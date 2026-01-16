@@ -1,3 +1,4 @@
+
 import { Sale, DataSource } from '../types';
 import { POWERBI_CONFIG, getSalesDaxQuery } from '../config';
 import { syncSalesToSupabase, fetchFromSupabase } from './supabaseService';
@@ -40,43 +41,71 @@ export const generateMockSales = (count: number, filterCode: string = 'PD'): Sal
 
 export const fetchRealPowerBIData = async (accessToken: string, tableName: string, filterCode?: string): Promise<Sale[]> => {
   if (!POWERBI_CONFIG.datasetId) throw new Error("ID do Dataset não configurado");
+  
   const cleanToken = accessToken.replace(/^Bearer\s+/i, "").trim();
-  const url = `${POWERBI_CONFIG.apiUrl}/datasets/${POWERBI_CONFIG.datasetId}/executeQueries`;
+  
+  let baseUrl = "https://api.powerbi.com/v1.0/myorg";
+  
+  if (POWERBI_CONFIG.workspaceId && POWERBI_CONFIG.workspaceId.length > 10) {
+     baseUrl = `https://api.powerbi.com/v1.0/myorg/groups/${POWERBI_CONFIG.workspaceId}`;
+  } else {
+     console.warn("Workspace ID não configurado. Tentando endpoint '/myorg'.");
+  }
+
+  const url = `${baseUrl}/datasets/${POWERBI_CONFIG.datasetId}/executeQueries`;
   const daxQuery = getSalesDaxQuery(tableName, filterCode);
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cleanToken}`
-    },
-    body: JSON.stringify({ 
-      queries: [{ query: daxQuery }],
-      serializerSettings: { includeNulls: true }
-    })
-  });
-
-  if (!response.ok) throw new Error(`Erro API Power BI: ${response.status}`);
-
-  const json = await response.json();
-  if (json.results?.[0]?.tables?.[0]?.rows) {
-    const rows = json.results[0].tables[0].rows.map((row: any) => {
-      const cleanRow: Record<string, any> = {};
-      Object.keys(row).forEach(rawKey => {
-        let cleanKey = rawKey;
-        const match = rawKey.match(/\[(.*?)\]/);
-        if (match && match[1]) cleanKey = match[1];
-        cleanRow[cleanKey] = row[rawKey];
-      });
-      return cleanRow;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cleanToken}`
+      },
+      body: JSON.stringify({ 
+        queries: [{ query: daxQuery }],
+        serializerSettings: { includeNulls: true }
+      })
     });
 
-    // REPLICAÇÃO AUTOMÁTICA NO SUPABASE (Não bloqueia o retorno dos dados se falhar)
-    syncSalesToSupabase(rows).catch(err => console.error("Erro em background na sincronização:", err));
+    if (!response.ok) {
+      if (response.status === 404) {
+         // Mensagem específica para ajudar o usuário a encontrar o erro de permissão do Robô
+         throw new Error("Erro 404: O robô de automação (ID: be812a00-410c-466a-accc-06b22e3a8fb1) NÃO está na lista de acesso do Workspace. O usuário 'TI' está lá, mas o sistema usa o robô. Adicione o ID be812a00... como Membro.");
+      }
+      if (response.status === 403) {
+         throw new Error("Erro 403: Permissão negada. Adicione o Service Principal (be812a00...) como Admin/Membro no Workspace.");
+      }
+      throw new Error(`Erro API Power BI: ${response.status}`);
+    }
+
+    const json = await response.json();
     
-    return rows;
+    if (json.error) {
+       throw new Error(`Erro Query DAX: ${JSON.stringify(json.error)}`);
+    }
+
+    if (json.results?.[0]?.tables?.[0]?.rows) {
+      const rows = json.results[0].tables[0].rows.map((row: any) => {
+        const cleanRow: Record<string, any> = {};
+        Object.keys(row).forEach(rawKey => {
+          let cleanKey = rawKey;
+          const match = rawKey.match(/\[(.*?)\]/);
+          if (match && match[1]) cleanKey = match[1];
+          cleanRow[cleanKey] = row[rawKey];
+        });
+        return cleanRow;
+      });
+
+      syncSalesToSupabase(rows).catch(err => console.error("Erro em background na sincronização:", err));
+      
+      return rows;
+    }
+    return [];
+  } catch (err: any) {
+    console.error("Fetch Power BI Error:", err);
+    throw err;
   }
-  return [];
 };
 
 export const fetchData = async (
@@ -93,7 +122,6 @@ export const fetchData = async (
     return await fetchFromSupabase(filterCode);
   }
 
-  // Fallback to mock
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve(generateMockSales(150, filterCode));

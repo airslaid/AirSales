@@ -1,4 +1,6 @@
+
 import { ServicePrincipalConfig } from '../types';
+import { supabase } from './supabaseService';
 
 export const getServicePrincipalToken = async (config: ServicePrincipalConfig): Promise<string> => {
   const { tenantId, clientId, clientSecret } = config;
@@ -7,10 +9,35 @@ export const getServicePrincipalToken = async (config: ServicePrincipalConfig): 
     throw new Error("Credenciais do Service Principal incompletas.");
   }
 
+  // 1. TENTATIVA VIA SUPABASE BACKEND (Recomendado)
+  // Tenta invocar uma Edge Function chamada 'powerbi-auth'.
+  // Se você criar essa função no Supabase, o CORS é resolvido nativamente.
+  try {
+    const { data, error } = await supabase.functions.invoke('powerbi-auth', {
+      body: { tenantId, clientId, clientSecret }
+    });
+
+    if (!error && data && data.access_token) {
+      console.log("Token obtido via Supabase Edge Function.");
+      return data.access_token;
+    }
+    
+    // Se a função não existir ou der erro, apenas logamos e seguimos para o fallback
+    if (error) {
+        console.warn("Supabase Edge Function falhou ou não existe. Usando fallback Proxy.", error);
+    }
+  } catch (err) {
+    console.warn("Erro ao conectar com Supabase Functions. Usando fallback Proxy.");
+  }
+
+  // 2. FALLBACK: PROXY CLIENT-SIDE (Para funcionar enquanto o backend não é deployado)
   // Endpoint de token da Microsoft (v2.0)
   const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  
+  // Usamos um proxy público para contornar o CORS em desenvolvimento/demonstração.
+  const proxyUrl = "https://corsproxy.io/?";
+  const finalUrl = proxyUrl + encodeURIComponent(tokenEndpoint);
 
-  // Escopo necessário para Power BI
   const scope = "https://analysis.windows.net/powerbi/api/.default";
 
   const body = new URLSearchParams();
@@ -20,7 +47,7 @@ export const getServicePrincipalToken = async (config: ServicePrincipalConfig): 
   body.append("scope", scope);
 
   try {
-    const response = await fetch(tokenEndpoint, {
+    const response = await fetch(finalUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -29,21 +56,25 @@ export const getServicePrincipalToken = async (config: ServicePrincipalConfig): 
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Erro OAuth:", errorData);
-      
-      // Tratamento específico para erro de CORS (comum em frontend-only)
-      if (response.status === 0 || response.type === 'opaque') {
-        throw new Error("Erro de CORS ou Rede. Se estiver rodando localmente, tente usar um plugin de 'CORS Unblock' ou mova essa lógica para o backend.");
+      const errorText = await response.text();
+      let errorData;
+      try {
+         errorData = JSON.parse(errorText);
+      } catch (e) {
+         errorData = { error: errorText };
       }
       
-      throw new Error(`Falha na autenticação: ${errorData.error_description || errorData.error}`);
+      console.error("Erro OAuth (Proxy):", errorData);
+      throw new Error(`Falha Azure: ${errorData.error_description || errorData.error || response.statusText}`);
     }
 
     const data = await response.json();
     return data.access_token;
   } catch (error: any) {
     console.error("Erro ao obter token:", error);
-    throw new Error(error.message || "Erro desconhecido ao obter token.");
+    if (error.message.includes("Failed to fetch")) {
+      throw new Error("Bloqueio de CORS ou Rede. Verifique sua conexão ou adblockers.");
+    }
+    throw error;
   }
 };
