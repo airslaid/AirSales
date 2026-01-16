@@ -5,7 +5,7 @@ import {
   Filter, Hexagon, DollarSign, ChevronDown, TrendingUp, Receipt, Users, UserPlus, Trash2, 
   ShieldCheck, LogOut, CheckCircle2, Lock, ArrowRight, Layout, X, Calendar, Key, Columns, 
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
-  Edit2, Globe, DatabaseZap, Shield, User, AlertCircle
+  Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart
 } from 'lucide-react';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
@@ -20,6 +20,7 @@ const MODULES = [
   { id: 'OV', label: 'Orçamentos', icon: FileText },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag },
   { id: 'DV', label: 'Desenvolvimento', icon: Hammer },
+  { id: 'PERFORMANCE', label: 'Meta x Realizado', icon: BarChart3, adminOnly: false },
   { id: 'METAS', label: 'Metas', icon: Target, adminOnly: true },
   { id: 'USERS', label: 'Gestão de Acessos', icon: Users, adminOnly: true },
 ];
@@ -83,6 +84,10 @@ export default function App() {
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [pbiToken, setPbiToken] = useState('');
   const [layoutSaved, setLayoutSaved] = useState(false);
+  
+  // Performance Report State
+  const [perfYear, setPerfYear] = useState(new Date().getFullYear());
+  const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1);
   
   // Notification State
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
@@ -156,13 +161,20 @@ export default function App() {
 
   const loadData = async () => {
     if (!currentUser || activeModuleId === 'USERS' || activeModuleId === 'METAS') return;
+    
+    // Se for Módulo de Performance, carregamos os dados de Pedidos (PD) para calcular o realizado
+    const moduleToFetch = activeModuleId === 'PERFORMANCE' ? 'PD' : activeModuleId;
+
     setLoading(true);
     try {
       const repCode = currentUser.is_admin ? undefined : currentUser.rep_in_codigo;
-      const data = await fetchData('supabase', "", "PEDIDOS", activeModuleId);
+      const data = await fetchData('supabase', "", "PEDIDOS", moduleToFetch);
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
       setSalesData(filtered);
-      generateColumns(filtered);
+      
+      if (activeModuleId !== 'PERFORMANCE') {
+        generateColumns(filtered);
+      }
     } catch (error) {} finally { setLoading(false); }
   };
 
@@ -173,7 +185,8 @@ export default function App() {
     }
     setSyncing(true);
     try {
-      await fetchData('powerbi', pbiToken, "PEDIDOS", activeModuleId);
+      const moduleToSync = activeModuleId === 'PERFORMANCE' ? 'PD' : activeModuleId;
+      await fetchData('powerbi', pbiToken, "PEDIDOS", moduleToSync);
       showNotification("Sincronização manual concluída com sucesso!", "success");
       setShowTokenModal(false);
       setPbiToken('');
@@ -201,7 +214,8 @@ export default function App() {
         const token = await getServicePrincipalToken(SERVICE_PRINCIPAL_CONFIG);
         console.log("Token obtido. Iniciando carga de dados...");
         
-        await fetchData('powerbi', token, "PEDIDOS", activeModuleId);
+        const moduleToSync = activeModuleId === 'PERFORMANCE' ? 'PD' : activeModuleId;
+        await fetchData('powerbi', token, "PEDIDOS", moduleToSync);
         
         showNotification("Base atualizada via Azure com sucesso!", "success");
         loadData();
@@ -214,10 +228,8 @@ export default function App() {
             showNotification("Bloqueio de CORS/Rede. Tentando modo manual...", "error");
             setShowTokenModal(true);
         } else {
-            // Se falhar o Power BI (ex: erro 404), tentamos recarregar o que tem no Supabase
-            // para não deixar o usuário na mão.
             showNotification(`Erro Power BI: ${error.message}`, "error");
-            loadData(); // Recarrega do Supabase
+            loadData(); 
         }
     } finally {
         setSyncing(false);
@@ -255,7 +267,10 @@ export default function App() {
       setNewGoal({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 });
       setEditingGoalId(null);
       loadGoals();
-    } catch (e: any) { showNotification(e.message, "error"); }
+    } catch (e: any) { 
+      console.error(e);
+      showNotification(`Erro ao salvar: ${e.message}`, "error"); 
+    }
   };
 
   const handleEditGoal = (goal: SalesGoal) => {
@@ -403,6 +418,72 @@ export default function App() {
       achievement
     };
   }, [processedData, salesGoals, filters.startDate, filters.representante]);
+
+  // --- LÓGICA DE PERFORMANCE (META X REALIZADO) ---
+  const performanceData = useMemo(() => {
+      // 1. Filtra metas para o Ano/Mês selecionados
+      const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth);
+      
+      // 2. Filtra vendas (PD) para o Ano/Mês selecionados
+      const relevantSales = salesData.filter(s => {
+          if (!s.PED_DT_EMISSAO) return false;
+          const dt = new Date(s.PED_DT_EMISSAO);
+          // Ajuste para garantir comparação correta (considerando fuso horário se necessário, mas simples aqui)
+          const sMonth = dt.getMonth() + 1; 
+          const sYear = dt.getFullYear();
+          return sYear === perfYear && sMonth === perfMonth;
+      });
+
+      // 3. Mapa unificado de Reps
+      const repMap = new Map<number, { name: string, goal: number, realized: number }>();
+
+      // Popula com as Metas
+      relevantGoals.forEach(g => {
+          const code = g.rep_in_codigo;
+          const current = repMap.get(code) || { name: g.rep_nome, goal: 0, realized: 0 };
+          current.goal += g.valor_meta;
+          current.name = g.rep_nome; // Nome da meta costuma ser confiável
+          repMap.set(code, current);
+      });
+
+      // Soma o Realizado
+      relevantSales.forEach(s => {
+          const code = Number(s.REP_IN_CODIGO);
+          if (!code) return;
+          const val = parseBrNumber(s.PED_RE_VLMERCADORIA);
+          
+          const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 };
+          current.realized += val;
+          if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME;
+          repMap.set(code, current);
+      });
+
+      // Transforma em array e calcula percentuais
+      let result = Array.from(repMap.entries()).map(([code, data]) => ({
+          code,
+          name: data.name || `Rep ${code}`,
+          goal: data.goal,
+          realized: data.realized,
+          percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0
+      }));
+
+      // Filtra para o usuário atual se não for admin
+      if (!currentUser?.is_admin && currentUser?.rep_in_codigo) {
+          result = result.filter(r => r.code === currentUser.rep_in_codigo);
+      }
+
+      // Ordena: Maior % Realizado primeiro, depois Maior Valor Realizado
+      return result.sort((a, b) => b.percent - a.percent);
+
+  }, [salesGoals, salesData, perfYear, perfMonth, currentUser]);
+
+  const perfMetrics = useMemo(() => {
+      const totalGoal = performanceData.reduce((acc, curr) => acc + curr.goal, 0);
+      const totalRealized = performanceData.reduce((acc, curr) => acc + curr.realized, 0);
+      const totalPercent = totalGoal > 0 ? (totalRealized / totalGoal) * 100 : 0;
+      return { totalGoal, totalRealized, totalPercent };
+  }, [performanceData]);
+
 
   const clearFilters = () => {
     const range = getCurrentMonthRange();
@@ -637,6 +718,101 @@ export default function App() {
                         )}
                       </tbody>
                     </table>
+                   </div>
+                </div>
+             </div>
+          ) : activeModuleId === 'PERFORMANCE' ? (
+             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {/* FILTROS DE PERFORMANCE */}
+                <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between">
+                   <div className="flex items-center gap-2">
+                      <div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div>
+                      <div>
+                         <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Relatório de Atingimento</h3>
+                         <p className="text-[9px] text-gray-500 font-medium">Comparativo Meta x Realizado (Pedidos)</p>
+                      </div>
+                   </div>
+                   <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <div className="flex-1 sm:w-32">
+                          <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano Base</label>
+                          <select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>
+                              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                      </div>
+                      <div className="flex-1 sm:w-40">
+                          <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês de Referência</label>
+                          <select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>
+                              {MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                          </select>
+                      </div>
+                   </div>
+                </div>
+
+                {/* CARDS DE RESUMO */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                   <StatCard title="Total Meta Definida" value={currencyFormat(perfMetrics.totalGoal)} icon={Target} color="text-gray-400" />
+                   <StatCard title="Total Realizado (PD)" value={currencyFormat(perfMetrics.totalRealized)} icon={ShoppingBag} color="text-blue-600" />
+                   <div className="bg-white p-3 border border-gray-200 shadow-sm flex flex-col justify-center relative overflow-hidden group">
+                      <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><PieChart size={40}/></div>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-1">Atingimento Global</p>
+                      <div className="flex items-end gap-2">
+                          <h3 className={`text-2xl font-black tracking-tighter ${perfMetrics.totalPercent >= 100 ? 'text-green-600' : perfMetrics.totalPercent >= 70 ? 'text-amber-500' : 'text-red-500'}`}>
+                             {perfMetrics.totalPercent.toFixed(1)}%
+                          </h3>
+                      </div>
+                   </div>
+                </div>
+
+                {/* LISTA DE REPRESENTANTES */}
+                <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
+                   <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
+                      <span className="text-[10px] font-bold uppercase text-gray-500">Performance por Representante</span>
+                   </div>
+                   <div className="overflow-x-auto">
+                      <table className="w-full text-[10px]">
+                         <thead className="bg-gray-50/50 border-b">
+                            <tr className="text-[9px] font-black uppercase text-gray-400">
+                               <th className="px-4 py-2 text-left">Representante</th>
+                               <th className="px-4 py-2 text-left w-1/3">Progresso da Meta</th>
+                               <th className="px-4 py-2 text-right">Meta (R$)</th>
+                               <th className="px-4 py-2 text-right">Realizado (R$)</th>
+                               <th className="px-4 py-2 text-center">% Ating.</th>
+                            </tr>
+                         </thead>
+                         <tbody className="divide-y divide-gray-100">
+                            {performanceData.length === 0 ? (
+                               <tr><td colSpan={5} className="p-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sem dados para o período selecionado</td></tr>
+                            ) : (
+                                performanceData.map((row) => (
+                                   <tr key={row.code} className="hover:bg-gray-50 transition-colors">
+                                      <td className="px-4 py-3">
+                                         <div className="font-bold text-gray-900">{row.name}</div>
+                                         <div className="text-[8px] text-gray-400 font-mono">COD: {row.code}</div>
+                                      </td>
+                                      <td className="px-4 py-3 align-middle">
+                                         <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                            <div 
+                                              className={`h-full rounded-full transition-all duration-1000 ${row.percent >= 100 ? 'bg-green-500' : row.percent >= 70 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                              style={{ width: `${Math.min(row.percent, 100)}%` }}
+                                            ></div>
+                                         </div>
+                                      </td>
+                                      <td className="px-4 py-3 text-right font-mono text-gray-500">{currencyFormat(row.goal)}</td>
+                                      <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">{currencyFormat(row.realized)}</td>
+                                      <td className="px-4 py-3 text-center">
+                                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                            row.percent >= 100 ? 'bg-green-100 text-green-700' : 
+                                            row.percent >= 70 ? 'bg-amber-100 text-amber-700' : 
+                                            'bg-red-100 text-red-700'
+                                         }`}>
+                                            {row.percent.toFixed(1)}%
+                                         </span>
+                                      </td>
+                                   </tr>
+                                ))
+                            )}
+                         </tbody>
+                      </table>
                    </div>
                 </div>
              </div>
