@@ -1,12 +1,22 @@
+
 // Configuração Simplificada para Token Manual
 export const POWERBI_CONFIG = {
   // IDs do Power BI
-  // Deixe workspaceId vazio ("") se o dataset estiver em "My Workspace"
-  workspaceId: "", 
-  datasetId: "067f8162-2f44-4f54-a0b1-e1e951e3891c",
+  // OBRIGATÓRIO para Automação Azure: Pegue o ID na URL do Power BI (app.powerbi.com/groups/{ID}/...)
+  workspaceId: "7e6c3164-4b3a-41e4-94b7-1fc3eb343f5e", 
   
-  // Endpoint da API
+  // ID do Conjunto de Dados (Dataset)
+  datasetId: "ed6c52cf-9183-4bb3-b6db-f9b74f3ead09",
+  
+  // Endpoint da API (Base)
   apiUrl: "https://api.powerbi.com/v1.0/myorg"
+};
+
+// Configuração de Automação Azure (Service Principal)
+export const SERVICE_PRINCIPAL_CONFIG = {
+  tenantId: "91f13493-6dab-4a48-baed-2336fa7ea4a3",
+  clientId: "be812a00-410c-466a-accc-06b22e3a8fb1",
+  clientSecret: "Ba68Q~O2vS87GY_k9K5CTOnWVkrZRoynzJ5kzaMK"
 };
 
 // Gera a query dinamicamente aplicando FILTRO na coluna SER_ST_CODIGO

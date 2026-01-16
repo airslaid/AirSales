@@ -5,7 +5,7 @@ import {
   Filter, Hexagon, DollarSign, ChevronDown, TrendingUp, Receipt, Users, UserPlus, Trash2, 
   ShieldCheck, LogOut, CheckCircle2, Lock, ArrowRight, Layout, X, Calendar, Key, Columns, 
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
-  Edit2, Globe, DatabaseZap, Shield, User
+  Edit2, Globe, DatabaseZap, Shield, User, AlertCircle
 } from 'lucide-react';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
@@ -13,6 +13,8 @@ import { fetchData } from './services/dataService';
 import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase } from './services/supabaseService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
+import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
+import { getServicePrincipalToken } from './services/authService';
 
 const MODULES = [
   { id: 'OV', label: 'Orçamentos', icon: FileText },
@@ -81,6 +83,10 @@ export default function App() {
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [pbiToken, setPbiToken] = useState('');
   const [layoutSaved, setLayoutSaved] = useState(false);
+  
+  // Notification State
+  const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
+
   const columnSelectorRef = useRef<HTMLDivElement>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
@@ -123,6 +129,15 @@ export default function App() {
     if (currentUser) loadData();
   }, [currentUser, activeModuleId]);
 
+  // Helper para exibir notificação
+  const showNotification = (message: string, type: 'success' | 'error' | 'warning') => {
+    setNotification({ message, type });
+    // Auto-dismiss após 5 segundos
+    setTimeout(() => {
+        setNotification(prev => prev?.message === message ? null : prev);
+    }, 5000);
+  };
+
   const loadAppUsers = async () => { try { const users = await fetchAppUsers(); setAppUsers(users); } catch (e) {} };
   const loadGoals = async () => { try { const goals = await fetchSalesGoals(); setSalesGoals(goals); } catch (e) {} };
   
@@ -151,19 +166,61 @@ export default function App() {
     } catch (error) {} finally { setLoading(false); }
   };
 
-  const handlePBISync = async () => {
-    if (!pbiToken) return alert("Por favor, informe o token do Power BI.");
+  const handleManualSync = async () => {
+    if (!pbiToken) {
+        showNotification("Informe o token do Power BI.", "error");
+        return;
+    }
     setSyncing(true);
     try {
       await fetchData('powerbi', pbiToken, "PEDIDOS", activeModuleId);
-      alert("Sincronização com Power BI concluída com sucesso!");
+      showNotification("Sincronização manual concluída com sucesso!", "success");
       setShowTokenModal(false);
       setPbiToken('');
       loadData();
     } catch (error: any) {
-      alert("Erro na sincronização: " + error.message);
+      showNotification("Erro na sincronização manual: " + error.message, "error");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleAutomatedSync = async () => {
+    if (syncing) return;
+    
+    if (!POWERBI_CONFIG.workspaceId || POWERBI_CONFIG.workspaceId.includes("PREENCHA")) {
+        showNotification("ERRO CRÍTICO: 'workspaceId' não configurado no config.ts", "error");
+        return;
+    }
+
+    setSyncing(true);
+    await new Promise(r => setTimeout(r, 300));
+
+    try {
+        console.log("Iniciando autenticação automática via Azure...");
+        const token = await getServicePrincipalToken(SERVICE_PRINCIPAL_CONFIG);
+        console.log("Token obtido. Iniciando carga de dados...");
+        
+        await fetchData('powerbi', token, "PEDIDOS", activeModuleId);
+        
+        showNotification("Base atualizada via Azure com sucesso!", "success");
+        loadData();
+    } catch (error: any) {
+        console.error("Falha na automação:", error);
+        
+        const isCorsError = error.message.includes("CORS") || error.message.includes("Failed to fetch");
+        
+        if (isCorsError) {
+            showNotification("Bloqueio de CORS/Rede. Tentando modo manual...", "error");
+            setShowTokenModal(true);
+        } else {
+            // Se falhar o Power BI (ex: erro 404), tentamos recarregar o que tem no Supabase
+            // para não deixar o usuário na mão.
+            showNotification(`Erro Power BI: ${error.message}`, "error");
+            loadData(); // Recarrega do Supabase
+        }
+    } finally {
+        setSyncing(false);
     }
   };
 
@@ -188,14 +245,17 @@ export default function App() {
   };
 
   const handleSaveGoal = async () => {
-    if (!newGoal.rep_in_codigo || !newGoal.valor_meta) return alert("Preencha Representante e Valor.");
+    if (!newGoal.rep_in_codigo || !newGoal.valor_meta) {
+        showNotification("Preencha Representante e Valor.", "error");
+        return;
+    }
     try {
       await upsertSalesGoal({ ...newGoal, id: editingGoalId || undefined });
-      alert(editingGoalId ? "Meta atualizada com sucesso." : "Meta salva com sucesso.");
+      showNotification(editingGoalId ? "Meta atualizada com sucesso." : "Meta salva com sucesso.", "success");
       setNewGoal({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 });
       setEditingGoalId(null);
       loadGoals();
-    } catch (e: any) { alert(e.message); }
+    } catch (e: any) { showNotification(e.message, "error"); }
   };
 
   const handleEditGoal = (goal: SalesGoal) => {
@@ -222,15 +282,21 @@ export default function App() {
   };
 
   const handleSaveUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password) return alert("Preencha Nome, E-mail e Senha.");
-    if (!newUser.is_admin && !newUser.rep_in_codigo) return alert("Vincule um representante para este usuário.");
+    if (!newUser.name || !newUser.email || !newUser.password) {
+        showNotification("Preencha Nome, E-mail e Senha.", "error");
+        return;
+    }
+    if (!newUser.is_admin && !newUser.rep_in_codigo) {
+        showNotification("Vincule um representante para este usuário.", "error");
+        return;
+    }
     
     try { 
       await upsertAppUser(newUser); 
       setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false }); 
       loadAppUsers(); 
-      alert("Acesso criado/atualizado com sucesso."); 
-    } catch (e: any) { alert(e.message); }
+      showNotification("Acesso criado/atualizado com sucesso.", "success");
+    } catch (e: any) { showNotification(e.message, "error"); }
   };
 
   const toggleColumnVisibility = (key: string) => {
@@ -376,6 +442,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex bg-gray-100 font-sans text-gray-900 overflow-x-auto">
+      {/* COMPONENTE DE NOTIFICAÇÃO (TOAST) */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}>
+           <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>
+              {notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}
+           </div>
+           <div>
+              <h4 className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${notification.type === 'success' ? 'text-green-800' : notification.type === 'warning' ? 'text-amber-800' : 'text-red-800'}`}>{notification.type === 'success' ? 'Sucesso' : 'Erro'}</h4>
+              <p className="text-[10px] font-medium text-gray-600 leading-tight break-words">{notification.message}</p>
+           </div>
+           <button onClick={() => setNotification(null)} className="ml-auto text-gray-400 hover:text-gray-900"><X size={12}/></button>
+        </div>
+      )}
+
       {/* MODAL DE TOKEN POWER BI */}
       {showTokenModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -401,7 +481,7 @@ export default function App() {
               </div>
               <div className="flex flex-col gap-3">
                 <button 
-                  onClick={handlePBISync} 
+                  onClick={handleManualSync} 
                   disabled={syncing}
                   className="w-full py-4 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black flex items-center justify-center gap-3 transition-all disabled:opacity-50"
                 >
@@ -447,7 +527,7 @@ export default function App() {
         <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
           <div className="flex items-center gap-4"><button onClick={() => setSidebarOpen(!sidebarOpen)}><Menu size={18}/></button><h2 className="text-[10px] font-bold uppercase tracking-widest">{MODULES.find(m => m.id === activeModuleId)?.label}</h2></div>
           {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && (
-            <button onClick={() => setShowTokenModal(true)} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg">
+            <button onClick={handleAutomatedSync} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg">
               <RefreshCw size={12} className={loading || syncing ? 'animate-spin' : ''} />
               <span className="hidden sm:inline">Atualizar Base</span>
             </button>
@@ -710,7 +790,7 @@ export default function App() {
                       </div>
                     </div>
                     <div className="sm:col-span-2 lg:col-span-2 xl:col-span-2 flex flex-col sm:flex-row gap-2 mt-1 lg:mt-0 xl:ml-auto">
-                      <button onClick={() => setShowTokenModal(true)} className="flex-1 px-4 py-1 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2 shadow-sm">
+                      <button onClick={handleAutomatedSync} className="flex-1 px-4 py-1 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2 shadow-sm">
                         <RefreshCw size={10} className={loading || syncing ? 'animate-spin' : ''} /> Sincronizar
                       </button>
                       <button onClick={clearFilters} className="flex-1 px-3 py-1 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all text-center">
