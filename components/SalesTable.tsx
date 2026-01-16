@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Sale, ColumnConfig, SortConfig } from '../types';
 import { ArrowUpDown, ArrowUp, ArrowDown, AlertCircle, GripVertical } from 'lucide-react';
@@ -65,13 +66,13 @@ export const SalesTable: React.FC<SalesTableProps> = ({
                   onDragStart={(e) => handleDragStart(e, col.originalIdx)}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, col.originalIdx)}
-                  className={`px-4 py-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest cursor-move hover:bg-gray-100 transition-colors border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}
+                  className={`px-2 py-1.5 text-[9px] font-bold text-gray-500 uppercase tracking-widest cursor-move hover:bg-gray-100 transition-colors border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}
                 >
-                  <div className={`flex items-center gap-2 ${getHeaderJustifyClass(col.key)}`}>
-                    <GripVertical size={12} className="text-gray-300 shrink-0" />
-                    <span onClick={() => onSort(col.key)} className="flex items-center gap-1 cursor-pointer truncate">
+                  <div className={`flex items-center gap-1 ${getHeaderJustifyClass(col.key)}`}>
+                    <GripVertical size={10} className="text-gray-300 shrink-0" />
+                    <span onClick={() => onSort(col.key)} className="flex items-center gap-0.5 cursor-pointer truncate">
                       {col.label}
-                      {sortConfig?.key === col.key && (sortConfig.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}
+                      {sortConfig?.key === col.key && (sortConfig.direction === 'asc' ? <ArrowUp size={8} /> : <ArrowDown size={8} />)}
                     </span>
                   </div>
                 </th>
@@ -80,17 +81,17 @@ export const SalesTable: React.FC<SalesTableProps> = ({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
-               <tr><td colSpan={visibleColumns.length} className="p-10 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">Processando Requisição...</td></tr>
+               <tr><td colSpan={visibleColumns.length} className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">Processando...</td></tr>
             ) : data.length === 0 ? (
-               <tr><td colSpan={visibleColumns.length} className="p-10 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Nenhum Registro Localizado</td></tr>
+               <tr><td colSpan={visibleColumns.length} className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Nenhum Registro</td></tr>
             ) : (
               data.map((row, rIdx) => (
                 <tr key={rIdx} className="hover:bg-gray-50/80 transition-colors border-b border-gray-50 last:border-0">
                   {visibleColumns.map(col => (
-                    <td key={col.key} className={`px-4 py-3 text-[11px] font-medium text-gray-700 whitespace-nowrap border-r border-gray-50 last:border-0 ${getAlignmentClass(col.key)}`}>
+                    <td key={col.key} className={`px-2 py-1 text-[10px] font-medium text-gray-700 whitespace-nowrap border-r border-gray-50 last:border-0 ${getAlignmentClass(col.key)}`}>
                       {col.key.includes('STATUS') ? (
                         <div className="flex justify-center">
-                          <span className={`px-2 py-0.5 border text-[9px] font-bold uppercase tracking-widest ${
+                          <span className={`px-1.5 py-0.5 border text-[8px] font-bold uppercase tracking-widest ${
                             String(row[col.key]).toLowerCase().includes('faturado') ? 'bg-green-50 text-green-600 border-green-100' : 
                             String(row[col.key]).toLowerCase().includes('cancel') ? 'bg-red-50 text-red-600 border-red-100' :
                             String(row[col.key]).toLowerCase().includes('aprov') ? 'bg-blue-50 text-blue-600 border-blue-100' :
