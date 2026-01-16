@@ -5,7 +5,7 @@ import {
   Filter, Hexagon, DollarSign, ChevronDown, TrendingUp, Receipt, Users, UserPlus, Trash2, 
   ShieldCheck, LogOut, CheckCircle2, Lock, ArrowRight, Layout, X, Calendar, Key, Columns, 
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
-  Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart
+  Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square
 } from 'lucide-react';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
@@ -88,11 +88,14 @@ export default function App() {
   // Performance Report State
   const [perfYear, setPerfYear] = useState(new Date().getFullYear());
   const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1);
+  const [perfSelectedReps, setPerfSelectedReps] = useState<number[]>([]); // Array vazio = Todos
+  const [showPerfRepSelector, setShowPerfRepSelector] = useState(false);
   
   // Notification State
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
 
   const columnSelectorRef = useRef<HTMLDivElement>(null);
+  const perfRepSelectorRef = useRef<HTMLDivElement>(null);
 
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -125,6 +128,7 @@ export default function App() {
     loadRepsForSelection();
     const handleClickOutside = (event: MouseEvent) => {
       if (columnSelectorRef.current && !columnSelectorRef.current.contains(event.target as Node)) setShowColumnSelector(false);
+      if (perfRepSelectorRef.current && !perfRepSelectorRef.current.contains(event.target as Node)) setShowPerfRepSelector(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -351,10 +355,23 @@ export default function App() {
   }, [salesData]);
 
   const filteredGoals = useMemo(() => {
-    if (newGoal.rep_in_codigo === 0 && !editingGoalId) return salesGoals;
-    if (editingGoalId) return salesGoals;
-    return salesGoals.filter(g => g.rep_in_codigo === newGoal.rep_in_codigo);
+    let goals = [...salesGoals];
+
+    // Se estiver filtrando no formulário, aplica filtro na lista
+    if (newGoal.rep_in_codigo !== 0 && !editingGoalId) {
+       goals = goals.filter(g => g.rep_in_codigo === newGoal.rep_in_codigo);
+    }
+
+    // Ordenação Cronológica: Ano ASC -> Mês ASC
+    return goals.sort((a, b) => {
+        if (a.ano !== b.ano) return a.ano - b.ano;
+        return a.mes - b.mes;
+    });
   }, [salesGoals, newGoal.rep_in_codigo, editingGoalId]);
+
+  const totalGoalsFiltered = useMemo(() => {
+      return filteredGoals.reduce((acc, curr) => acc + curr.valor_meta, 0);
+  }, [filteredGoals]);
 
   const processedData = useMemo(() => {
     let result = [...salesData];
@@ -428,7 +445,6 @@ export default function App() {
       const relevantSales = salesData.filter(s => {
           if (!s.PED_DT_EMISSAO) return false;
           const dt = new Date(s.PED_DT_EMISSAO);
-          // Ajuste para garantir comparação correta (considerando fuso horário se necessário, mas simples aqui)
           const sMonth = dt.getMonth() + 1; 
           const sYear = dt.getFullYear();
           return sYear === perfYear && sMonth === perfMonth;
@@ -437,16 +453,14 @@ export default function App() {
       // 3. Mapa unificado de Reps
       const repMap = new Map<number, { name: string, goal: number, realized: number }>();
 
-      // Popula com as Metas
       relevantGoals.forEach(g => {
           const code = g.rep_in_codigo;
           const current = repMap.get(code) || { name: g.rep_nome, goal: 0, realized: 0 };
           current.goal += g.valor_meta;
-          current.name = g.rep_nome; // Nome da meta costuma ser confiável
+          current.name = g.rep_nome; 
           repMap.set(code, current);
       });
 
-      // Soma o Realizado
       relevantSales.forEach(s => {
           const code = Number(s.REP_IN_CODIGO);
           if (!code) return;
@@ -458,7 +472,6 @@ export default function App() {
           repMap.set(code, current);
       });
 
-      // Transforma em array e calcula percentuais
       let result = Array.from(repMap.entries()).map(([code, data]) => ({
           code,
           name: data.name || `Rep ${code}`,
@@ -470,12 +483,16 @@ export default function App() {
       // Filtra para o usuário atual se não for admin
       if (!currentUser?.is_admin && currentUser?.rep_in_codigo) {
           result = result.filter(r => r.code === currentUser.rep_in_codigo);
+      } else {
+        // Se for admin, aplica o filtro de seleção múltipla (se houver seleção)
+        if (perfSelectedReps.length > 0) {
+            result = result.filter(r => perfSelectedReps.includes(r.code));
+        }
       }
 
-      // Ordena: Maior % Realizado primeiro, depois Maior Valor Realizado
       return result.sort((a, b) => b.percent - a.percent);
 
-  }, [salesGoals, salesData, perfYear, perfMonth, currentUser]);
+  }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps]);
 
   const perfMetrics = useMemo(() => {
       const totalGoal = performanceData.reduce((acc, curr) => acc + curr.goal, 0);
@@ -483,6 +500,17 @@ export default function App() {
       const totalPercent = totalGoal > 0 ? (totalRealized / totalGoal) * 100 : 0;
       return { totalGoal, totalRealized, totalPercent };
   }, [performanceData]);
+
+  // Função para alternar seleção de representante no filtro
+  const togglePerfRepSelection = (repCode: number) => {
+     setPerfSelectedReps(prev => {
+        if (prev.includes(repCode)) {
+            return prev.filter(c => c !== repCode);
+        } else {
+            return [...prev, repCode];
+        }
+     });
+  };
 
 
   const clearFilters = () => {
@@ -676,14 +704,26 @@ export default function App() {
                      </div>
                      <div className="relative"><Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"/><input type="text" className="pl-8 pr-3 py-1 bg-gray-50 border border-gray-200 text-[10px] outline-none" placeholder="Busca rápida..."/></div>
                    </div>
-                   <div className="overflow-x-auto">
+                   
+                   {/* TOTALIZADOR DA LISTA */}
+                   {(newGoal.rep_in_codigo !== 0 || filteredGoals.length > 0) && (
+                       <div className="px-4 py-2 bg-blue-50/50 border-b border-blue-100 flex justify-between items-center animate-in fade-in slide-in-from-top-1">
+                          <div className="flex items-center gap-2">
+                             <Calculator size={14} className="text-blue-600" />
+                             <span className="text-[9px] font-bold uppercase tracking-widest text-blue-800">Total Definido</span>
+                          </div>
+                          <span className="text-sm font-bold text-blue-900 font-mono tracking-tight">{currencyFormat(totalGoalsFiltered)}</span>
+                       </div>
+                   )}
+
+                   <div className="overflow-x-auto max-h-[500px] custom-scrollbar">
                     <table className="w-full text-[10px]">
-                      <thead className="bg-gray-50 border-b">
+                      <thead className="bg-gray-50 border-b sticky top-0 z-10">
                         <tr className="text-gray-400 uppercase font-bold text-[8px]">
-                          <th className="px-4 py-2 text-left">Representante</th>
-                          <th className="px-4 py-2 text-center">Período</th>
-                          <th className="px-4 py-2 text-right">Valor Meta</th>
-                          <th className="px-4 py-2 text-center">Ações</th>
+                          <th className="px-4 py-2 text-left bg-gray-50">Representante</th>
+                          <th className="px-4 py-2 text-center bg-gray-50">Período</th>
+                          <th className="px-4 py-2 text-right bg-gray-50">Valor Meta</th>
+                          <th className="px-4 py-2 text-center bg-gray-50">Ações</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -724,7 +764,7 @@ export default function App() {
           ) : activeModuleId === 'PERFORMANCE' ? (
              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {/* FILTROS DE PERFORMANCE */}
-                <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between">
+                <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-12 z-10">
                    <div className="flex items-center gap-2">
                       <div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div>
                       <div>
@@ -733,14 +773,66 @@ export default function App() {
                       </div>
                    </div>
                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <div className="flex-1 sm:w-32">
-                          <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano Base</label>
+                      {/* FILTRO DE REPRESENTANTES (MULTI-SELECT) */}
+                      {currentUser.is_admin && (
+                         <div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}>
+                            <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label>
+                            <button 
+                                onClick={() => setShowPerfRepSelector(!showPerfRepSelector)}
+                                className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"
+                            >
+                                <span className="truncate">
+                                    {perfSelectedReps.length === 0 
+                                        ? 'Todos os Representantes' 
+                                        : perfSelectedReps.length === 1 
+                                            ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado'
+                                            : `${perfSelectedReps.length} Selecionados`
+                                    }
+                                </span>
+                                <ChevronDown size={12} className="text-gray-500"/>
+                            </button>
+                            {showPerfRepSelector && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100">
+                                    <div 
+                                        onClick={() => setPerfSelectedReps([])}
+                                        className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"
+                                    >
+                                        <div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>
+                                            {perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}
+                                        </div>
+                                        <span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span>
+                                    </div>
+                                    {availableReps.map(r => {
+                                        const isSelected = perfSelectedReps.includes(r.code);
+                                        return (
+                                            <div 
+                                                key={r.code}
+                                                onClick={() => togglePerfRepSelection(r.code)}
+                                                className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"
+                                            >
+                                                <div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>
+                                                    {isSelected && <CheckCircle2 size={10} className="text-white"/>}
+                                                </div>
+                                                <div className="flex flex-col">
+                                                    <span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span>
+                                                    <span className="text-[7px] text-gray-300 font-mono">{r.code}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                         </div>
+                      )}
+
+                      <div className="flex-1 sm:w-24">
+                          <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label>
                           <select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>
                               {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
                           </select>
                       </div>
-                      <div className="flex-1 sm:w-40">
-                          <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês de Referência</label>
+                      <div className="flex-1 sm:w-32">
+                          <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label>
                           <select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>
                               {MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                           </select>
@@ -923,15 +1015,15 @@ export default function App() {
                   <ChevronDown size={12} className={`transition-transform duration-200 ${filtersExpanded ? 'rotate-180' : ''}`} />
                 </div>
                 {filtersExpanded && (
-                  <div className="p-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-2 items-end">
-                    <div className="sm:col-span-2 lg:col-span-2 space-y-0.5">
+                  <div className="p-2 flex flex-wrap items-end gap-2">
+                    <div className="w-48 space-y-0.5">
                       <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Busca Global</label>
                       <div className="relative">
                         <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input type="text" placeholder="ID, Cliente, Produto..." className="w-full pl-7 pr-2 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.globalSearch} onChange={e => setFilters({...filters, globalSearch: e.target.value})} />
                       </div>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="flex-1 space-y-0.5">
                       <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Representante</label>
                       <select 
                         className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none disabled:bg-gray-100" 
@@ -943,21 +1035,21 @@ export default function App() {
                         {availableReps.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}
                       </select>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="flex-1 space-y-0.5">
                       <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Status</label>
                       <select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}>
                         <option value="">Todos</option>
                         {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
-                    <div className="space-y-0.5">
+                    <div className="flex-1 space-y-0.5">
                       <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Filial</label>
                       <select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.filial} onChange={e => setFilters({...filters, filial: e.target.value})}>
                         <option value="">Todas</option>
                         {availableFiliais.map(f => <option key={f} value={f}>{f}</option>)}
                       </select>
                     </div>
-                    <div className="sm:col-span-2 lg:col-span-2 xl:col-span-2 space-y-0.5">
+                    <div className="flex-1 min-w-[180px] space-y-0.5">
                       <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Período de Emissão</label>
                       <div className="flex items-center gap-1">
                         <input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} title="Data Inicial" />
@@ -965,11 +1057,8 @@ export default function App() {
                         <input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} title="Data Final" />
                       </div>
                     </div>
-                    <div className="sm:col-span-2 lg:col-span-2 xl:col-span-2 flex flex-col sm:flex-row gap-2 mt-1 lg:mt-0 xl:ml-auto">
-                      <button onClick={handleAutomatedSync} className="flex-1 px-4 py-1 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2 shadow-sm">
-                        <RefreshCw size={10} className={loading || syncing ? 'animate-spin' : ''} /> Sincronizar
-                      </button>
-                      <button onClick={clearFilters} className="flex-1 px-3 py-1 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all text-center">
+                    <div className="w-20">
+                      <button onClick={clearFilters} className="w-full px-3 py-1 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all text-center border border-gray-200">
                          Resetar
                       </button>
                     </div>
@@ -987,20 +1076,6 @@ export default function App() {
                     <Target size={14} className="text-blue-500" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums mb-2">{currencyFormat(metrics.goal)}</h3>
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-[9px] font-bold uppercase">
-                      <span className="text-gray-400">Atingimento</span>
-                      <span className={metrics.achievement >= 100 ? 'text-green-600' : metrics.achievement >= 70 ? 'text-amber-500' : 'text-red-500'}>
-                        {metrics.achievement.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-1000 ${metrics.achievement >= 100 ? 'bg-green-500' : metrics.achievement >= 70 ? 'bg-amber-500' : 'bg-red-500'}`}
-                        style={{ width: `${Math.min(metrics.achievement, 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
                 </div>
 
                 <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturado)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} />
