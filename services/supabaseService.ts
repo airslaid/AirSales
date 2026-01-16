@@ -7,6 +7,17 @@ const SUPABASE_KEY = 'sb_publishable_LU7HaVKZciu8MiTVCdgkLA_q_oErIcL';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Helper para gerar UUID caso o banco não tenha Default Value configurado
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 const toNumeric = (val: any): number => {
   if (val === null || val === undefined || val === '') return 0;
   if (typeof val === 'number') return val;
@@ -131,7 +142,32 @@ export const fetchSalesGoals = async (): Promise<SalesGoal[]> => {
 };
 
 export const upsertSalesGoal = async (goal: SalesGoal) => {
-  const { error } = await supabase.from('sales_goals').upsert([goal], { onConflict: 'rep_in_codigo,ano,mes' });
+  // Correção para Erro "null value in column id"
+  // 1. Prepara o payload
+  const payload = { ...goal };
+  
+  // 2. Se não temos ID vindo do front (edição), verificamos se já existe no banco
+  // Isso evita que tentemos inserir um novo ID randomico para uma meta que já existe (o que causaria update do ID, não recomendado)
+  if (!payload.id) {
+     const { data: existing } = await supabase
+        .from('sales_goals')
+        .select('id')
+        .eq('rep_in_codigo', goal.rep_in_codigo)
+        .eq('ano', goal.ano)
+        .eq('mes', goal.mes)
+        .maybeSingle();
+     
+     if (existing?.id) {
+        // Se já existe, usamos o ID existente para fazer o Update corretamente
+        payload.id = existing.id;
+     } else {
+        // Se NÃO existe, geramos um UUID para garantir que o insert funcione
+        // (Isso corrige o erro da coluna ID sem default value)
+        payload.id = generateUUID();
+     }
+  }
+
+  const { error } = await supabase.from('sales_goals').upsert([payload], { onConflict: 'rep_in_codigo,ano,mes' });
   if (error) throw error;
   return true;
 };
