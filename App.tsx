@@ -376,8 +376,6 @@ export default function App() {
     if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
     if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
     
-    // NOTA: Se o agrupamento estiver ativo, a ordenação deve ser feita sobre os pedidos, não sobre os itens individuais,
-    // mas por simplicidade mantemos a ordenação global aqui. O SalesTable vai agrupar depois.
     if (sortConfig) {
       result.sort((a, b) => {
         let valA = a[sortConfig.key], valB = b[sortConfig.key];
@@ -424,7 +422,7 @@ export default function App() {
     return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement };
   }, [processedData, salesGoals, filters.startDate, filters.endDate, filters.representante]);
 
-  // Performance Report logic... (sem alterações significativas aqui)
+  // Performance Report logic
   const performanceData = useMemo(() => {
       const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth);
       const relevantSales = salesData.filter(s => {
@@ -486,7 +484,7 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white border border-gray-200 shadow-2xl">
           <div className="p-8 border-b border-gray-100 bg-gray-50 flex items-center gap-4">
             <div className="w-12 h-12 bg-gray-900 flex items-center justify-center text-white font-bold text-xl">AS</div>
@@ -506,7 +504,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex bg-gray-100 font-sans text-gray-900 overflow-x-auto">
+    <div className="flex h-screen w-screen bg-gray-100 font-sans text-gray-900 overflow-hidden">
       {/* Notifications and Modals */}
       {notification && (
         <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}>
@@ -531,22 +529,57 @@ export default function App() {
         </div>
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-50 flex flex-col transition-transform duration-300 bg-white border-r border-gray-200 lg:translate-x-0 ${sidebarOpen ? 'lg:w-56' : 'lg:w-16'} ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="h-12 flex items-center px-4 border-b border-gray-100 bg-gray-50"><div className="flex items-center gap-2 text-gray-900"><Hexagon size={20}/><span className="font-bold uppercase text-xs">AIR SALES</span></div></div>
-        <nav className="flex-1 py-4 px-2 space-y-1">{MODULES.filter(m => !m.adminOnly || currentUser.is_admin).map(m => (<button key={m.id} onClick={() => setActiveModuleId(m.id)} className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'}`}><m.icon size={16} />{(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>}</button>))}</nav>
-        <div className="p-3 border-t border-gray-100"><div className="px-3 py-2 mb-1"><p className="text-[9px] font-bold text-gray-400 uppercase">Usuário Logado</p><div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate">{currentUser.name}</p></div></div><button onClick={() => setCurrentUser(null)} className="w-full flex items-center justify-center gap-2 p-2 text-gray-400 hover:text-red-600 text-[10px] font-bold uppercase"><LogOut size={14} />Sair</button></div>
+      {/* Sidebar - Desktop (Flex Item) / Mobile (Fixed + Overlay) */}
+      <aside className={`
+        flex flex-col border-r border-gray-200 bg-white transition-all duration-300 z-30 flex-shrink-0
+        ${mobileSidebarOpen ? 'fixed inset-y-0 left-0 shadow-2xl w-64 translate-x-0' : 'hidden lg:flex relative'}
+        ${!mobileSidebarOpen && sidebarOpen ? 'w-56' : ''}
+        ${!mobileSidebarOpen && !sidebarOpen ? 'w-16' : ''}
+      `}>
+        <div className="h-12 flex items-center px-4 border-b border-gray-100 bg-gray-50 shrink-0"><div className="flex items-center gap-2 text-gray-900"><Hexagon size={20}/><span className={`font-bold uppercase text-xs transition-opacity duration-200 ${!sidebarOpen && !mobileSidebarOpen ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>AIR SALES</span></div></div>
+        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar">
+           {MODULES.filter(m => !m.adminOnly || currentUser.is_admin).map(m => (
+             <button 
+                key={m.id} 
+                onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} 
+                className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all rounded-sm whitespace-nowrap ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'} ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`}
+                title={!sidebarOpen && !mobileSidebarOpen ? m.label : ''}
+             >
+                <m.icon size={16} className="shrink-0" />
+                {(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>}
+             </button>
+            ))}
+        </nav>
+        <div className="p-3 border-t border-gray-100 shrink-0">
+           {(sidebarOpen || mobileSidebarOpen) && (
+              <div className="px-3 py-2 mb-1">
+                 <p className="text-[9px] font-bold text-gray-400 uppercase">Usuário</p>
+                 <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser.name}</p></div>
+              </div>
+           )}
+           <button onClick={() => setCurrentUser(null)} className={`w-full flex items-center gap-2 p-2 text-gray-400 hover:text-red-600 text-[10px] font-bold uppercase ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`}><LogOut size={14} />{(sidebarOpen || mobileSidebarOpen) && 'Sair'}</button>
+        </div>
       </aside>
 
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'lg:ml-56' : 'lg:ml-16'}`}>
-        <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center sticky top-0 z-20 shadow-sm">
-          <div className="flex items-center gap-4"><button onClick={() => setSidebarOpen(!sidebarOpen)}><Menu size={18}/></button><h2 className="text-[10px] font-bold uppercase tracking-widest">{MODULES.find(m => m.id === activeModuleId)?.label}</h2></div>
-          {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && (<button onClick={handleAutomatedSync} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg"><RefreshCw size={12} className={loading || syncing ? 'animate-spin' : ''} /><span className="hidden sm:inline">Atualizar Base (FULL)</span></button>)}
+      {/* Mobile Backdrop */}
+      {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)} />}
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+        <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
+          <div className="flex items-center gap-4">
+             <button onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} className="lg:hidden"><Menu size={18}/></button>
+             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:block"><Menu size={18}/></button>
+             <h2 className="text-[10px] font-bold uppercase tracking-widest truncate">{MODULES.find(m => m.id === activeModuleId)?.label}</h2>
+          </div>
+          {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && (<button onClick={handleAutomatedSync} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg"><RefreshCw size={12} className={loading || syncing ? 'animate-spin' : ''} /><span className="hidden sm:inline">Atualizar Base</span></button>)}
         </header>
 
-        <main className="p-2 space-y-2 w-full mx-auto">
+        {/* Scrollable Main Content - Agora apenas a tabela e modais rolam individualmente se necessario */}
+        <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full">
           {activeModuleId === 'METAS' ? (
-             /* Metas Component (mantido igual) */
-             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+             /* Metas Component - Rola individualmente */
+             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar">
                 <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}>
                    <div className="flex items-center justify-between border-b pb-2"><h3 className="text-[10px] font-bold uppercase tracking-widest">{editingGoalId ? 'Editando Meta' : 'Nova Meta de Vendas'}</h3>{editingGoalId && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}</div>
                    <div className="space-y-2">
@@ -556,16 +589,16 @@ export default function App() {
                    </div>
                    <div className="space-y-1.5 pt-1"><button onClick={handleSaveGoal} className={`w-full py-2.5 text-white text-[9px] font-bold uppercase tracking-widest shadow-lg transition-all active:scale-[0.98] ${editingGoalId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gray-900 hover:bg-black'}`}>{editingGoalId ? 'Confirmar Alterações' : 'Registrar Meta'}</button>{editingGoalId && (<button onClick={handleCancelEdit} className="w-full py-2 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Cancelar Edição</button>)}</div>
                 </div>
-                <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm">
+                <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm h-fit">
                    <div className="p-3 bg-gray-50 border-b flex justify-between items-center"><div className="flex flex-col"><span className="text-[10px] font-bold uppercase text-gray-500">Metas Registradas</span>{newGoal.rep_in_codigo !== 0 && !editingGoalId && <span className="text-[9px] font-bold text-blue-600 uppercase tracking-tighter">Filtrando por: {newGoal.rep_nome}</span>}</div><div className="relative"><Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"/><input type="text" className="pl-8 pr-3 py-1 bg-gray-50 border border-gray-200 text-[10px] outline-none" placeholder="Busca rápida..."/></div></div>
                    {(newGoal.rep_in_codigo !== 0 || filteredGoals.length > 0) && (<div className="px-4 py-2 bg-blue-50/50 border-b border-blue-100 flex justify-between items-center animate-in fade-in slide-in-from-top-1"><div className="flex items-center gap-2"><Calculator size={14} className="text-blue-600" /><span className="text-[9px] font-bold uppercase tracking-widest text-blue-800">Total Definido</span></div><span className="text-sm font-bold text-blue-900 font-mono tracking-tight">{currencyFormat(totalGoalsFiltered)}</span></div>)}
                    <div className="overflow-x-auto max-h-[500px] custom-scrollbar"><table className="w-full text-[10px]"><thead className="bg-gray-50 border-b sticky top-0 z-10"><tr className="text-gray-400 uppercase font-bold text-[8px]"><th className="px-4 py-2 text-left bg-gray-50">Representante</th><th className="px-4 py-2 text-center bg-gray-50">Período</th><th className="px-4 py-2 text-right bg-gray-50">Valor Meta</th><th className="px-4 py-2 text-center bg-gray-50">Ações</th></tr></thead><tbody className="divide-y">{filteredGoals.length === 0 ? (<tr><td colSpan={4} className="p-4 text-center text-[9px] font-bold text-gray-300 uppercase tracking-widest">Nenhum registro para este filtro</td></tr>) : (filteredGoals.map(g => (<tr key={g.id} className={`hover:bg-gray-50 transition-colors group ${editingGoalId === g.id ? 'bg-amber-50' : ''}`}><td className="px-4 py-2"><strong>{g.rep_nome}</strong><br/><span className="text-[8px] text-gray-400">COD: {g.rep_in_codigo}</span></td><td className="px-4 py-2 text-center font-bold text-gray-600">{MONTHS.find(m => m.id === g.mes)?.label} / {g.ano}</td><td className="px-4 py-2 text-right font-mono font-bold text-gray-900">{currencyFormat(g.valor_meta)}</td><td className="px-4 py-2 text-center"><div className="flex items-center justify-center gap-3"><button onClick={() => handleEditGoal(g)} className={`transition-colors ${editingGoalId === g.id ? 'text-amber-600' : 'text-gray-300 hover:text-blue-600'}`} title="Editar meta"><Edit2 size={14}/></button><button onClick={async () => { if(confirm('Tem certeza que deseja remover esta meta permanentemente?')) { await deleteSalesGoal(g.id!); loadGoals(); } }} className="text-gray-200 hover:text-red-500 transition-colors" title="Excluir meta"><Trash2 size={14}/></button></div></td></tr>)))}</tbody></table></div>
                 </div>
              </div>
           ) : activeModuleId === 'PERFORMANCE' ? (
-             /* Performance Component (mantido igual) */
-             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-12 z-10">
+             /* Performance Component - Rola individualmente */
+             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar">
+                <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-0 z-10">
                    {/* ... conteúdo performance ... */}
                    <div className="flex items-center gap-2"><div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div><div><h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Relatório de Atingimento</h3><p className="text-[9px] text-gray-500 font-medium">Comparativo Meta x Realizado (Pedidos)</p></div></div>
                    <div className="flex items-center gap-2 w-full sm:w-auto">{currentUser.is_admin && (<div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label><button onClick={() => setShowPerfRepSelector(!showPerfRepSelector)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"><span className="truncate">{perfSelectedReps.length === 0 ? 'Todos os Representantes' : perfSelectedReps.length === 1 ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado' : `${perfSelectedReps.length} Selecionados`}</span><ChevronDown size={12} className="text-gray-500"/></button>{showPerfRepSelector && (<div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100"><div onClick={() => setPerfSelectedReps([])} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>{perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span></div>{availableReps.map(r => {const isSelected = perfSelectedReps.includes(r.code); return (<div key={r.code} onClick={() => togglePerfRepSelection(r.code)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>{isSelected && <CheckCircle2 size={10} className="text-white"/>}</div><div className="flex flex-col"><span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span><span className="text-[7px] text-gray-300 font-mono">{r.code}</span></div></div>);})}</div>)}</div>)}<div className="flex-1 sm:w-24"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="flex-1 sm:w-32"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>{MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div></div></div>
@@ -573,15 +606,15 @@ export default function App() {
                 <div className="bg-white border border-gray-200 shadow-sm overflow-hidden"><div className="p-3 bg-gray-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold uppercase text-gray-500">Performance por Representante</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Representante</th><th className="px-4 py-2 text-left w-1/3">Progresso da Meta</th><th className="px-4 py-2 text-right">Meta (R$)</th><th className="px-4 py-2 text-right">Realizado (R$)</th><th className="px-4 py-2 text-center">% Ating.</th></tr></thead><tbody className="divide-y divide-gray-100">{performanceData.length === 0 ? (<tr><td colSpan={5} className="p-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sem dados para o período selecionado</td></tr>) : (performanceData.map((row) => (<tr key={row.code} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-3"><div className="font-bold text-gray-900">{row.name}</div><div className="text-[8px] text-gray-400 font-mono">COD: {row.code}</div></td><td className="px-4 py-3 align-middle"><div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${row.percent >= 100 ? 'bg-green-500' : row.percent >= 70 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(row.percent, 100)}%` }}></div></div></td><td className="px-4 py-3 text-right font-mono text-gray-500">{currencyFormat(row.goal)}</td><td className="px-4 py-3 text-right font-mono font-bold text-gray-900">{currencyFormat(row.realized)}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${row.percent >= 100 ? 'bg-green-100 text-green-700' : row.percent >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{row.percent.toFixed(1)}%</span></td></tr>)))}</tbody></table></div></div>
              </div>
           ) : activeModuleId === 'USERS' ? (
-             /* Users Component (mantido igual) */
-             <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300">
+             /* Users Component - Rola individualmente */
+             <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar">
                 <div className="col-span-12 lg:col-span-4 bg-white border border-gray-200 p-3 space-y-2 shadow-sm"><h3 className="text-[10px] font-bold uppercase tracking-widest border-b pb-2">Novo Acesso</h3><div className="space-y-2"><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Nome Completo</label><input type="text" placeholder="Ex: João da Silva" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.name} onChange={e => setNewUser(p => ({...p, name: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">E-mail Corporativo</label><input type="email" placeholder="usuario@empresa.com.br" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.email} onChange={e => setNewUser(p => ({...p, email: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Senha de Acesso</label><input type="password" placeholder="••••••••" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.password || ''} onChange={e => setNewUser(p => ({...p, password: e.target.value}))} /></div><div className="pt-1 flex items-center gap-2 p-2 bg-gray-50 border border-dashed border-gray-200"><input type="checkbox" id="is_admin" className="w-3 h-3 accent-gray-900" checked={newUser.is_admin} onChange={e => setNewUser(p => ({...p, is_admin: e.target.checked, rep_in_codigo: e.target.checked ? null : p.rep_in_codigo}))} /><label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label></div>{!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}</div><button onClick={handleSaveUser} className="w-full py-2.5 bg-[#1a2130] text-white text-[9px] font-bold uppercase tracking-widest shadow-xl hover:bg-black transition-all">Criar Acesso</button></div>
                 <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-right">Ação</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-right"><button onClick={async () => { if(confirm(`Remover acesso de ${u.name}?`)) { await deleteAppUser(u.id!); loadAppUsers(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div></div>
              </div>
           ) : (
-            <>
+            <div className="flex flex-col h-full gap-2 overflow-hidden">
               {/* PAINEL DE FILTROS OTIMIZADO */}
-              <div className="bg-white border border-gray-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
+              <div className="bg-white border border-gray-200 shadow-sm overflow-hidden animate-in fade-in duration-300 shrink-0">
                 <div className="p-2 border-b bg-gray-50 flex items-center justify-between cursor-pointer" onClick={() => setFiltersExpanded(!filtersExpanded)}>
                   <div className="flex items-center gap-2"><Filter size={12} className="text-gray-900" /><span className="text-[9px] font-bold uppercase tracking-widest">Painel de Inteligência</span></div>
                   <ChevronDown size={12} className={`transition-transform duration-200 ${filtersExpanded ? 'rotate-180' : ''}`} />
@@ -603,7 +636,7 @@ export default function App() {
               </div>
 
               {/* DASHBOARD DE MÉTRICAS */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0">
                 <StatCard title="Total Bruto (Itens)" value={currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" />
                 
                 {activeModuleId !== 'OV' && activeModuleId !== 'DV' && (
@@ -619,9 +652,9 @@ export default function App() {
                 <StatCard title="Pedidos Únicos" value={metrics.count.toString()} icon={Package} color="text-gray-400" />
               </div>
 
-              {/* TABELA DE VENDAS */}
-              <div className="bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
-                <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between">
+              {/* TABELA DE VENDAS FLEXÍVEL */}
+              <div className="bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 relative">
+                <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between shrink-0">
                    <div className="flex items-center gap-2"><TableIcon size={14}/><h3 className="text-[9px] font-bold uppercase tracking-widest">Visão Analítica (Detalhamento por Item)</h3></div>
                    <div className="flex items-center gap-2">
                      {/* Toggle de Agrupamento */}
@@ -645,19 +678,19 @@ export default function App() {
                      </div>
                    </div>
                 </div>
-                <div className="flex-1">
-                  <SalesTable 
-                    data={processedData} 
-                    columns={salesColumns} 
-                    sortConfig={sortConfig} 
-                    onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
-                    onColumnReorder={(f, t) => { const newCols = [...salesColumns]; const [moved] = newCols.splice(f, 1); newCols.splice(t, 0, moved); setSalesColumns(newCols); }} 
-                    isLoading={loading || syncing}
-                    isGroupedByOrder={isGroupedByOrder}
-                  />
+                <div className="flex-1 overflow-hidden relative">
+                    <SalesTable 
+                      data={processedData} 
+                      columns={salesColumns} 
+                      sortConfig={sortConfig} 
+                      onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
+                      onColumnReorder={(f, t) => { const newCols = [...salesColumns]; const [moved] = newCols.splice(f, 1); newCols.splice(t, 0, moved); setSalesColumns(newCols); }} 
+                      isLoading={loading || syncing}
+                      isGroupedByOrder={isGroupedByOrder}
+                    />
                 </div>
               </div>
-            </>
+            </div>
           )}
         </main>
       </div>
