@@ -19,27 +19,16 @@ export const SERVICE_PRINCIPAL_CONFIG = {
   clientSecret: "Ba68Q~O2vS87GY_k9K5CTOnWVkrZRoynzJ5kzaMK"
 };
 
-// Gera a query dinamicamente aplicando FILTRO na coluna SER_ST_CODIGO
+// Gera a query dinamicamente
 export const getSalesDaxQuery = (tableName: string, filterCode?: string) => {
-  // Se houver um código de filtro (OV, PD, DV), aplicamos o FILTER
-  if (filterCode) {
-    return `
-      EVALUATE
-      TOPN(
-        500,
-        FILTER(
-          '${tableName}',
-          '${tableName}'[SER_ST_CODIGO] = "${filterCode}"
-        )
-      )
-    `;
-  }
-
-  // Fallback: traz tudo se não tiver filtro
+  // ATENÇÃO: SOLICITAÇÃO DE REMOÇÃO TOTAL DE FILTROS.
+  // Estamos trazendo TOPN 5000 para garantir que pegue todas as 375 linhas (e mais).
+  // Não aplicamos mais FILTER(..., [SER_ST_CODIGO] = "X").
+  
   return `
     EVALUATE
     TOPN(
-      500,
+      5000,
       '${tableName}'
     )
   `;
@@ -47,5 +36,5 @@ export const getSalesDaxQuery = (tableName: string, filterCode?: string) => {
 
 // Query simples de fallback
 export const getSimpleDaxQuery = (tableName: string) => `
-EVALUATE TOPN(100, '${tableName}')
+EVALUATE TOPN(5000, '${tableName}')
 `;
