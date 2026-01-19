@@ -196,11 +196,11 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   };
 
   return (
-    <div className="w-full bg-white overflow-hidden">
-      <div className="overflow-x-auto custom-scrollbar">
+    <div className="w-full h-full bg-white flex flex-col">
+      <div className="flex-1 overflow-auto custom-scrollbar">
         <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100/50 border-b border-gray-200">
+          <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
+            <tr>
               {visibleColumns.map((col, idx) => (
                 <th 
                   key={col.key}
@@ -208,7 +208,7 @@ export const SalesTable: React.FC<SalesTableProps> = ({
                   onDragStart={(e) => handleDragStart(e, col.originalIdx)}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, col.originalIdx)}
-                  className={`px-2 py-1.5 text-[9px] font-bold text-gray-500 uppercase tracking-widest cursor-move hover:bg-gray-100 transition-colors border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}
+                  className={`px-2 py-2 text-[9px] font-bold text-gray-500 uppercase tracking-widest cursor-move hover:bg-gray-100 transition-colors border-r border-gray-200 last:border-0 ${getAlignmentClass(col.key)}`}
                 >
                   <div className={`flex items-center gap-1 ${getHeaderJustifyClass(col.key)}`}>
                     <GripVertical size={10} className="text-gray-300 shrink-0" />
