@@ -409,16 +409,30 @@ export default function App() {
     });
 
     let currentGoalValue = 0;
-    if (filters.startDate) {
-      const dateObj = new Date(filters.startDate);
-      const filterMonth = dateObj.getMonth() + 1;
-      const filterYear = dateObj.getFullYear();
-      
-      const targetGoals = salesGoals.filter(g => 
-        g.mes === filterMonth && 
-        g.ano === filterYear &&
-        (filters.representante ? String(g.rep_in_codigo) === filters.representante : true)
-      );
+
+    // LÓGICA DE META AJUSTADA: Considera o intervalo completo (startDate até endDate)
+    if (filters.startDate && filters.endDate) {
+      // Divide strings YYYY-MM-DD para evitar problemas de timezone com objeto Date
+      const [startYear, startMonth] = filters.startDate.split('-').map(Number);
+      const [endYear, endMonth] = filters.endDate.split('-').map(Number);
+
+      // Converte para um índice absoluto de meses (Ano * 12 + Mês) para facilitar comparação de ranges
+      // Ex: 2026 * 12 + 1 = 24313
+      const startAbs = startYear * 12 + startMonth;
+      const endAbs = endYear * 12 + endMonth;
+
+      const targetGoals = salesGoals.filter(g => {
+        const goalAbs = g.ano * 12 + g.mes;
+        // Verifica se o mês da meta está dentro do range selecionado (inclusivo)
+        const inRange = goalAbs >= startAbs && goalAbs <= endAbs;
+        
+        // Aplica filtro de representante se houver seleção
+        const repMatch = filters.representante 
+          ? String(g.rep_in_codigo) === filters.representante 
+          : true;
+
+        return inRange && repMatch;
+      });
       
       currentGoalValue = targetGoals.reduce((acc, curr) => acc + curr.valor_meta, 0);
     }
@@ -434,7 +448,7 @@ export default function App() {
       goal: currentGoalValue,
       achievement
     };
-  }, [processedData, salesGoals, filters.startDate, filters.representante]);
+  }, [processedData, salesGoals, filters.startDate, filters.endDate, filters.representante]);
 
   // --- LÓGICA DE PERFORMANCE (META X REALIZADO) ---
   const performanceData = useMemo(() => {
@@ -1070,12 +1084,24 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
                 <StatCard title="Total Bruto" value={currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" />
                 
-                <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors relative overflow-hidden group">
+                <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors relative overflow-hidden group flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">Meta</p>
                     <Target size={14} className="text-blue-500" />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums mb-2">{currencyFormat(metrics.goal)}</h3>
+                  <div className="flex items-end justify-between">
+                     <h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums">{currencyFormat(metrics.goal)}</h3>
+                     {metrics.goal > 0 && (
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${metrics.achievement >= 100 ? 'bg-green-100 text-green-700' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                           {metrics.achievement.toFixed(1)}%
+                        </span>
+                     )}
+                  </div>
+                   {metrics.goal > 0 && (
+                      <div className="w-full h-1 bg-gray-100 mt-2 rounded-full overflow-hidden">
+                         <div className={`h-full ${metrics.achievement >= 100 ? 'bg-green-500' : metrics.achievement >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(metrics.achievement, 100)}%` }}></div>
+                      </div>
+                   )}
                 </div>
 
                 <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturado)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} />
