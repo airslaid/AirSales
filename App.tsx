@@ -8,6 +8,10 @@ import {
   Package, Tag, Layers, ListTree
 } from 'lucide-react';
 
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
 import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives } from './services/supabaseService';
@@ -339,6 +343,57 @@ export default function App() {
     setTimeout(() => setLayoutSaved(false), 2000); 
   };
 
+  // EXPORT FUNCTIONS
+  const handleExportExcel = () => {
+    const visibleCols = salesColumns.filter(c => c.visible);
+    
+    // Mapeia os dados formatados
+    const dataToExport = processedData.map(row => {
+      const newRow: Record<string, any> = {};
+      visibleCols.forEach(col => {
+        newRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key];
+      });
+      return newRow;
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    
+    // Ajuste de largura das colunas (básico)
+    const wscols = visibleCols.map(() => ({ wch: 20 }));
+    ws['!cols'] = wscols;
+
+    XLSX.utils.book_append_sheet(wb, ws, "Relatório de Vendas");
+    XLSX.writeFile(wb, `AirSales_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF('landscape');
+    const visibleCols = salesColumns.filter(c => c.visible);
+    
+    const tableColumn = visibleCols.map(c => c.label);
+    const tableRows = processedData.map(row => {
+      return visibleCols.map(col => {
+        return col.format ? col.format(row[col.key]) : String(row[col.key] || '');
+      });
+    });
+
+    doc.setFontSize(10);
+    doc.text(`Relatório Air Sales - ${MODULES.find(m => m.id === activeModuleId)?.label}`, 14, 15);
+    doc.setFontSize(8);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 20);
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 25,
+      styles: { fontSize: 6, cellPadding: 1 },
+      headStyles: { fillColor: [26, 33, 48] }, // Dark blue header
+    });
+
+    doc.save(`AirSales_Export_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   const availableReps = useMemo(() => {
     if (currentUser && !currentUser.is_admin && currentUser.rep_in_codigo) return fullRepsList.filter(r => r.code === currentUser.rep_in_codigo);
     return fullRepsList;
@@ -657,6 +712,22 @@ export default function App() {
                 <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between shrink-0">
                    <div className="flex items-center gap-2"><TableIcon size={14}/><h3 className="text-[9px] font-bold uppercase tracking-widest">Visão Analítica (Detalhamento por Item)</h3></div>
                    <div className="flex items-center gap-2">
+                     {/* Export Buttons */}
+                     <button 
+                       onClick={handleExportExcel} 
+                       className="px-2 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm"
+                       title="Exportar para Excel"
+                     >
+                       <FileSpreadsheet size={12}/> Excel
+                     </button>
+                     <button 
+                       onClick={handleExportPDF} 
+                       className="px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm"
+                       title="Exportar para PDF"
+                     >
+                       <FileType size={12}/> PDF
+                     </button>
+
                      {/* Toggle de Agrupamento */}
                      <button 
                         onClick={() => setIsGroupedByOrder(!isGroupedByOrder)} 
