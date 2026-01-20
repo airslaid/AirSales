@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Sale, ColumnConfig, SortConfig } from '../types';
-import { ArrowUp, ArrowDown, GripVertical, ChevronRight, ChevronDown, Package } from 'lucide-react';
+import { ArrowUp, ArrowDown, GripVertical, ChevronRight, ChevronDown, Package, Check, X as XIcon } from 'lucide-react';
+import { updateSaleCommissionStatus } from '../services/supabaseService';
 
 interface SalesTableProps {
   data: Sale[];
@@ -23,6 +24,7 @@ export const SalesTable: React.FC<SalesTableProps> = ({
 }) => {
   const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [processingPayment, setProcessingPayment] = useState<string | null>(null);
 
   const handleDragStart = (e: React.DragEvent<HTMLTableCellElement>, index: number) => {
     setDraggedColIndex(index);
@@ -51,6 +53,34 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     setExpandedOrders(newSet);
   };
 
+  const handlePaymentToggle = async (e: React.MouseEvent, row: Sale) => {
+     e.stopPropagation();
+     
+     // Unique ID for UI loading state
+     const uniqueId = `${row.FIL_IN_CODIGO}-${row.SER_ST_CODIGO}-${row.PED_IN_CODIGO}-${row.ITP_IN_SEQUENCIA}`;
+     setProcessingPayment(uniqueId);
+
+     const keys = {
+          fil: Number(row.FIL_IN_CODIGO),
+          ser: String(row.SER_ST_CODIGO),
+          ped: Number(row.PED_IN_CODIGO),
+          seq: Number(row.ITP_IN_SEQUENCIA)
+      };
+
+      try {
+          // Atualiza no banco
+          await updateSaleCommissionStatus(keys, !row.COMISSAO_PAGA);
+          
+          // Atualiza objeto localmente (mutação direta para refletir na UI instantaneamente sem reload total)
+          // Em uma app real, usaríamos um callback onDataChange, mas aqui simplificamos
+          row.COMISSAO_PAGA = !row.COMISSAO_PAGA; 
+      } catch (err) {
+          alert('Erro ao atualizar pagamento');
+      } finally {
+          setProcessingPayment(null);
+      }
+  };
+
   const visibleColumns = columns.map((col, idx) => ({ ...col, originalIdx: idx })).filter(c => c.visible);
 
   const getAlignmentClass = (key: string) => {
@@ -72,7 +102,6 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     data.forEach(item => {
       const orderId = Number(item.PED_IN_CODIGO);
       if (!groups.has(orderId)) {
-        // Cria o registro pai (cópia do primeiro item, mas zerando valores que serão somados)
         groups.set(orderId, { 
           summary: { ...item }, 
           items: [] 
@@ -83,16 +112,18 @@ export const SalesTable: React.FC<SalesTableProps> = ({
       group.items.push(item);
     });
 
-    // Recalcula totais do pai
     const result = Array.from(groups.values()).map(g => {
        const totalVal = g.items.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
        const totalQtd = g.items.reduce((acc, curr) => acc + (Number(curr.ITP_RE_QUANTIDADE) || 0), 0);
+       const totalComissao = g.items.reduce((acc, curr) => acc + (Number(curr.VALOR_COMISSAO) || 0), 0);
        
        g.summary.ITP_RE_VALORMERCADORIA = totalVal;
        g.summary.ITP_RE_QUANTIDADE = totalQtd;
-       g.summary.ITP_ST_DESCRICAO = `${g.items.length} Itens`; // Substitui nome do produto
+       g.summary.VALOR_COMISSAO = totalComissao;
+       g.summary.ITP_ST_DESCRICAO = `${g.items.length} Itens`;
        g.summary.PRO_ST_ALTERNATIVO = '-';
-       g.summary.ITP_RE_VALORUNITARIO = 0; // Não faz sentido somar unitário no pai
+       g.summary.ITP_RE_VALORUNITARIO = 0;
+       g.summary.COMISSAO_PAGA = g.items.every(i => i.COMISSAO_PAGA); // Pai só é pago se todos filhos forem
 
        return g;
     });
@@ -104,7 +135,7 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   // Renderização Padrão (Sem Agrupamento)
   const renderFlatRows = () => {
     return data.map((row, rIdx) => (
-      <tr key={rIdx} className="hover:bg-gray-50/80 transition-colors border-b border-gray-50 last:border-0">
+      <tr key={rIdx} className={`hover:bg-gray-50/80 transition-colors border-b border-gray-50 last:border-0 ${row.COMISSAO_PAGA ? 'bg-green-50/30' : ''}`}>
         {visibleColumns.map(col => (
           <td key={col.key} className={`px-2 py-1 text-[10px] font-medium text-gray-700 whitespace-nowrap border-r border-gray-50 last:border-0 ${getAlignmentClass(col.key)}`}>
             {renderCellContent(row, col)}
@@ -130,7 +161,6 @@ export const SalesTable: React.FC<SalesTableProps> = ({
             className={`cursor-pointer transition-colors border-b border-gray-100 ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
           >
             {visibleColumns.map((col, idx) => {
-              // Adiciona ícone de expansão na primeira coluna visível
               const isFirstCol = idx === 0;
               return (
                 <td key={col.key} className={`px-2 py-1.5 text-[10px] font-bold text-gray-800 whitespace-nowrap border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}>
@@ -149,10 +179,9 @@ export const SalesTable: React.FC<SalesTableProps> = ({
 
           {/* Linhas Filhas (Itens) */}
           {isExpanded && group.items.map((item, itemIdx) => (
-            <tr key={`${orderId}-${itemIdx}`} className="bg-gray-50/50 border-b border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200">
+            <tr key={`${orderId}-${itemIdx}`} className={`bg-gray-50/50 border-b border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200 ${item.COMISSAO_PAGA ? 'bg-green-50/50' : ''}`}>
               {visibleColumns.map((col, idx) => (
                  <td key={col.key} className={`px-2 py-1 text-[9px] text-gray-500 whitespace-nowrap border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}>
-                    {/* Indenta a primeira coluna para dar hierarquia visual */}
                     <div className={idx === 0 ? 'pl-6 flex items-center gap-1' : ''}>
                        {idx === 0 && <div className="w-1.5 h-px bg-gray-300"></div>}
                        {renderCellContent(item, col)}
@@ -167,6 +196,35 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   };
 
   const renderCellContent = (row: Sale, col: ColumnConfig, isParent = false) => {
+    // RENDERIZAÇÃO CUSTOMIZADA: CHECKBOX DE PAGAMENTO
+    if (col.key === 'CHECK_PAGAMENTO') {
+        if (isParent) return null; // Não mostra check no pai agrupado por enquanto para evitar complexidade de update em lote
+        
+        const uniqueId = `${row.FIL_IN_CODIGO}-${row.SER_ST_CODIGO}-${row.PED_IN_CODIGO}-${row.ITP_IN_SEQUENCIA}`;
+        const isProcessing = processingPayment === uniqueId;
+
+        return (
+            <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                <button 
+                    onClick={(e) => handlePaymentToggle(e, row)}
+                    disabled={isProcessing}
+                    className={`w-5 h-5 rounded-sm border flex items-center justify-center transition-all shadow-sm ${
+                        row.COMISSAO_PAGA 
+                        ? 'bg-green-500 border-green-600 text-white hover:bg-green-600' 
+                        : 'bg-white border-gray-300 text-gray-200 hover:border-gray-400'
+                    }`}
+                    title={row.COMISSAO_PAGA ? "Pago (Clique para desfazer)" : "Marcar como Pago"}
+                >
+                    {isProcessing ? (
+                        <div className="w-3 h-3 border-2 border-white/50 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                        row.COMISSAO_PAGA && <Check size={12} strokeWidth={4} />
+                    )}
+                </button>
+            </div>
+        );
+    }
+
     if (col.key.includes('STATUS')) {
       return (
         <div className="flex justify-center">
@@ -182,9 +240,8 @@ export const SalesTable: React.FC<SalesTableProps> = ({
       );
     }
     
-    // Tratamento especial para colunas que não fazem sentido no agrupamento pai
     if (isParent) {
-       if (col.key === 'ITP_RE_VALORUNITARIO' || col.key === 'PRO_ST_ALTERNATIVO') return <span className="text-gray-300">-</span>;
+       if (col.key === 'ITP_RE_VALORUNITARIO' || col.key === 'PRO_ST_ALTERNATIVO' || col.key === 'ATINGIMENTO_META_ORIGEM') return <span className="text-gray-300">-</span>;
        if (col.key === 'ITP_ST_DESCRICAO') return <span className="italic text-gray-500 flex items-center gap-1"><Package size={10}/> {row[col.key]}</span>;
     }
 

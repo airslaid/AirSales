@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { Sale, AppUser, SalesGoal } from '../types';
 
@@ -222,13 +221,37 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
       "ITP_RE_QUANTIDADE": row.itp_re_quantidade,
       "ITP_RE_VALORUNITARIO": row.itp_re_valorunitario,
       "ITP_RE_VALORMERCADORIA": row.itp_re_valormercadoria,
-      "ITP_ST_PEDIDOCLIENTE": row.itp_st_pedidocliente
+      "ITP_ST_PEDIDOCLIENTE": row.itp_st_pedidocliente,
+      "COMISSAO_PAGA": row.comissao_paga || false // Mapeando o status de pagamento
     }));
   } catch (err: any) {
     console.error("Erro Supabase Fetch:", err.message);
     return [];
   }
 };
+
+export const updateSaleCommissionStatus = async (
+    keys: { fil: number, ser: string, ped: number, seq: number }, 
+    isPaid: boolean
+) => {
+    try {
+        const { error } = await supabase
+            .from('sales')
+            .update({ comissao_paga: isPaid })
+            .match({ 
+                fil_in_codigo: keys.fil,
+                ser_st_codigo: keys.ser,
+                ped_in_codigo: keys.ped,
+                itp_in_sequencia: keys.seq
+            });
+
+        if (error) throw error;
+        return true;
+    } catch (e: any) {
+        console.error("Erro ao atualizar status de comissão:", e.message);
+        throw e;
+    }
+}
 
 export const fetchAppUsers = async (): Promise<AppUser[]> => {
   const { data, error } = await supabase.from('app_users').select('*').order('name');
