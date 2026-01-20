@@ -21,7 +21,6 @@ import { StatCard } from './components/StatCard';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
 
-// ATUALIZAÇÃO: Todos os módulos buscam na mesma tabela 'PEDIDOS_DETALHADOS'
 const MODULES = [
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
@@ -79,12 +78,17 @@ const percentFormat = (val: any) => {
 
 const dateFormat = (val: any) => {
   if (!val) return '-';
+  const strVal = String(val);
+  
+  // Se já estiver no formato brasileiro DD/MM/YYYY, retorna direto
+  if (strVal.includes('/') && strVal.length === 10) return strVal;
+  
   try {
-    const datePart = String(val).split('T')[0];
+    const datePart = strVal.split('T')[0];
     const parts = datePart.split('-');
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return datePart;
-  } catch (e) { return String(val); }
+  } catch (e) { return strVal; }
 };
 
 const getCurrentMonthRange = () => {
@@ -258,6 +262,9 @@ export default function App() {
       seq: Number(row.ITP_IN_SEQUENCIA)
     };
     const newStatus = !row.COMISSAO_PAGA;
+    
+    // Flag dinâmica baseada no cargo selecionado
+    const roleProp = `PAGO_${activeCommissionRole}`;
 
     // Atualização Otimista no Estado Global
     setSalesData(prev => prev.map(item => {
@@ -267,13 +274,13 @@ export default function App() {
         item.PED_IN_CODIGO === keys.ped &&
         item.ITP_IN_SEQUENCIA === keys.seq
       ) {
-        return { ...item, COMISSAO_PAGA: newStatus };
+        return { ...item, COMISSAO_PAGA: newStatus, [roleProp]: newStatus };
       }
       return item;
     }));
 
     try {
-      await updateSaleCommissionStatus(keys, newStatus);
+      await updateSaleCommissionStatus(keys, newStatus, roleProp);
       showNotification(newStatus ? "Pagamento confirmado!" : "Pagamento estornado.", "success");
     } catch (error) {
       // Reverte o estado em caso de erro
@@ -284,7 +291,7 @@ export default function App() {
           item.PED_IN_CODIGO === keys.ped &&
           item.ITP_IN_SEQUENCIA === keys.seq
         ) {
-          return { ...item, COMISSAO_PAGA: !newStatus };
+          return { ...item, COMISSAO_PAGA: !newStatus, [roleProp]: !newStatus };
         }
         return item;
       }));
@@ -313,7 +320,7 @@ export default function App() {
       "PED_IN_CODIGO", 
       "FILIAL_NOME", 
       "REPRESENTANTE_NOME", 
-      "PED_DT_EMISSAO", 
+      "PED_DT_EMISSAO",
       "CLIENTE_NOME", 
       "PRO_ST_ALTERNATIVO", 
       "ITP_ST_DESCRICAO", 
@@ -346,12 +353,13 @@ export default function App() {
         "ITP_RE_QUANTIDADE",
         "ITP_RE_VALORUNITARIO",
         "ITP_RE_VALORMERCADORIA",
-        "ITP_ST_PEDIDOCLIENTE"
+        "ITP_ST_PEDIDOCLIENTE",
+        "IPE_DT_DATAENTREGA"
     ];
 
     setSalesColumns(allPossibleKeys.map(key => ({ 
         key, 
-        label: key.replace(/_/g, ' ').replace('ITP ST', '').replace('ITP RE', '').replace('PED RE', '').replace('PED ST', '').replace('IT ST', '').trim(), 
+        label: key.replace(/_/g, ' ').replace('ITP ST', '').replace('ITP RE', '').replace('PED RE', '').replace('PED ST', '').replace('IT ST', '').replace('IPE DT', '').replace('DT', 'DATA').trim(), 
         visible: defaultOrder.includes(key), 
         format: getFormatter(key) 
     })));
