@@ -261,9 +261,10 @@ export default function App() {
       ped: Number(row.PED_IN_CODIGO),
       seq: Number(row.ITP_IN_SEQUENCIA)
     };
-    const newStatus = !row.COMISSAO_PAGA;
     
     // Flag dinâmica baseada no cargo selecionado
+    // O row.COMISSAO_PAGA é mapeado no commissionData para refletir o status atual
+    const newStatus = !row.COMISSAO_PAGA;
     const roleProp = `PAGO_${activeCommissionRole}`;
 
     // Atualização Otimista no Estado Global
@@ -274,7 +275,8 @@ export default function App() {
         item.PED_IN_CODIGO === keys.ped &&
         item.ITP_IN_SEQUENCIA === keys.seq
       ) {
-        return { ...item, COMISSAO_PAGA: newStatus, [roleProp]: newStatus };
+        // Atualiza apenas a propriedade específica do cargo
+        return { ...item, [roleProp]: newStatus };
       }
       return item;
     }));
@@ -291,7 +293,7 @@ export default function App() {
           item.PED_IN_CODIGO === keys.ped &&
           item.ITP_IN_SEQUENCIA === keys.seq
         ) {
-          return { ...item, COMISSAO_PAGA: !newStatus, [roleProp]: !newStatus };
+          return { ...item, [roleProp]: !newStatus };
         }
         return item;
       }));
@@ -633,11 +635,16 @@ export default function App() {
 
       const valorComissao = valMercadoria * percentual;
 
+      // Determina se ESTE cargo já foi pago
+      const rolePaymentKey = `PAGO_${activeCommissionRole}`;
+      const isPaid = !!item[rolePaymentKey];
+
       return {
         ...item,
         PERCENTUAL_COMISSAO: percentual,
         VALOR_COMISSAO: valorComissao,
-        ATINGIMENTO_META_ORIGEM: atingimentoMeta
+        ATINGIMENTO_META_ORIGEM: atingimentoMeta,
+        COMISSAO_PAGA: isPaid // Vincula o estado do checkbox à coluna específica do cargo
       };
     });
   }, [processedData, activeCommissionRole, commissionViewMode, salesGoals, salesData, activeModuleId]);
