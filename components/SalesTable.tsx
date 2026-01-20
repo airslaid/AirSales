@@ -1,7 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
 import { Sale, ColumnConfig, SortConfig } from '../types';
 import { ArrowUp, ArrowDown, GripVertical, ChevronRight, ChevronDown, Package, Check, X as XIcon } from 'lucide-react';
-import { updateSaleCommissionStatus } from '../services/supabaseService';
 
 interface SalesTableProps {
   data: Sale[];
@@ -11,6 +11,7 @@ interface SalesTableProps {
   onColumnReorder: (fromIndex: number, toIndex: number) => void;
   isLoading: boolean;
   isGroupedByOrder?: boolean;
+  onTogglePayment?: (row: Sale) => Promise<void>;
 }
 
 export const SalesTable: React.FC<SalesTableProps> = ({ 
@@ -20,10 +21,11 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   onSort,
   onColumnReorder,
   isLoading,
-  isGroupedByOrder = false
+  isGroupedByOrder = false,
+  onTogglePayment
 }) => {
   const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
-  const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
 
   const handleDragStart = (e: React.DragEvent<HTMLTableCellElement>, index: number) => {
@@ -43,39 +45,27 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     setDraggedColIndex(null);
   };
 
-  const toggleExpand = (orderId: number) => {
+  const toggleExpand = (groupKey: string) => {
     const newSet = new Set(expandedOrders);
-    if (newSet.has(orderId)) {
-      newSet.delete(orderId);
+    if (newSet.has(groupKey)) {
+      newSet.delete(groupKey);
     } else {
-      newSet.add(orderId);
+      newSet.add(groupKey);
     }
     setExpandedOrders(newSet);
   };
 
   const handlePaymentToggle = async (e: React.MouseEvent, row: Sale) => {
      e.stopPropagation();
+     if (!onTogglePayment) return;
      
-     // Unique ID for UI loading state
      const uniqueId = `${row.FIL_IN_CODIGO}-${row.SER_ST_CODIGO}-${row.PED_IN_CODIGO}-${row.ITP_IN_SEQUENCIA}`;
      setProcessingPayment(uniqueId);
 
-     const keys = {
-          fil: Number(row.FIL_IN_CODIGO),
-          ser: String(row.SER_ST_CODIGO),
-          ped: Number(row.PED_IN_CODIGO),
-          seq: Number(row.ITP_IN_SEQUENCIA)
-      };
-
       try {
-          // Atualiza no banco
-          await updateSaleCommissionStatus(keys, !row.COMISSAO_PAGA);
-          
-          // Atualiza objeto localmente (mutação direta para refletir na UI instantaneamente sem reload total)
-          // Em uma app real, usaríamos um callback onDataChange, mas aqui simplificamos
-          row.COMISSAO_PAGA = !row.COMISSAO_PAGA; 
+          await onTogglePayment(row);
       } catch (err) {
-          alert('Erro ao atualizar pagamento');
+          // Erro já tratado no pai
       } finally {
           setProcessingPayment(null);
       }
@@ -93,26 +83,25 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     return leftAlignedKeys.includes(key) ? 'justify-start' : 'justify-center';
   };
 
-  // Lógica de Agrupamento
   const groupedData = useMemo(() => {
     if (!isGroupedByOrder) return null;
 
-    const groups = new Map<number, { summary: Sale, items: Sale[] }>();
+    const groups = new Map<string, { summary: Sale, items: Sale[] }>();
 
     data.forEach(item => {
-      const orderId = Number(item.PED_IN_CODIGO);
-      if (!groups.has(orderId)) {
-        groups.set(orderId, { 
+      const groupKey = `${item.FIL_IN_CODIGO}-${item.SER_ST_CODIGO}-${item.PED_IN_CODIGO}`;
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, { 
           summary: { ...item }, 
           items: [] 
         });
       }
       
-      const group = groups.get(orderId)!;
+      const group = groups.get(groupKey)!;
       group.items.push(item);
     });
 
-    const result = Array.from(groups.values()).map(g => {
+    const result = Array.from(groups.entries()).map(([key, g]) => {
        const totalVal = g.items.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
        const totalQtd = g.items.reduce((acc, curr) => acc + (Number(curr.ITP_RE_QUANTIDADE) || 0), 0);
        const totalComissao = g.items.reduce((acc, curr) => acc + (Number(curr.VALOR_COMISSAO) || 0), 0);
@@ -123,7 +112,8 @@ export const SalesTable: React.FC<SalesTableProps> = ({
        g.summary.ITP_ST_DESCRICAO = `${g.items.length} Itens`;
        g.summary.PRO_ST_ALTERNATIVO = '-';
        g.summary.ITP_RE_VALORUNITARIO = 0;
-       g.summary.COMISSAO_PAGA = g.items.every(i => i.COMISSAO_PAGA); // Pai só é pago se todos filhos forem
+       g.summary.COMISSAO_PAGA = g.items.every(i => i.COMISSAO_PAGA);
+       g.summary.__groupKey = key;
 
        return g;
     });
@@ -131,8 +121,6 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     return result;
   }, [data, isGroupedByOrder]);
 
-
-  // Renderização Padrão (Sem Agrupamento)
   const renderFlatRows = () => {
     return data.map((row, rIdx) => (
       <tr key={rIdx} className={`hover:bg-gray-50/80 transition-colors border-b border-gray-50 last:border-0 ${row.COMISSAO_PAGA ? 'bg-green-50/30' : ''}`}>
@@ -145,19 +133,17 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     ));
   };
 
-  // Renderização Agrupada (Com Expansão)
   const renderGroupedRows = () => {
     if (!groupedData) return null;
 
     return groupedData.map((group) => {
-      const orderId = Number(group.summary.PED_IN_CODIGO);
-      const isExpanded = expandedOrders.has(orderId);
+      const groupKey = group.summary.__groupKey as string;
+      const isExpanded = expandedOrders.has(groupKey);
 
       return (
-        <React.Fragment key={orderId}>
-          {/* Linha Pai (Resumo do Pedido) */}
+        <React.Fragment key={groupKey}>
           <tr 
-            onClick={() => toggleExpand(orderId)}
+            onClick={() => toggleExpand(groupKey)}
             className={`cursor-pointer transition-colors border-b border-gray-100 ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
           >
             {visibleColumns.map((col, idx) => {
@@ -177,9 +163,8 @@ export const SalesTable: React.FC<SalesTableProps> = ({
             })}
           </tr>
 
-          {/* Linhas Filhas (Itens) */}
           {isExpanded && group.items.map((item, itemIdx) => (
-            <tr key={`${orderId}-${itemIdx}`} className={`bg-gray-50/50 border-b border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200 ${item.COMISSAO_PAGA ? 'bg-green-50/50' : ''}`}>
+            <tr key={`${groupKey}-${itemIdx}`} className={`bg-gray-50/50 border-b border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200 ${item.COMISSAO_PAGA ? 'bg-green-50/50' : ''}`}>
               {visibleColumns.map((col, idx) => (
                  <td key={col.key} className={`px-2 py-1 text-[9px] text-gray-500 whitespace-nowrap border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}>
                     <div className={idx === 0 ? 'pl-6 flex items-center gap-1' : ''}>
@@ -196,9 +181,8 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   };
 
   const renderCellContent = (row: Sale, col: ColumnConfig, isParent = false) => {
-    // RENDERIZAÇÃO CUSTOMIZADA: CHECKBOX DE PAGAMENTO
     if (col.key === 'CHECK_PAGAMENTO') {
-        if (isParent) return null; // Não mostra check no pai agrupado por enquanto para evitar complexidade de update em lote
+        if (isParent) return null;
         
         const uniqueId = `${row.FIL_IN_CODIGO}-${row.SER_ST_CODIGO}-${row.PED_IN_CODIGO}-${row.ITP_IN_SEQUENCIA}`;
         const isProcessing = processingPayment === uniqueId;
