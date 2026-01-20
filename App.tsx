@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   RefreshCw, Search, Database, Menu, Table as TableIcon, FileText, ShoppingBag, Hammer, 
@@ -194,9 +195,8 @@ export default function App() {
       const activeModule = MODULES.find(m => m.id === activeModuleId);
       const tableName = activeModule?.table || 'PEDIDOS_DETALHADOS';
       
-      const repCode = currentUser.is_admin ? undefined : currentUser.rep_in_codigo;
+      const repCode = currentUser?.is_admin ? undefined : currentUser?.rep_in_codigo;
       
-      // Se for Módulo de Comissão ou Pagamentos, usa a base 'PD' (Pedidos) para cálculo
       const filterToUse = (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? 'PD' : activeModuleId;
       
       const data = await fetchData('supabase', "", tableName, filterToUse);
@@ -248,6 +248,48 @@ export default function App() {
             loadData(); 
         }
     } finally { setSyncing(false); }
+  };
+
+  const handleTogglePayment = async (row: Sale) => {
+    const keys = {
+      fil: Number(row.FIL_IN_CODIGO),
+      ser: String(row.SER_ST_CODIGO),
+      ped: Number(row.PED_IN_CODIGO),
+      seq: Number(row.ITP_IN_SEQUENCIA)
+    };
+    const newStatus = !row.COMISSAO_PAGA;
+
+    // Atualização Otimista no Estado Global
+    setSalesData(prev => prev.map(item => {
+      if (
+        item.FIL_IN_CODIGO === keys.fil &&
+        item.SER_ST_CODIGO === keys.ser &&
+        item.PED_IN_CODIGO === keys.ped &&
+        item.ITP_IN_SEQUENCIA === keys.seq
+      ) {
+        return { ...item, COMISSAO_PAGA: newStatus };
+      }
+      return item;
+    }));
+
+    try {
+      await updateSaleCommissionStatus(keys, newStatus);
+      showNotification(newStatus ? "Pagamento confirmado!" : "Pagamento estornado.", "success");
+    } catch (error) {
+      // Reverte o estado em caso de erro
+      setSalesData(prev => prev.map(item => {
+        if (
+          item.FIL_IN_CODIGO === keys.fil &&
+          item.SER_ST_CODIGO === keys.ser &&
+          item.PED_IN_CODIGO === keys.ped &&
+          item.ITP_IN_SEQUENCIA === keys.seq
+        ) {
+          return { ...item, COMISSAO_PAGA: !newStatus };
+        }
+        return item;
+      }));
+      showNotification("Erro ao atualizar pagamento no banco.", "error");
+    }
   };
 
   const generateColumns = (data: Sale[]) => {
@@ -353,38 +395,11 @@ export default function App() {
     } catch (e: any) { showNotification(e.message, "error"); }
   };
 
-  const handleTogglePayment = async (row: Sale) => {
-      // Chaves compostas para identificar unicamente a linha no banco
-      const keys = {
-          fil: Number(row.FIL_IN_CODIGO),
-          ser: String(row.SER_ST_CODIGO),
-          ped: Number(row.PED_IN_CODIGO),
-          seq: Number(row.ITP_IN_SEQUENCIA)
-      };
-
-      const newStatus = !row.COMISSAO_PAGA;
-
-      // Otimista Update no Estado Local
-      setSalesData(prev => prev.map(s => {
-          if (
-              Number(s.FIL_IN_CODIGO) === keys.fil &&
-              String(s.SER_ST_CODIGO) === keys.ser &&
-              Number(s.PED_IN_CODIGO) === keys.ped &&
-              Number(s.ITP_IN_SEQUENCIA) === keys.seq
-          ) {
-              return { ...s, COMISSAO_PAGA: newStatus };
-          }
-          return s;
-      }));
-
-      try {
-          await updateSaleCommissionStatus(keys, newStatus);
-          showNotification(newStatus ? "Comissão marcada como PAGA!" : "Pagamento estornado.", "success");
-      } catch (error) {
-          showNotification("Erro ao atualizar pagamento.", "error");
-          // Reverte em caso de erro
-          loadData(); 
-      }
+  const handleColumnReorder = (fromIndex: number, toIndex: number) => {
+    const newCols = [...salesColumns];
+    const [moved] = newCols.splice(fromIndex, 1);
+    newCols.splice(toIndex, 0, moved);
+    setSalesColumns(newCols);
   };
 
   const toggleColumnVisibility = (key: string) => {
@@ -398,9 +413,7 @@ export default function App() {
     setTimeout(() => setLayoutSaved(false), 2000); 
   };
 
-  // EXPORT FUNCTIONS
   const handleExportExcel = () => {
-    // Escolhe os dados corretos baseado no módulo
     let tableData = processedData;
     let tableCols = salesColumns;
 
@@ -411,11 +424,10 @@ export default function App() {
 
     const visibleCols = tableCols.filter(c => c.visible);
     
-    // Mapeia os dados formatados
     const dataToExport = tableData.map(row => {
       const newRow: Record<string, any> = {};
       visibleCols.forEach(col => {
-        if (col.key === 'CHECK_PAGAMENTO') return; // Pula coluna de check
+        if (col.key === 'CHECK_PAGAMENTO') return; 
         newRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key];
       });
       return newRow;
@@ -460,14 +472,14 @@ export default function App() {
       body: tableRows,
       startY: 25,
       styles: { fontSize: 6, cellPadding: 1 },
-      headStyles: { fillColor: [26, 33, 48] }, // Dark blue header
+      headStyles: { fillColor: [26, 33, 48] },
     });
 
     doc.save(`AirSales_Export_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   const availableReps = useMemo(() => {
-    if (currentUser && !currentUser.is_admin && currentUser.rep_in_codigo) return fullRepsList.filter(r => r.code === currentUser.rep_in_codigo);
+    if (currentUser && !currentUser?.is_admin && currentUser?.rep_in_codigo) return fullRepsList.filter(r => r.code === currentUser.rep_in_codigo);
     return fullRepsList;
   }, [fullRepsList, currentUser]);
 
@@ -498,12 +510,9 @@ export default function App() {
       result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s)));
     }
     
-    // AJUSTE: Filtro de Data Dinâmico
-    // Se for Comissão ou Pagamentos e modo Faturado: usa NOT_DT_EMISSAO (Faturamento).
     const isPaymentModule = activeModuleId === 'PAGAMENTOS';
     const isCommissionModule = activeModuleId === 'COMISSAO';
     
-    // No Módulo de Pagamentos, a regra é: Se Faturado -> Nota. Se Aberto -> Pedido.
     const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') 
         ? 'NOT_DT_EMISSAO' 
         : 'PED_DT_EMISSAO';
@@ -527,7 +536,6 @@ export default function App() {
     return result;
   }, [salesData, filters, sortConfig, activeModuleId, commissionViewMode]);
 
-  // --- LÓGICA DE COMISSÕES AVANÇADA ---
   const commissionData = useMemo(() => {
     const monthlyMetrics = new Map<string, number>();
 
@@ -569,22 +577,17 @@ export default function App() {
        }
     };
 
-    // No módulo PAGAMENTOS, queremos ver tudo ou filtrar pelo toggle
-    // Se for COMISSAO, mantém o comportamento estrito anterior
     const isPaymentModule = activeModuleId === 'PAGAMENTOS';
 
     const filteredByMode = processedData.filter(item => {
       const status = String(item.PED_ST_STATUS || '').toUpperCase();
       const hasInvoice = !!item.NOT_DT_EMISSAO;
 
-      // Se for Pagamentos, a lógica de filtro é aplicada pelo usuário, aqui processamos
-      // para garantir que o cálculo ocorra. O filtro visual vem depois.
       if (isPaymentModule) {
            if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice;
            return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL');
       }
 
-      // Módulo Comissão
       if (commissionViewMode === 'FATURADO') {
          return status.includes('FATURADO') || hasInvoice;
       } 
@@ -637,6 +640,7 @@ export default function App() {
         { key: 'NF_NOT_IN_CODIGO', label: 'NOTA FISCAL', visible: true },
         { key: 'PED_IN_CODIGO', label: 'PEDIDO', visible: true },
         { key: 'CLIENTE_NOME', label: 'CLIENTE', visible: true },
+        { key: 'PRO_ST_ALTERNATIVO', label: 'CÓD. ALTERNATIVO', visible: true },
         { key: 'REPRESENTANTE_NOME', label: 'REPRESENTANTE', visible: true },
         { key: 'ITP_RE_VALORMERCADORIA', label: 'VALOR VENDA', visible: true, format: currencyFormat },
         { key: 'PED_DT_EMISSAO', label: 'DT VENDA', visible: true, format: dateFormat },
@@ -651,9 +655,8 @@ export default function App() {
         { key: 'VALOR_COMISSAO', label: 'R$ COMISSÃO', visible: true, format: currencyFormat },
     );
 
-    // Se for módulo de pagamentos, adiciona a coluna de Check
     if (activeModuleId === 'PAGAMENTOS') {
-        cols.unshift({ key: 'CHECK_PAGAMENTO', label: 'PAGO?', visible: true }); // Insere no início
+        cols.unshift({ key: 'CHECK_PAGAMENTO', label: 'PAGO?', visible: true });
     } else {
         cols.push({ key: 'PED_ST_STATUS', label: 'STATUS', visible: true });
     }
@@ -697,7 +700,6 @@ export default function App() {
     return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement };
   }, [processedData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
 
-  // Payment Metrics
   const paymentMetrics = useMemo(() => {
       if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 };
 
@@ -727,7 +729,6 @@ export default function App() {
   }, [commissionData, activeModuleId]);
 
 
-  // Performance Report logic
   const performanceData = useMemo(() => {
       const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth);
       const relevantSales = salesData.filter(s => {
@@ -810,7 +811,6 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-gray-100 font-sans text-gray-900 overflow-hidden">
-      {/* Notifications and Modals */}
       {notification && (
         <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}>
            <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div>
@@ -834,7 +834,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Sidebar - Desktop (Flex Item) / Mobile (Fixed + Overlay) */}
       <aside className={`
         flex flex-col border-r border-gray-200 bg-white transition-all duration-300 z-30 flex-shrink-0
         ${mobileSidebarOpen ? 'fixed inset-y-0 left-0 shadow-2xl w-64 translate-x-0' : 'hidden lg:flex relative'}
@@ -843,7 +842,7 @@ export default function App() {
       `}>
         <div className="h-12 flex items-center px-4 border-b border-gray-100 bg-gray-50 shrink-0"><div className="flex items-center gap-2 text-gray-900"><Hexagon size={20}/><span className={`font-bold uppercase text-xs transition-opacity duration-200 ${!sidebarOpen && !mobileSidebarOpen ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>AIR SALES</span></div></div>
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar">
-           {MODULES.filter(m => !m.adminOnly || currentUser.is_admin).map(m => (
+           {MODULES.filter(m => !m.adminOnly || currentUser?.is_admin).map(m => (
              <button 
                 key={m.id} 
                 onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} 
@@ -859,17 +858,15 @@ export default function App() {
            {(sidebarOpen || mobileSidebarOpen) && (
               <div className="px-3 py-2 mb-1">
                  <p className="text-[9px] font-bold text-gray-400 uppercase">Usuário</p>
-                 <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser.name}</p></div>
+                 <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser?.name}</p></div>
               </div>
            )}
            <button onClick={() => setCurrentUser(null)} className={`w-full flex items-center gap-2 p-2 text-gray-400 hover:text-red-600 text-[10px] font-bold uppercase ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`}><LogOut size={14} />{(sidebarOpen || mobileSidebarOpen) && 'Sair'}</button>
         </div>
       </aside>
 
-      {/* Mobile Backdrop */}
       {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)} />}
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center shrink-0 z-10 shadow-sm">
           <div className="flex items-center gap-4">
@@ -880,10 +877,8 @@ export default function App() {
           {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && (<button onClick={handleAutomatedSync} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg"><RefreshCw size={12} className={loading || syncing ? 'animate-spin' : ''} /><span className="hidden sm:inline">Atualizar Base</span></button>)}
         </header>
 
-        {/* Scrollable Main Content - Agora apenas a tabela e modais rolam individualmente se necessario */}
         <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full">
           {activeModuleId === 'METAS' ? (
-             /* Metas Component - Rola individualmente */
              <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar">
                 <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}>
                    <div className="flex items-center justify-between border-b pb-2"><h3 className="text-[10px] font-bold uppercase tracking-widest">{editingGoalId ? 'Editando Meta' : 'Nova Meta de Vendas'}</h3>{editingGoalId && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}</div>
@@ -901,24 +896,20 @@ export default function App() {
                 </div>
              </div>
           ) : activeModuleId === 'PERFORMANCE' ? (
-             /* Performance Component - Rola individualmente */
              <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar">
                 <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-0 z-10">
-                   {/* ... conteúdo performance ... */}
                    <div className="flex items-center gap-2"><div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div><div><h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Relatório de Atingimento</h3><p className="text-[9px] text-gray-500 font-medium">Comparativo Meta x Realizado (Pedidos)</p></div></div>
-                   <div className="flex items-center gap-2 w-full sm:w-auto">{currentUser.is_admin && (<div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label><button onClick={() => setShowPerfRepSelector(!showPerfRepSelector)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"><span className="truncate">{perfSelectedReps.length === 0 ? 'Todos os Representantes' : perfSelectedReps.length === 1 ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado' : `${perfSelectedReps.length} Selecionados`}</span><ChevronDown size={12} className="text-gray-500"/></button>{showPerfRepSelector && (<div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100"><div onClick={() => setPerfSelectedReps([])} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>{perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span></div>{availableReps.map(r => {const isSelected = perfSelectedReps.includes(r.code); return (<div key={r.code} onClick={() => togglePerfRepSelection(r.code)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>{isSelected && <CheckCircle2 size={10} className="text-white"/>}</div><div className="flex flex-col"><span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span><span className="text-[7px] text-gray-300 font-mono">{r.code}</span></div></div>);})}</div>)}</div>)}<div className="flex-1 sm:w-24"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="flex-1 sm:w-32"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>{MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div></div></div>
+                   <div className="flex items-center gap-2 w-full sm:w-auto">{currentUser?.is_admin && (<div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label><button onClick={() => setShowPerfRepSelector(!showPerfRepSelector)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"><span className="truncate">{perfSelectedReps.length === 0 ? 'Todos os Representantes' : perfSelectedReps.length === 1 ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado' : `${perfSelectedReps.length} Selecionados`}</span><ChevronDown size={12} className="text-gray-500"/></button>{showPerfRepSelector && (<div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100"><div onClick={() => setPerfSelectedReps([])} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>{perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span></div>{availableReps.map(r => {const isSelected = perfSelectedReps.includes(r.code); return (<div key={r.code} onClick={() => togglePerfRepSelection(r.code)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>{isSelected && <CheckCircle2 size={10} className="text-white"/>}</div><div className="flex flex-col"><span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span><span className="text-[7px] text-gray-300 font-mono">{r.code}</span></div></div>);})}</div>)}</div>)}<div className="flex-1 sm:w-24"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="flex-1 sm:w-32"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>{MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div></div></div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><StatCard title="Total Meta Definida" value={currencyFormat(perfMetrics.totalGoal)} icon={Target} color="text-gray-400" /><StatCard title="Total Realizado (Itens)" value={currencyFormat(perfMetrics.totalRealized)} icon={ShoppingBag} color="text-blue-600" /><div className="bg-white p-3 border border-gray-200 shadow-sm flex flex-col justify-center relative overflow-hidden group"><div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><PieChart size={40}/></div><p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-1">Atingimento Global</p><div className="flex items-end gap-2"><h3 className={`text-2xl font-black tracking-tighter ${perfMetrics.totalPercent >= 100 ? 'text-green-600' : perfMetrics.totalPercent >= 70 ? 'text-amber-500' : 'text-red-500'}`}>{perfMetrics.totalPercent.toFixed(1)}%</h3></div></div></div>
                 <div className="bg-white border border-gray-200 shadow-sm overflow-hidden"><div className="p-3 bg-gray-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold uppercase text-gray-500">Performance por Representante</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Representante</th><th className="px-4 py-2 text-left w-1/3">Progresso da Meta</th><th className="px-4 py-2 text-right">Meta (R$)</th><th className="px-4 py-2 text-right">Realizado (R$)</th><th className="px-4 py-2 text-center">% Ating.</th></tr></thead><tbody className="divide-y divide-gray-100">{performanceData.length === 0 ? (<tr><td colSpan={5} className="p-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sem dados para o período selecionado</td></tr>) : (performanceData.map((row) => (<tr key={row.code} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-3"><div className="font-bold text-gray-900">{row.name}</div><div className="text-[8px] text-gray-400 font-mono">COD: {row.code}</div></td><td className="px-4 py-3 align-middle"><div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${row.percent >= 100 ? 'bg-green-500' : row.percent >= 70 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(row.percent, 100)}%` }}></div></div></td><td className="px-4 py-3 text-right font-mono text-gray-500">{currencyFormat(row.goal)}</td><td className="px-4 py-3 text-right font-mono font-bold text-gray-900">{currencyFormat(row.realized)}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${row.percent >= 100 ? 'bg-green-100 text-green-700' : row.percent >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{row.percent.toFixed(1)}%</span></td></tr>)))}</tbody></table></div></div>
              </div>
           ) : activeModuleId === 'USERS' ? (
-             /* Users Component - Rola individualmente */
              <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar">
                 <div className="col-span-12 lg:col-span-4 bg-white border border-gray-200 p-3 space-y-2 shadow-sm"><h3 className="text-[10px] font-bold uppercase tracking-widest border-b pb-2">Novo Acesso</h3><div className="space-y-2"><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Nome Completo</label><input type="text" placeholder="Ex: João da Silva" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.name} onChange={e => setNewUser(p => ({...p, name: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">E-mail Corporativo</label><input type="email" placeholder="usuario@empresa.com.br" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.email} onChange={e => setNewUser(p => ({...p, email: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Senha de Acesso</label><input type="password" placeholder="••••••••" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.password || ''} onChange={e => setNewUser(p => ({...p, password: e.target.value}))} /></div><div className="pt-1 flex items-center gap-2 p-2 bg-gray-50 border border-dashed border-gray-200"><input type="checkbox" id="is_admin" className="w-3 h-3 accent-gray-900" checked={newUser.is_admin} onChange={e => setNewUser(p => ({...p, is_admin: e.target.checked, rep_in_codigo: e.target.checked ? null : p.rep_in_codigo}))} /><label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label></div>{!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}</div><button onClick={handleSaveUser} className="w-full py-2.5 bg-[#1a2130] text-white text-[9px] font-bold uppercase tracking-widest shadow-xl hover:bg-black transition-all">Criar Acesso</button></div>
                 <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-right">Ação</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-right"><button onClick={async () => { if(confirm(`Remover acesso de ${u.name}?`)) { await deleteAppUser(u.id!); loadAppUsers(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div></div>
              </div>
           ) : (
             <div className="flex flex-col h-full gap-2 overflow-hidden">
-              {/* PAINEL DE FILTROS OTIMIZADO */}
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden animate-in fade-in duration-300 shrink-0">
                 <div className="p-2 border-b bg-gray-50 flex items-center justify-between cursor-pointer" onClick={() => setFiltersExpanded(!filtersExpanded)}>
                   <div className="flex items-center gap-2"><Filter size={12} className="text-gray-900" /><span className="text-[9px] font-bold uppercase tracking-widest">Painel de Inteligência</span></div>
@@ -930,8 +921,7 @@ export default function App() {
                       <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Busca Global</label>
                       <div className="relative"><Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" /><input type="text" placeholder="ID, Cliente, Produto..." className="w-full pl-7 pr-2 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.globalSearch} onChange={e => setFilters({...filters, globalSearch: e.target.value})} /></div>
                     </div>
-                    {/* ... (Filtros de Representante, Status, Filial, Data) ... */}
-                    <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Representante</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none disabled:bg-gray-100" value={filters.representante} onChange={e => setFilters({...filters, representante: e.target.value})} disabled={!currentUser.is_admin}><option value="">{currentUser.is_admin ? 'Todos' : 'Meu Cadastro'}</option>{availableReps.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}</select></div>
+                    <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Representante</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none disabled:bg-gray-100" value={filters.representante} onChange={e => setFilters({...filters, representante: e.target.value})} disabled={!currentUser?.is_admin}><option value="">{currentUser?.is_admin ? 'Todos' : 'Meu Cadastro'}</option>{availableReps.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}</select></div>
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Status</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}><option value="">Todos</option>{availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Filial</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.filial} onChange={e => setFilters({...filters, filial: e.target.value})}><option value="">Todas</option>{availableFiliais.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
                     <div className="flex-1 min-w-[180px] space-y-0.5">
@@ -945,7 +935,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* DASHBOARD DE MÉTRICAS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0">
                 {activeModuleId === 'PAGAMENTOS' ? (
                   <>
@@ -960,6 +949,12 @@ export default function App() {
                         value={currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} 
                         icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} 
                         color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} 
+                     />
+                     <StatCard 
+                        title="Total Faturado (Venda)" 
+                        value={currencyFormat(metrics.faturado)} 
+                        icon={TrendingUp} 
+                        color="text-blue-600" 
                      />
                   </>
                 ) : (
@@ -986,7 +981,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* TABELA DE VENDAS FLEXÍVEL */}
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 relative">
                 <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between shrink-0">
                    {activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? (
@@ -1024,7 +1018,6 @@ export default function App() {
                    )}
 
                    <div className="flex items-center gap-2 ml-auto">
-                     {/* Export Buttons */}
                      <button 
                        onClick={handleExportExcel} 
                        className="px-2 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm"
@@ -1040,7 +1033,6 @@ export default function App() {
                        <FileType size={12}/> PDF
                      </button>
 
-                     {/* Toggle de Agrupamento */}
                      <button 
                         onClick={() => setIsGroupedByOrder(!isGroupedByOrder)} 
                         className={`px-3 py-1.5 border text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${isGroupedByOrder ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
@@ -1062,50 +1054,16 @@ export default function App() {
                    </div>
                 </div>
                 <div className="flex-1 overflow-hidden relative">
-                    {activeModuleId === 'PAGAMENTOS' ? (
-                       <SalesTable 
-                         data={commissionData} 
-                         columns={commissionColumns.map(c => {
-                             if (c.key === 'CHECK_PAGAMENTO') {
-                                return {
-                                    ...c,
-                                    format: (val: any) => {
-                                       // Este format é apenas um placeholder, o rendering real do checkbox acontece abaixo
-                                       return ""; 
-                                    }
-                                }
-                             }
-                             return c;
-                         })} 
-                         sortConfig={sortConfig} 
-                         onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
-                         onColumnReorder={() => {}} 
-                         isLoading={loading || syncing}
-                         isGroupedByOrder={isGroupedByOrder}
-                       />
-                    ) : (
-                       <SalesTable 
-                         data={activeModuleId === 'COMISSAO' ? commissionData : processedData} 
-                         columns={activeModuleId === 'COMISSAO' ? commissionColumns : salesColumns} 
-                         sortConfig={sortConfig} 
-                         onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
-                         onColumnReorder={(f, t) => { 
-                             if (activeModuleId === 'COMISSAO') return; 
-                             const newCols = [...salesColumns]; const [moved] = newCols.splice(f, 1); newCols.splice(t, 0, moved); setSalesColumns(newCols); 
-                         }} 
-                         isLoading={loading || syncing}
-                         isGroupedByOrder={isGroupedByOrder}
-                       />
-                    )}
-                    
-                    {/* Hack para injetar o checkbox na tabela via DOM overlay ou alterar o componente SalesTable é complexo sem alterar o arquivo SalesTable.
-                        Vou usar uma abordagem onde o SalesTable renderiza o conteúdo customizado se detectar a coluna.
-                        Mas como não posso editar SalesTable com lógica customizada facilmente sem quebrar a prop 'format', 
-                        vou fazer o seguinte: O SalesTable usa 'format' para renderizar texto.
-                        
-                        Vou alterar o componente SalesTable para aceitar ReactNode ou 
-                        Vou criar um overlay de ações se necessário, mas o melhor é alterar o SalesTable.tsx para suportar renderização customizada na célula.
-                     */}
+                    <SalesTable 
+                        data={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} 
+                        columns={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns} 
+                        sortConfig={sortConfig} 
+                        onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
+                        onColumnReorder={handleColumnReorder} 
+                        isLoading={loading || syncing}
+                        isGroupedByOrder={isGroupedByOrder}
+                        onTogglePayment={handleTogglePayment}
+                    />
                 </div>
               </div>
             </div>
