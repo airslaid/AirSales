@@ -282,7 +282,7 @@ export default function App() {
     try {
       await updateSaleCommissionStatus(keys, newStatus, roleProp);
       showNotification(newStatus ? "Pagamento confirmado!" : "Pagamento estornado.", "success");
-    } catch (error) {
+    } catch (error: any) {
       // Reverte o estado em caso de erro
       setSalesData(prev => prev.map(item => {
         if (
@@ -295,7 +295,7 @@ export default function App() {
         }
         return item;
       }));
-      showNotification("Erro ao atualizar pagamento no banco.", "error");
+      showNotification(`Erro ao atualizar pagamento: ${error.message || 'Erro desconhecido'}`, "error");
     }
   };
 
@@ -320,7 +320,7 @@ export default function App() {
       "PED_IN_CODIGO", 
       "FILIAL_NOME", 
       "REPRESENTANTE_NOME", 
-      "PED_DT_EMISSAO",
+      "PED_DT_EMISSAO", 
       "CLIENTE_NOME", 
       "PRO_ST_ALTERNATIVO", 
       "ITP_ST_DESCRICAO", 
