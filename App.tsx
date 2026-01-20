@@ -5,7 +5,7 @@ import {
   ShieldCheck, LogOut, CheckCircle2, Lock, ArrowRight, Layout, X, Calendar, Key, Columns, 
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
-  Package, Tag, Layers, ListTree
+  Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -14,7 +14,7 @@ import autoTable from 'jspdf-autotable';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
-import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives } from './services/supabaseService';
+import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus } from './services/supabaseService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
@@ -25,9 +25,19 @@ const MODULES = [
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
   { id: 'DV', label: 'Desenvolvimento', icon: Hammer, table: 'PEDIDOS_DETALHADOS' },
+  { id: 'COMISSAO', label: 'Comissões', icon: Percent, adminOnly: false },
+  { id: 'PAGAMENTOS', label: 'Controle Pagamentos', icon: Wallet, adminOnly: true },
   { id: 'PERFORMANCE', label: 'Meta x Realizado', icon: BarChart3, adminOnly: false },
   { id: 'METAS', label: 'Metas', icon: Target, adminOnly: true },
   { id: 'USERS', label: 'Gestão de Acessos', icon: Users, adminOnly: true },
+];
+
+const COMMISSION_ROLES = [
+  { id: 'ASSISTENTE', label: 'Orçamentista / Assistente' },
+  { id: 'VENDEDOR', label: 'Representante' },
+  { id: 'SUPERVISOR', label: 'Supervisor de Vendas' },
+  { id: 'POSVENDA', label: 'Exec. Pós-Venda' },
+  { id: 'GERENTE', label: 'Gerente Comercial' }
 ];
 
 const MONTHS = [
@@ -60,6 +70,12 @@ const numberFormat = (val: any) => {
   return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 }).format(num);
 };
 
+const percentFormat = (val: any) => {
+  if (val === null || val === undefined) return '-';
+  const num = parseBrNumber(val);
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2, style: 'percent', minimumFractionDigits: 2 }).format(num);
+};
+
 const dateFormat = (val: any) => {
   if (!val) return '-';
   try {
@@ -82,6 +98,9 @@ const getCurrentMonthRange = () => {
 
 export default function App() {
   const [activeModuleId, setActiveModuleId] = useState<string>('PD');
+  const [activeCommissionRole, setActiveCommissionRole] = useState<string>('ASSISTENTE');
+  const [commissionViewMode, setCommissionViewMode] = useState<'FATURADO' | 'ABERTO'>('FATURADO');
+
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [salesGoals, setSalesGoals] = useState<SalesGoal[]>([]);
@@ -176,13 +195,15 @@ export default function App() {
       const tableName = activeModule?.table || 'PEDIDOS_DETALHADOS';
       
       const repCode = currentUser.is_admin ? undefined : currentUser.rep_in_codigo;
-      const filterToUse = activeModuleId === 'PERFORMANCE' ? 'PD' : activeModuleId;
+      
+      // Se for Módulo de Comissão ou Pagamentos, usa a base 'PD' (Pedidos) para cálculo
+      const filterToUse = (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? 'PD' : activeModuleId;
       
       const data = await fetchData('supabase', "", tableName, filterToUse);
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
       setSalesData(filtered);
       
-      if (activeModuleId !== 'PERFORMANCE') {
+      if (activeModuleId !== 'PERFORMANCE' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS') {
         generateColumns(filtered);
       }
     } catch (error) {} finally { setLoading(false); }
@@ -255,7 +276,7 @@ export default function App() {
       "PRO_ST_ALTERNATIVO", 
       "ITP_ST_DESCRICAO", 
       "ITP_RE_QUANTIDADE",
-      "ITP_RE_VALORUNITARIO",
+      "ITP_RE_VALORUNITARIO", 
       "ITP_RE_VALORMERCADORIA", 
       "PED_ST_STATUS"
     ];
@@ -332,6 +353,40 @@ export default function App() {
     } catch (e: any) { showNotification(e.message, "error"); }
   };
 
+  const handleTogglePayment = async (row: Sale) => {
+      // Chaves compostas para identificar unicamente a linha no banco
+      const keys = {
+          fil: Number(row.FIL_IN_CODIGO),
+          ser: String(row.SER_ST_CODIGO),
+          ped: Number(row.PED_IN_CODIGO),
+          seq: Number(row.ITP_IN_SEQUENCIA)
+      };
+
+      const newStatus = !row.COMISSAO_PAGA;
+
+      // Otimista Update no Estado Local
+      setSalesData(prev => prev.map(s => {
+          if (
+              Number(s.FIL_IN_CODIGO) === keys.fil &&
+              String(s.SER_ST_CODIGO) === keys.ser &&
+              Number(s.PED_IN_CODIGO) === keys.ped &&
+              Number(s.ITP_IN_SEQUENCIA) === keys.seq
+          ) {
+              return { ...s, COMISSAO_PAGA: newStatus };
+          }
+          return s;
+      }));
+
+      try {
+          await updateSaleCommissionStatus(keys, newStatus);
+          showNotification(newStatus ? "Comissão marcada como PAGA!" : "Pagamento estornado.", "success");
+      } catch (error) {
+          showNotification("Erro ao atualizar pagamento.", "error");
+          // Reverte em caso de erro
+          loadData(); 
+      }
+  };
+
   const toggleColumnVisibility = (key: string) => {
     setSalesColumns(prev => prev.map(col => col.key === key ? { ...col, visible: !col.visible } : col));
   };
@@ -345,12 +400,22 @@ export default function App() {
 
   // EXPORT FUNCTIONS
   const handleExportExcel = () => {
-    const visibleCols = salesColumns.filter(c => c.visible);
+    // Escolhe os dados corretos baseado no módulo
+    let tableData = processedData;
+    let tableCols = salesColumns;
+
+    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') {
+        tableData = commissionData;
+        tableCols = commissionColumns;
+    }
+
+    const visibleCols = tableCols.filter(c => c.visible);
     
     // Mapeia os dados formatados
-    const dataToExport = processedData.map(row => {
+    const dataToExport = tableData.map(row => {
       const newRow: Record<string, any> = {};
       visibleCols.forEach(col => {
+        if (col.key === 'CHECK_PAGAMENTO') return; // Pula coluna de check
         newRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key];
       });
       return newRow;
@@ -359,20 +424,27 @@ export default function App() {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     
-    // Ajuste de largura das colunas (básico)
-    const wscols = visibleCols.map(() => ({ wch: 20 }));
+    const wscols = visibleCols.filter(c => c.key !== 'CHECK_PAGAMENTO').map(() => ({ wch: 20 }));
     ws['!cols'] = wscols;
 
-    XLSX.utils.book_append_sheet(wb, ws, "Relatório de Vendas");
+    XLSX.utils.book_append_sheet(wb, ws, `Relatório ${MODULES.find(m => m.id === activeModuleId)?.label}`);
     XLSX.writeFile(wb, `AirSales_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   const handleExportPDF = () => {
     const doc = new jsPDF('landscape');
-    const visibleCols = salesColumns.filter(c => c.visible);
+    let tableData = processedData;
+    let tableCols = salesColumns;
+
+    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') {
+        tableData = commissionData;
+        tableCols = commissionColumns;
+    }
+
+    const visibleCols = tableCols.filter(c => c.visible && c.key !== 'CHECK_PAGAMENTO');
     
     const tableColumn = visibleCols.map(c => c.label);
-    const tableRows = processedData.map(row => {
+    const tableRows = tableData.map(row => {
       return visibleCols.map(col => {
         return col.format ? col.format(row[col.key]) : String(row[col.key] || '');
       });
@@ -425,8 +497,20 @@ export default function App() {
       const s = filters.globalSearch.toLowerCase();
       result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s)));
     }
-    if (filters.startDate) result = result.filter(item => item.PED_DT_EMISSAO >= filters.startDate);
-    if (filters.endDate) result = result.filter(item => item.PED_DT_EMISSAO <= filters.endDate);
+    
+    // AJUSTE: Filtro de Data Dinâmico
+    // Se for Comissão ou Pagamentos e modo Faturado: usa NOT_DT_EMISSAO (Faturamento).
+    const isPaymentModule = activeModuleId === 'PAGAMENTOS';
+    const isCommissionModule = activeModuleId === 'COMISSAO';
+    
+    // No Módulo de Pagamentos, a regra é: Se Faturado -> Nota. Se Aberto -> Pedido.
+    const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') 
+        ? 'NOT_DT_EMISSAO' 
+        : 'PED_DT_EMISSAO';
+
+    if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
+    if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
+    
     if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
     if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
     if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
@@ -441,12 +525,148 @@ export default function App() {
       });
     }
     return result;
-  }, [salesData, filters, sortConfig]);
+  }, [salesData, filters, sortConfig, activeModuleId, commissionViewMode]);
+
+  // --- LÓGICA DE COMISSÕES AVANÇADA ---
+  const commissionData = useMemo(() => {
+    const monthlyMetrics = new Map<string, number>();
+
+    salesData.forEach(sale => {
+       const dt = sale['PED_DT_EMISSAO'];
+       if (!dt) return;
+       const d = new Date(dt);
+       const year = d.getFullYear();
+       const month = d.getMonth() + 1;
+       const repCode = Number(sale['REP_IN_CODIGO']);
+       const val = parseBrNumber(sale['ITP_RE_VALORMERCADORIA']);
+
+       const globalKey = `${year}-${month}-GLOBAL`;
+       monthlyMetrics.set(globalKey, (monthlyMetrics.get(globalKey) || 0) + val);
+
+       if (repCode) {
+          const repKey = `${year}-${month}-${repCode}`;
+          monthlyMetrics.set(repKey, (monthlyMetrics.get(repKey) || 0) + val);
+       }
+    });
+
+    const getGoalContext = (emissionDateStr: string, repCode: number) => {
+       if (!emissionDateStr) return { goal: 0, realized: 0, percent: 0 };
+       const d = new Date(emissionDateStr);
+       const year = d.getFullYear();
+       const month = d.getMonth() + 1;
+
+       if (activeCommissionRole === 'GERENTE') {
+          const globalKey = `${year}-${month}-GLOBAL`;
+          const realized = monthlyMetrics.get(globalKey) || 0;
+          const goal = salesGoals.filter(g => g.ano === year && g.mes === month).reduce((acc, curr) => acc + curr.valor_meta, 0);
+          return { goal, realized, percent: goal > 0 ? realized / goal : 0 };
+       } else {
+          const repKey = `${year}-${month}-${repCode}`;
+          const realized = monthlyMetrics.get(repKey) || 0;
+          const goalObj = salesGoals.find(g => g.ano === year && g.mes === month && g.rep_in_codigo === repCode);
+          const goal = goalObj?.valor_meta || 0;
+          return { goal, realized, percent: goal > 0 ? realized / goal : 0 };
+       }
+    };
+
+    // No módulo PAGAMENTOS, queremos ver tudo ou filtrar pelo toggle
+    // Se for COMISSAO, mantém o comportamento estrito anterior
+    const isPaymentModule = activeModuleId === 'PAGAMENTOS';
+
+    const filteredByMode = processedData.filter(item => {
+      const status = String(item.PED_ST_STATUS || '').toUpperCase();
+      const hasInvoice = !!item.NOT_DT_EMISSAO;
+
+      // Se for Pagamentos, a lógica de filtro é aplicada pelo usuário, aqui processamos
+      // para garantir que o cálculo ocorra. O filtro visual vem depois.
+      if (isPaymentModule) {
+           if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice;
+           return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL');
+      }
+
+      // Módulo Comissão
+      if (commissionViewMode === 'FATURADO') {
+         return status.includes('FATURADO') || hasInvoice;
+      } 
+      return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL');
+    });
+
+    return filteredByMode.map(item => {
+      const valMercadoria = parseBrNumber(item['ITP_RE_VALORMERCADORIA']);
+      const repCode = Number(item['REP_IN_CODIGO']);
+      const emissionDate = item['PED_DT_EMISSAO'];
+
+      let percentual = 0;
+      let atingimentoMeta = 0;
+
+      if (String(item.PED_ST_STATUS).toUpperCase().includes('CANCEL')) {
+         return { ...item, PERCENTUAL_COMISSAO: 0, VALOR_COMISSAO: 0, ATINGIMENTO_META_ORIGEM: 0 };
+      }
+
+      if (activeCommissionRole === 'ASSISTENTE') {
+        percentual = 0.0005; 
+      } else {
+        const { percent } = getGoalContext(emissionDate, repCode);
+        atingimentoMeta = percent;
+
+        if (activeCommissionRole === 'GERENTE') {
+            percentual = percent <= 0.85 ? 0.0035 : 0.0050;
+        } else if (activeCommissionRole === 'SUPERVISOR' || activeCommissionRole === 'POSVENDA') {
+            percentual = percent <= 0.85 ? 0.0015 : 0.0025;
+        } else if (activeCommissionRole === 'VENDEDOR') {
+            if (percent <= 0.65) percentual = 0.01;
+            else if (percent <= 0.85) percentual = 0.015;
+            else percentual = 0.02;
+        }
+      }
+
+      const valorComissao = valMercadoria * percentual;
+
+      return {
+        ...item,
+        PERCENTUAL_COMISSAO: percentual,
+        VALOR_COMISSAO: valorComissao,
+        ATINGIMENTO_META_ORIGEM: atingimentoMeta
+      };
+    });
+  }, [processedData, activeCommissionRole, commissionViewMode, salesGoals, salesData, activeModuleId]);
+
+  const commissionColumns = useMemo<ColumnConfig[]>(() => {
+    const cols: ColumnConfig[] = [
+        { key: 'NOT_DT_EMISSAO', label: 'DT FATURAMENTO', visible: true, format: dateFormat },
+        { key: 'NF_NOT_IN_CODIGO', label: 'NOTA FISCAL', visible: true },
+        { key: 'PED_IN_CODIGO', label: 'PEDIDO', visible: true },
+        { key: 'CLIENTE_NOME', label: 'CLIENTE', visible: true },
+        { key: 'REPRESENTANTE_NOME', label: 'REPRESENTANTE', visible: true },
+        { key: 'ITP_RE_VALORMERCADORIA', label: 'VALOR VENDA', visible: true, format: currencyFormat },
+        { key: 'PED_DT_EMISSAO', label: 'DT VENDA', visible: true, format: dateFormat },
+    ];
+
+    if (activeCommissionRole !== 'ASSISTENTE') {
+        cols.push({ key: 'ATINGIMENTO_META_ORIGEM', label: '% META (MÊS VENDA)', visible: true, format: percentFormat });
+    }
+
+    cols.push(
+        { key: 'PERCENTUAL_COMISSAO', label: '% COMISSÃO', visible: true, format: percentFormat },
+        { key: 'VALOR_COMISSAO', label: 'R$ COMISSÃO', visible: true, format: currencyFormat },
+    );
+
+    // Se for módulo de pagamentos, adiciona a coluna de Check
+    if (activeModuleId === 'PAGAMENTOS') {
+        cols.unshift({ key: 'CHECK_PAGAMENTO', label: 'PAGO?', visible: true }); // Insere no início
+    } else {
+        cols.push({ key: 'PED_ST_STATUS', label: 'STATUS', visible: true });
+    }
+
+    return cols;
+  }, [activeCommissionRole, activeModuleId]);
+
 
   const metrics = useMemo(() => {
     let total = 0, faturado = 0, emAprovacao = 0, emAberto = 0;
+    const sourceData = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
     
-    processedData.forEach(d => {
+    sourceData.forEach(d => {
       const v = parseBrNumber(d['ITP_RE_VALORMERCADORIA'] || 0);
       const s = String(d.PED_ST_STATUS || '').toLowerCase();
       total += v;
@@ -472,10 +692,40 @@ export default function App() {
     }
 
     const achievement = currentGoalValue > 0 ? (total / currentGoalValue) * 100 : 0;
-    const uniqueOrders = new Set(processedData.map(d => `${d.FIL_IN_CODIGO}-${d.SER_ST_CODIGO}-${d.PED_IN_CODIGO}`)).size;
+    const uniqueOrders = new Set(sourceData.map(d => `${d.FIL_IN_CODIGO}-${d.SER_ST_CODIGO}-${d.PED_IN_CODIGO}`)).size;
 
     return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement };
-  }, [processedData, salesGoals, filters.startDate, filters.endDate, filters.representante]);
+  }, [processedData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
+
+  // Payment Metrics
+  const paymentMetrics = useMemo(() => {
+      if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 };
+
+      let toPay = 0;
+      let paid = 0;
+      let projected = 0;
+
+      commissionData.forEach((d: any) => {
+          const val = d.VALOR_COMISSAO || 0;
+          const status = String(d.PED_ST_STATUS || '').toUpperCase();
+          const hasInvoice = !!d.NOT_DT_EMISSAO;
+          const isRealized = status.includes('FATURADO') || hasInvoice;
+          
+          if (isRealized) {
+              if (d.COMISSAO_PAGA) {
+                  paid += val;
+              } else {
+                  toPay += val;
+              }
+          } else {
+              if (!status.includes('CANCEL')) {
+                projected += val;
+              }
+          }
+      });
+      return { toPay, paid, projected };
+  }, [commissionData, activeModuleId]);
+
 
   // Performance Report logic
   const performanceData = useMemo(() => {
@@ -577,7 +827,7 @@ export default function App() {
               <button onClick={() => setShowTokenModal(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button>
             </div>
             <div className="p-8 space-y-6">
-              <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Bearer Token de Acesso</label><textarea className="w-full p-4 bg-gray-50 border border-gray-200 text-xs font-mono min-h-[120px] outline-none focus:border-gray-900 transition-colors" placeholder="Cole aqui o token gerado no Power BI API..." value={pbiToken} onChange={e => setPbiToken(e.target.value)} autoFocus /></div>
+              <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-400">Bearer Token de Acesso</label><textarea className="w-full p-4 bg-gray-50 border border-gray-200 text-xs font-mono min-h-[120px] outline-none focus:border-gray-900 transition-colors" placeholder="Cole aqui o token gerado no Power BI API..." value={pbiToken} onChange={e => setPbiToken(e.target.value)} autoFocus /></div>
               <div className="flex flex-col gap-3"><button onClick={handleManualSync} disabled={syncing} className="w-full py-4 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black flex items-center justify-center gap-3 transition-all disabled:opacity-50">{syncing ? <RefreshCw size={14} className="animate-spin" /> : <DatabaseZap size={14} />}{syncing ? 'Processando Sincronização...' : 'Iniciar Sincronização TOTAL'}</button><button onClick={loadData} className="w-full py-3 bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Apenas Atualizar Visualização Local</button></div>
             </div>
           </div>
@@ -684,7 +934,12 @@ export default function App() {
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Representante</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none disabled:bg-gray-100" value={filters.representante} onChange={e => setFilters({...filters, representante: e.target.value})} disabled={!currentUser.is_admin}><option value="">{currentUser.is_admin ? 'Todos' : 'Meu Cadastro'}</option>{availableReps.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}</select></div>
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Status</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}><option value="">Todos</option>{availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Filial</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.filial} onChange={e => setFilters({...filters, filial: e.target.value})}><option value="">Todas</option>{availableFiliais.map(f => <option key={f} value={f}>{f}</option>)}</select></div>
-                    <div className="flex-1 min-w-[180px] space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Período de Emissão</label><div className="flex items-center gap-1"><input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} title="Data Inicial" /><span className="text-gray-300 text-[9px]">-</span><input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} title="Data Final" /></div></div>
+                    <div className="flex-1 min-w-[180px] space-y-0.5">
+                      <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">
+                         {((activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') && commissionViewMode === 'FATURADO') ? 'Data Faturamento (Nota)' : 'Período de Emissão (Pedido)'}
+                      </label>
+                      <div className="flex items-center gap-1"><input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} title="Data Inicial" /><span className="text-gray-300 text-[9px]">-</span><input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} title="Data Final" /></div>
+                    </div>
                     <div className="w-20"><button onClick={clearFilters} className="w-full px-3 py-1 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all text-center border border-gray-200">Resetar</button></div>
                   </div>
                 )}
@@ -692,9 +947,26 @@ export default function App() {
 
               {/* DASHBOARD DE MÉTRICAS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0">
-                <StatCard title="Total Bruto (Itens)" value={currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" />
+                {activeModuleId === 'PAGAMENTOS' ? (
+                  <>
+                    <StatCard title="Total a Pagar (Pendente)" value={currencyFormat(paymentMetrics.toPay)} icon={AlertCircle} color="text-red-500" />
+                    <StatCard title="Total Pago (Baixado)" value={currencyFormat(paymentMetrics.paid)} icon={CheckCircle2} color="text-green-600" />
+                    <StatCard title="Projeção (Carteira)" value={currencyFormat(paymentMetrics.projected)} icon={Wallet} color="text-blue-500" />
+                  </>
+                ) : activeModuleId === 'COMISSAO' ? (
+                  <>
+                     <StatCard 
+                        title={commissionViewMode === 'FATURADO' ? "Total Gerado" : "Previsão Gerada"} 
+                        value={currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} 
+                        icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} 
+                        color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} 
+                     />
+                  </>
+                ) : (
+                   <StatCard title="Total Bruto (Itens)" value={currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" />
+                )}
                 
-                {activeModuleId !== 'OV' && activeModuleId !== 'DV' && (
+                {activeModuleId !== 'OV' && activeModuleId !== 'DV' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && (
                   <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors relative overflow-hidden group flex flex-col justify-between">
                     <div className="flex items-center justify-between mb-1"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">Meta</p><Target size={14} className="text-blue-500" /></div>
                     <div className="flex items-end justify-between"><h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums">{currencyFormat(metrics.goal)}</h3>{metrics.goal > 0 && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${metrics.achievement >= 100 ? 'bg-green-100 text-green-700' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{metrics.achievement.toFixed(1)}%</span>)}</div>
@@ -702,16 +974,56 @@ export default function App() {
                   </div>
                 )}
 
-                <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturado)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} />
-                <StatCard title="Aberto" value={currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" />
-                <StatCard title="Pedidos Únicos" value={metrics.count.toString()} icon={Package} color="text-gray-400" />
+                {activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && (
+                  <>
+                    <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturado)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} />
+                    <StatCard title="Aberto" value={currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" />
+                  </>
+                )}
+                
+                {activeModuleId !== 'PAGAMENTOS' && (
+                  <StatCard title="Pedidos Únicos" value={metrics.count.toString()} icon={Package} color="text-gray-400" />
+                )}
               </div>
 
               {/* TABELA DE VENDAS FLEXÍVEL */}
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 relative">
                 <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between shrink-0">
-                   <div className="flex items-center gap-2"><TableIcon size={14}/><h3 className="text-[9px] font-bold uppercase tracking-widest">Visão Analítica (Detalhamento por Item)</h3></div>
-                   <div className="flex items-center gap-2">
+                   {activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? (
+                     <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                       <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-[50%] scrollbar-hide">
+                         {COMMISSION_ROLES.map(role => (
+                           <button 
+                             key={role.id}
+                             onClick={() => setActiveCommissionRole(role.id)}
+                             className={`px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-2 border ${activeCommissionRole === role.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'}`}
+                           >
+                             {role.id === 'ASSISTENTE' ? <Calculator size={10} /> : role.id === 'VENDEDOR' ? <Briefcase size={10} /> : role.id === 'GERENTE' ? <TrendingUp size={10} /> : <HeartHandshake size={10} />}
+                             {role.label}
+                           </button>
+                         ))}
+                       </div>
+                       
+                       <div className="flex bg-gray-100 p-0.5 rounded-sm border border-gray-200">
+                          <button 
+                             onClick={() => setCommissionViewMode('FATURADO')} 
+                             className={`px-3 py-1 text-[9px] font-bold uppercase tracking-widest rounded-sm transition-all flex items-center gap-1.5 ${commissionViewMode === 'FATURADO' ? 'bg-white shadow-sm text-green-700' : 'text-gray-400 hover:text-gray-600'}`}
+                          >
+                             <Banknote size={12}/> Real (Faturado)
+                          </button>
+                          <button 
+                             onClick={() => setCommissionViewMode('ABERTO')} 
+                             className={`px-3 py-1 text-[9px] font-bold uppercase tracking-widest rounded-sm transition-all flex items-center gap-1.5 ${commissionViewMode === 'ABERTO' ? 'bg-white shadow-sm text-amber-600' : 'text-gray-400 hover:text-gray-600'}`}
+                          >
+                             <Wallet size={12}/> Projeção (Carteira)
+                          </button>
+                       </div>
+                     </div>
+                   ) : (
+                     <div className="flex items-center gap-2"><TableIcon size={14}/><h3 className="text-[9px] font-bold uppercase tracking-widest">Visão Analítica (Detalhamento por Item)</h3></div>
+                   )}
+
+                   <div className="flex items-center gap-2 ml-auto">
                      {/* Export Buttons */}
                      <button 
                        onClick={handleExportExcel} 
@@ -742,7 +1054,7 @@ export default function App() {
                         {showColumnSelector && (
                           <div className="absolute right-0 mt-3 w-64 bg-white border border-gray-200 shadow-2xl z-40 animate-in fade-in zoom-in-95 duration-200 rounded-sm">
                             <div className="p-3 border-b flex justify-between items-center bg-gray-50"><span className="text-[9px] font-black uppercase text-gray-900 tracking-widest">Layout</span><button onClick={() => setShowColumnSelector(false)}><X size={12} className="text-gray-400 hover:text-red-500"/></button></div>
-                            <div className="py-2 max-h-[300px] overflow-y-auto custom-scrollbar">{salesColumns.map(col => (<button key={col.key} onClick={() => toggleColumnVisibility(col.key)} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors group text-left border-b border-gray-50 last:border-0"><div className={`w-4 h-4 border rounded-sm flex items-center justify-center transition-all ${col.visible ? 'bg-gray-900 border-gray-900' : 'bg-white border-gray-300'}`}>{col.visible && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest flex-1 ${col.visible ? 'text-gray-900' : 'text-gray-300'}`}>{col.label}</span></button>))}</div>
+                            <div className="py-2 max-h-[300px] overflow-y-auto custom-scrollbar">{(activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns).map(col => (<button key={col.key} onClick={() => toggleColumnVisibility(col.key)} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-gray-50 transition-colors group text-left border-b border-gray-50 last:border-0"><div className={`w-4 h-4 border rounded-sm flex items-center justify-center transition-all ${col.visible ? 'bg-gray-900 border-gray-900' : 'bg-white border-gray-300'}`}>{col.visible && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest flex-1 ${col.visible ? 'text-gray-900' : 'text-gray-300'}`}>{col.label}</span></button>))}</div>
                             <div className="p-3 border-t bg-gray-50"><button onClick={saveGlobalVision} className={`w-full py-2.5 text-[9px] font-bold uppercase tracking-widest text-white transition-all shadow-md active:scale-[0.98] ${layoutSaved ? 'bg-green-600' : 'bg-gray-900 hover:bg-black'}`}>{layoutSaved ? 'Salvo!' : 'Salvar Padrão'}</button></div>
                           </div>
                         )}
@@ -750,15 +1062,50 @@ export default function App() {
                    </div>
                 </div>
                 <div className="flex-1 overflow-hidden relative">
-                    <SalesTable 
-                      data={processedData} 
-                      columns={salesColumns} 
-                      sortConfig={sortConfig} 
-                      onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
-                      onColumnReorder={(f, t) => { const newCols = [...salesColumns]; const [moved] = newCols.splice(f, 1); newCols.splice(t, 0, moved); setSalesColumns(newCols); }} 
-                      isLoading={loading || syncing}
-                      isGroupedByOrder={isGroupedByOrder}
-                    />
+                    {activeModuleId === 'PAGAMENTOS' ? (
+                       <SalesTable 
+                         data={commissionData} 
+                         columns={commissionColumns.map(c => {
+                             if (c.key === 'CHECK_PAGAMENTO') {
+                                return {
+                                    ...c,
+                                    format: (val: any) => {
+                                       // Este format é apenas um placeholder, o rendering real do checkbox acontece abaixo
+                                       return ""; 
+                                    }
+                                }
+                             }
+                             return c;
+                         })} 
+                         sortConfig={sortConfig} 
+                         onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
+                         onColumnReorder={() => {}} 
+                         isLoading={loading || syncing}
+                         isGroupedByOrder={isGroupedByOrder}
+                       />
+                    ) : (
+                       <SalesTable 
+                         data={activeModuleId === 'COMISSAO' ? commissionData : processedData} 
+                         columns={activeModuleId === 'COMISSAO' ? commissionColumns : salesColumns} 
+                         sortConfig={sortConfig} 
+                         onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} 
+                         onColumnReorder={(f, t) => { 
+                             if (activeModuleId === 'COMISSAO') return; 
+                             const newCols = [...salesColumns]; const [moved] = newCols.splice(f, 1); newCols.splice(t, 0, moved); setSalesColumns(newCols); 
+                         }} 
+                         isLoading={loading || syncing}
+                         isGroupedByOrder={isGroupedByOrder}
+                       />
+                    )}
+                    
+                    {/* Hack para injetar o checkbox na tabela via DOM overlay ou alterar o componente SalesTable é complexo sem alterar o arquivo SalesTable.
+                        Vou usar uma abordagem onde o SalesTable renderiza o conteúdo customizado se detectar a coluna.
+                        Mas como não posso editar SalesTable com lógica customizada facilmente sem quebrar a prop 'format', 
+                        vou fazer o seguinte: O SalesTable usa 'format' para renderizar texto.
+                        
+                        Vou alterar o componente SalesTable para aceitar ReactNode ou 
+                        Vou criar um overlay de ações se necessário, mas o melhor é alterar o SalesTable.tsx para suportar renderização customizada na célula.
+                     */}
                 </div>
               </div>
             </div>
