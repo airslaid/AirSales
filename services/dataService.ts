@@ -22,6 +22,11 @@ export const generateMockSales = (orderCount: number, filterCode: string = 'PD')
   for (let i = 0; i < orderCount; i++) {
     const orderId = 150 + i;
     const date = new Date(2025, 0, 1 + Math.floor(Math.random() * 60)); // Jan/Fev 2025
+    
+    // Gera uma data de entrega futura (15 dias após emissão)
+    const deliveryDate = new Date(date);
+    deliveryDate.setDate(date.getDate() + 15);
+    
     const client = CLIENT_NAMES[Math.floor(Math.random() * CLIENT_NAMES.length)];
     const rep = REPS[Math.floor(Math.random() * REPS.length)];
     const filial = REGIONS[Math.floor(Math.random() * REGIONS.length)];
@@ -66,6 +71,9 @@ export const generateMockSales = (orderCount: number, filterCode: string = 'PD')
           "NF_NOT_IN_CODIGO": status === 'FATURADO' ? 5000 + orderId : null,
           "NOT_DT_EMISSAO": status === 'FATURADO' ? date.toISOString().split('T')[0] : null,
           
+          // Nova Coluna Mockada
+          "IPE_DT_DATAENTREGA": deliveryDate.toISOString().split('T')[0],
+          
           "ID_PEDIDO": orderId,
           "SITUACAO": status
         });
@@ -89,8 +97,6 @@ export const fetchRealPowerBIData = async (accessToken: string, tableName: strin
 
   const url = `${baseUrl}/datasets/${POWERBI_CONFIG.datasetId}/executeQueries`;
   
-  // REMOÇÃO DE FILTRO: Passamos undefined ou string vazia para o gerador de DAX
-  // para garantir que ele não aplique cláusula FILTER.
   const daxQuery = getSalesDaxQuery(tableName, undefined);
 
   try {
@@ -119,28 +125,23 @@ export const fetchRealPowerBIData = async (accessToken: string, tableName: strin
     }
 
     if (json.results?.[0]?.tables?.[0]?.rows) {
-      // 1. ANÁLISE CRUA (DIAGNÓSTICO)
       const rawRows = json.results[0].tables[0].rows;
-      const rawAnalysis: Record<string, number> = {};
       
-      // Itera para logar o que realmente veio no JSON antes de qualquer limpeza
-      rawRows.forEach((r: any) => {
-          // Tenta achar a chave de várias formas, pois o DAX pode retornar '[SER_ST_CODIGO]' ou só 'SER_ST_CODIGO'
-          let val = r['SER_ST_CODIGO'] || r['[SER_ST_CODIGO]'] || r['Table[SER_ST_CODIGO]'];
-          // Se não achou pelo nome exato, procura nas chaves do objeto
-          if (val === undefined) {
-             const key = Object.keys(r).find(k => k.includes('SER_ST_CODIGO'));
-             if (key) val = r[key];
+      // LOG DE DIAGNÓSTICO DE COLUNAS (IMPORTANTE PARA DEBUG)
+      if (rawRows.length > 0) {
+          const sampleKeys = Object.keys(rawRows[0]);
+          const hasDelivery = sampleKeys.some(k => k.includes('IPE_DT_DATAENTREGA'));
+          
+          console.group("🔎 [DIAGNOSTICO] COLUNAS RECEBIDAS DO POWER BI");
+          console.log("Colunas encontradas:", sampleKeys);
+          if (hasDelivery) {
+              console.log("%c✅ Coluna IPE_DT_DATAENTREGA ENCONTRADA!", "color:green;font-weight:bold");
+          } else {
+              console.log("%c⚠️ Coluna IPE_DT_DATAENTREGA NÃO ENCONTRADA!", "color:red;font-weight:bold");
+              console.log("Ação Necessária: Atualize o Dataset no Power BI Desktop e Publique novamente.");
           }
-          const label = val === null || val === undefined ? 'NULL/UNDEFINED' : (val === '' ? 'VAZIO' : String(val));
-          rawAnalysis[label] = (rawAnalysis[label] || 0) + 1;
-      });
-      
-      console.group("🔎 [DIAGNOSTICO] POWER BI - DADOS BRUTOS (SEM FILTRO)");
-      console.log(`Total de Linhas Recebidas: ${rawRows.length}`);
-      console.log("Contagem por SER_ST_CODIGO (original):", rawAnalysis);
-      console.groupEnd();
-
+          console.groupEnd();
+      }
 
       // 2. PROCESSAMENTO E NORMALIZAÇÃO
       const rows = rawRows.map((row: any) => {
@@ -158,10 +159,6 @@ export const fetchRealPowerBIData = async (accessToken: string, tableName: strin
           cleanRow[cleanRowKey] = row[rawKey];
         });
         
-        // REMOÇÃO DE SOBRESCRITA:
-        // Não forçamos mais SER_ST_CODIGO = filterCode. 
-        // Deixamos o dado original do banco prevalecer.
-
         return cleanRow;
       });
 
@@ -189,7 +186,6 @@ export const fetchData = async (
   filterCode?: string
 ): Promise<Sale[]> => {
   if (source === 'powerbi' && token) {
-    // Passamos undefined no filterCode para garantir fetch total
     return await fetchRealPowerBIData(token, tableName, undefined);
   }
   

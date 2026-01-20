@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { Sale, AppUser, SalesGoal } from '../types';
 
@@ -40,40 +41,30 @@ const normalizeStatus = (text: string | null | undefined): string => {
     .toUpperCase();
 };
 
-// --- GESTÃO DE VENDAS (Detalhada) ---
-
 export const syncSalesToSupabase = async (sales: Sale[]) => {
   if (!sales || sales.length === 0) return;
   
-  // DIAGNOSTICO DE ENTRADA
   const incomingCount = sales.length;
-  const incomingBreakdown = sales.reduce((acc: any, s) => {
-      const k = findValue(s, 'SER_ST_CODIGO') || 'SEM_CODIGO';
-      acc[k] = (acc[k] || 0) + 1;
-      return acc;
-  }, {});
   
-  console.group("📥 [DIAGNOSTICO] SYNC SUPABASE - ENTRADA");
-  console.log(`Recebendo ${incomingCount} linhas para processar.`);
-  console.log("Breakdown por Tipo:", incomingBreakdown);
-  console.groupEnd();
+  // VERIFICAÇÃO DE DADOS CRÍTICOS
+  const sample = sales[0];
+  const hasDeliveryDate = !!(findValue(sample, 'IPE_DT_DATAENTREGA'));
+  if (!hasDeliveryDate) {
+      console.warn("⚠️ AVISO CRÍTICO: O campo 'IPE_DT_DATAENTREGA' não foi detectado no pacote de dados vindo do Power BI. O Supabase receberá NULL.");
+  }
 
   try {
-    const ordersMap = new Map<number, number>(); // Pedido -> Contador de Itens
+    const ordersMap = new Map<number, number>(); 
 
-    // Mapeamento direto dos dados (Normalização apenas)
     const allRows = sales.map(s => {
       let rawSer = findValue(s, 'SER_ST_CODIGO') || s['SER_ST_CODIGO'];
       let serCod = String(rawSer || '').trim();
-      
       const pedNum = Math.floor(toNumeric(findValue(s, 'PED_IN_CODIGO')));
       const filId = Math.floor(toNumeric(findValue(s, 'FIL_IN_CODIGO')));
-      
       let itpSeq = Math.floor(toNumeric(findValue(s, 'ITP_IN_SEQUENCIA')));
       
       if (!pedNum || pedNum === 0) return null;
 
-      // Se a sequência vier zerada ou nula, geramos sequencialmente apenas para garantir integridade do banco
       if (itpSeq === 0) {
           const currentCount = ordersMap.get(pedNum) || 0;
           itpSeq = currentCount + 1;
@@ -88,16 +79,13 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
         ser_st_codigo: serCod,
         ped_in_codigo: pedNum,
         itp_in_sequencia: itpSeq,
-        
         ped_dt_emissao: findValue(s, 'PED_DT_EMISSAO') || null,
         ped_ch_situacao: String(findValue(s, 'PED_CH_SITUACAO') || '').trim(),
         ped_st_status: normalizeStatus(String(findValue(s, 'PED_ST_STATUS') || '').trim()),
-        
         cli_in_codigo: Math.floor(toNumeric(findValue(s, 'CLI_IN_CODIGO'))),
         cliente_nome: String(findValue(s, 'CLIENTE_NOME') || '').trim(),
         rep_in_codigo: Math.floor(toNumeric(findValue(s, 'REP_IN_CODIGO'))),
         representante_nome: String(findValue(s, 'REPRESENTANTE_NOME') || '').trim(),
-        
         pro_in_codigo: Math.floor(toNumeric(findValue(s, 'PRO_IN_CODIGO'))),
         pro_st_alternativo: String(findValue(s, 'PRO_ST_ALTERNATIVO') || '').trim(),
         itp_st_descricao: String(findValue(s, 'ITP_ST_DESCRICAO') || '').trim(),
@@ -107,17 +95,16 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
         itp_st_pedidocliente: String(findValue(s, 'ITP_ST_PEDIDOCLIENTE') || '').trim(),
         itp_st_situacao: normalizeStatus(String(findValue(s, 'ITP_ST_SITUACAO') || '').trim()),
         it_st_status: normalizeStatus(String(findValue(s, 'IT_ST_STATUS') || '').trim()),
-
         nf_not_in_codigo: Math.floor(toNumeric(findValue(s, 'NF_NOT_IN_CODIGO'))),
-        not_dt_emissao: findValue(s, 'NOT_DT_EMISSAO') || null
+        not_dt_emissao: findValue(s, 'NOT_DT_EMISSAO') || null,
+        
+        // Mapeamento com log de segurança
+        ipe_dt_dataentrega: findValue(s, 'IPE_DT_DATAENTREGA') || null
       };
     }).filter((row): row is NonNullable<typeof row> => row !== null);
 
     if (allRows.length === 0) return;
 
-    // SANITIZAÇÃO DE LOTE (Essencial para Upsert funcionar)
-    // Isso garante que não existam duas linhas com a mesma chave (Filial+Serie+Pedido+Seq) NO MESMO PACOTE.
-    // O Postgres rejeita o pacote inteiro se houver colisão interna.
     const uniqueKeyMap = new Map<string, any>();
     allRows.forEach(r => {
         const key = `${r.fil_in_codigo}-${r.ser_st_codigo}-${r.ped_in_codigo}-${r.itp_in_sequencia}`;
@@ -126,26 +113,16 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
     
     const rows = Array.from(uniqueKeyMap.values());
 
-    // ENVIO PARA O SUPABASE
     const { error } = await supabase.from('sales').upsert(rows, { 
       onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' 
     });
     
     if (error) {
-       console.warn(`Upsert falhou (${error.code}). Tentando fallback ignorando duplicatas. Detalhe: ${error.message}`);
        const { error: error2 } = await supabase.from('sales').upsert(rows, { ignoreDuplicates: true });
        if (error2) throw error2;
     }
 
-    // LOG FINAL DE SUCESSO
-    const finalCounts: Record<string, number> = {};
-    rows.forEach((r) => {
-         const t = r.ser_st_codigo || 'VAZIO';
-         finalCounts[t] = (finalCounts[t] || 0) + 1;
-    });
-    const details = Object.entries(finalCounts).map(([k,v]) => `${k}=${v}`).join(', ');
-    console.log(`%cSincronização OK! Enviado: ${rows.length}. Detalhes: [ ${details} ]`, 'color:green;font-weight:bold');
-
+    console.log(`%cSincronização OK! Enviado: ${rows.length}.`, 'color:green;font-weight:bold');
     return true;
   } catch (err: any) {
     console.error("Erro Crítico no Sync Supabase:", err.message);
@@ -155,8 +132,6 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
 
 export const fetchAllRepresentatives = async (): Promise<{ code: number, name: string }[]> => {
   try {
-    // Busca apenas as colunas necessárias para montar a lista de representantes
-    // Sem filtro de módulo (PD/OV) para pegar todos
     const { data, error } = await supabase
       .from('sales')
       .select('rep_in_codigo, representante_nome')
@@ -164,20 +139,12 @@ export const fetchAllRepresentatives = async (): Promise<{ code: number, name: s
       .limit(5000);
 
     if (error) throw error;
-
     const uniqueMap = new Map<number, string>();
-    
     data?.forEach((row: any) => {
       const code = Number(row.rep_in_codigo);
-      // Normaliza o nome
       const name = String(row.representante_nome || '').trim();
-      
-      // Permite código 0 se existir, desde que tenha nome
-      if (!uniqueMap.has(code) && name.length > 0) {
-        uniqueMap.set(code, name);
-      }
+      if (!uniqueMap.has(code) && name.length > 0) uniqueMap.set(code, name);
     });
-
     return Array.from(uniqueMap.entries())
       .map(([code, name]) => ({ code, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -193,7 +160,6 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
     if (repCode) query = query.eq('rep_in_codigo', repCode);
     
     const { data, error } = await query.order('ped_dt_emissao', { ascending: false }).limit(2000);
-    
     if (error) throw error;
 
     console.log(`Leitura Supabase [${filterCode}]: ${data?.length || 0} registros.`);
@@ -222,7 +188,15 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
       "ITP_RE_VALORUNITARIO": row.itp_re_valorunitario,
       "ITP_RE_VALORMERCADORIA": row.itp_re_valormercadoria,
       "ITP_ST_PEDIDOCLIENTE": row.itp_st_pedidocliente,
-      "COMISSAO_PAGA": row.comissao_paga || false // Mapeando o status de pagamento
+      
+      // Coluna de data mapeada
+      "IPE_DT_DATAENTREGA": row.ipe_dt_dataentrega,
+      
+      "PAGO_ASSISTENTE": row.pago_assistente || false,
+      "PAGO_VENDEDOR": row.pago_vendedor || false,
+      "PAGO_SUPERVISOR": row.pago_supervisor || false,
+      "PAGO_POSVENDA": row.pago_posvenda || false,
+      "PAGO_GERENTE": row.pago_gerente || false
     }));
   } catch (err: any) {
     console.error("Erro Supabase Fetch:", err.message);
@@ -232,12 +206,13 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
 
 export const updateSaleCommissionStatus = async (
     keys: { fil: number, ser: string, ped: number, seq: number }, 
-    isPaid: boolean
+    isPaid: boolean,
+    columnName: string 
 ) => {
     try {
         const { error } = await supabase
             .from('sales')
-            .update({ comissao_paga: isPaid })
+            .update({ [columnName.toLowerCase()]: isPaid }) 
             .match({ 
                 fil_in_codigo: keys.fil,
                 ser_st_codigo: keys.ser,
