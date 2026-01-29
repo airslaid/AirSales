@@ -326,8 +326,7 @@ export default function App() {
       "CLIENTE_NOME", 
       "PRO_ST_ALTERNATIVO", 
       "ITP_ST_DESCRICAO", 
-      "ITP_RE_QUANTIDADE",
-      "ITP_RE_VALORUNITARIO", 
+      "ITP_RE_QUANTIDADE", 
       "ITP_RE_VALORMERCADORIA", 
       "PED_ST_STATUS"
     ];
@@ -635,7 +634,6 @@ export default function App() {
 
       const valorComissao = valMercadoria * percentual;
 
-      // Determina se ESTE cargo já foi pago
       const rolePaymentKey = `PAGO_${activeCommissionRole}`;
       const isPaid = !!item[rolePaymentKey];
 
@@ -644,7 +642,7 @@ export default function App() {
         PERCENTUAL_COMISSAO: percentual,
         VALOR_COMISSAO: valorComissao,
         ATINGIMENTO_META_ORIGEM: atingimentoMeta,
-        COMISSAO_PAGA: isPaid // Vincula o estado do checkbox à coluna específica do cargo
+        COMISSAO_PAGA: isPaid
       };
     });
   }, [processedData, activeCommissionRole, commissionViewMode, salesGoals, salesData, activeModuleId]);
@@ -687,10 +685,24 @@ export default function App() {
     sourceData.forEach(d => {
       const v = parseBrNumber(d['ITP_RE_VALORMERCADORIA'] || 0);
       const s = String(d.PED_ST_STATUS || '').toLowerCase();
+
+      // VERIFICAÇÃO DE FATURAMENTO ROBUSTA
+      // Considera faturado se tiver Data de Nota OU Número de Nota, além do status textual
+      const hasInvoice = (d['NOT_DT_EMISSAO'] && d['NOT_DT_EMISSAO'] !== '') || (d['NF_NOT_IN_CODIGO'] && Number(d['NF_NOT_IN_CODIGO']) > 0);
+
       total += v;
-      if (s.includes('faturado')) faturado += v;
+      
+      // Lógica ajustada: Se tiver nota ou status faturado, entra na conta de Faturado
+      if (s.includes('faturado') || hasInvoice) {
+         faturado += v;
+      }
+      
       if (s.includes('aprov')) emAprovacao += v;
-      if (s.includes('aberto')) emAberto += v;
+      
+      // Só conta como Aberto se NÃO estiver faturado (via nota ou status)
+      if (s.includes('aberto') && !hasInvoice && !s.includes('faturado')) {
+         emAberto += v;
+      }
     });
 
     let currentGoalValue = 0;
