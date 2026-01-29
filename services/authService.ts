@@ -1,6 +1,6 @@
 
 import { ServicePrincipalConfig } from '../types';
-import { supabase } from './supabaseService';
+import { SUPABASE_URL, SUPABASE_KEY } from './supabaseService';
 
 export const getServicePrincipalToken = async (config: ServicePrincipalConfig): Promise<string> => {
   const { tenantId, clientId, clientSecret } = config;
@@ -9,72 +9,53 @@ export const getServicePrincipalToken = async (config: ServicePrincipalConfig): 
     throw new Error("Credenciais do Service Principal incompletas.");
   }
 
-  // 1. TENTATIVA VIA SUPABASE BACKEND (Recomendado)
-  // Tenta invocar uma Edge Function chamada 'powerbi-auth'.
-  // Se você criar essa função no Supabase, o CORS é resolvido nativamente.
-  try {
-    const { data, error } = await supabase.functions.invoke('powerbi-auth', {
-      body: { tenantId, clientId, clientSecret }
-    });
+  console.log("🔐 Autenticando via Supabase Edge Function: 'dynamic-function'...");
 
-    if (!error && data && data.access_token) {
-      console.log("Token obtido via Supabase Edge Function.");
-      return data.access_token;
-    }
-    
-    // Se a função não existir ou der erro, apenas logamos e seguimos para o fallback
-    if (error) {
-        console.warn("Supabase Edge Function falhou ou não existe. Usando fallback Proxy.", error);
-    }
-  } catch (err) {
-    console.warn("Erro ao conectar com Supabase Functions. Usando fallback Proxy.");
-  }
-
-  // 2. FALLBACK: PROXY CLIENT-SIDE (Para funcionar enquanto o backend não é deployado)
-  // Endpoint de token da Microsoft (v2.0)
-  const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-  
-  // Usamos um proxy público para contornar o CORS em desenvolvimento/demonstração.
-  const proxyUrl = "https://corsproxy.io/?";
-  const finalUrl = proxyUrl + encodeURIComponent(tokenEndpoint);
-
-  const scope = "https://analysis.windows.net/powerbi/api/.default";
-
-  const body = new URLSearchParams();
-  body.append("grant_type", "client_credentials");
-  body.append("client_id", clientId);
-  body.append("client_secret", clientSecret);
-  body.append("scope", scope);
+  const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/dynamic-function`;
 
   try {
-    const response = await fetch(finalUrl, {
-      method: "POST",
+    const response = await fetch(FUNCTION_URL, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/json',
+        // CRÍTICO: Supabase exige ambos os headers para requisições externas via fetch
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
       },
-      body: body.toString(),
+      body: JSON.stringify({ tenantId, clientId, clientSecret })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      let errorData;
+      let errorMessage = `Erro HTTP ${response.status}`;
+      
       try {
-         errorData = JSON.parse(errorText);
+        const jsonError = JSON.parse(errorText);
+        if (jsonError.error) errorMessage = jsonError.error;
+        else if (jsonError.message) errorMessage = jsonError.message; // Captura msg do Supabase (ex: Invalid JWT)
+        else errorMessage = errorText;
       } catch (e) {
-         errorData = { error: errorText };
+        errorMessage = errorText.slice(0, 200); 
       }
       
-      console.error("Erro OAuth (Proxy):", errorData);
-      throw new Error(`Falha Azure: ${errorData.error_description || errorData.error || response.statusText}`);
+      throw new Error(`Falha na Edge Function: ${errorMessage}`);
     }
 
     const data = await response.json();
-    return data.access_token;
-  } catch (error: any) {
-    console.error("Erro ao obter token:", error);
-    if (error.message.includes("Failed to fetch")) {
-      throw new Error("Bloqueio de CORS ou Rede. Verifique sua conexão ou adblockers.");
+
+    if (data.error) {
+       throw new Error(`Erro retornado pela Microsoft: ${data.error_description || data.error}`);
     }
-    throw error;
+
+    if (data.access_token) {
+      console.log("✅ Token Azure obtido com sucesso.");
+      return data.access_token;
+    }
+
+    throw new Error("A resposta da função não contém o token de acesso.");
+
+  } catch (err: any) {
+    console.error("Falha Detalhada de Autenticação:", err);
+    throw new Error(err.message || "Falha desconhecida ao conectar à função.");
   }
 };
