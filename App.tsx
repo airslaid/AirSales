@@ -6,7 +6,8 @@ import {
   ShieldCheck, LogOut, CheckCircle2, Lock, ArrowRight, Layout, X, Calendar, Key, Columns, 
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
-  Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check
+  Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
+  FileUp, UploadCloud
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -15,7 +16,7 @@ import autoTable from 'jspdf-autotable';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
-import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus } from './services/supabaseService';
+import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase } from './services/supabaseService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
@@ -46,6 +47,20 @@ const MONTHS = [
   { id: 7, label: 'Julho' }, { id: 8, label: 'Agosto' }, { id: 9, label: 'Setembro' },
   { id: 10, label: 'Outubro' }, { id: 11, label: 'Novembro' }, { id: 12, label: 'Dezembro' }
 ];
+
+// Interface para itens pendentes de importação XML
+interface PendingXmlItem {
+  tempId: string;
+  nfeNumber: string;
+  emissionDate: string; // Data da NFe
+  clientName: string;
+  totalValue: number;
+  // Campos a preencher
+  orderNumber: string;
+  saleDate: string; // Data da Venda
+  repId: number | null;
+  fileName: string;
+}
 
 const parseBrNumber = (val: any): number => {
   if (val === null || val === undefined) return 0;
@@ -120,6 +135,10 @@ export default function App() {
   const [pbiToken, setPbiToken] = useState('');
   const [layoutSaved, setLayoutSaved] = useState(false);
   const [isGroupedByOrder, setIsGroupedByOrder] = useState(false);
+  
+  // XML Import State
+  const [showXmlModal, setShowXmlModal] = useState(false);
+  const [pendingXmls, setPendingXmls] = useState<PendingXmlItem[]>([]);
   
   const [perfYear, setPerfYear] = useState(new Date().getFullYear());
   const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1);
@@ -212,6 +231,133 @@ export default function App() {
       }
     } catch (error) {} finally { setLoading(false); }
   };
+
+  // --- XML IMPORT HANDLER ---
+  const handleXmlUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const newItems: PendingXmlItem[] = [];
+    let processedCount = 0;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string;
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(text, "text/xml");
+
+          // Basic NFe Parsing
+          const infNFe = xmlDoc.getElementsByTagName("infNFe")[0];
+          const ide = xmlDoc.getElementsByTagName("ide")[0];
+          const dest = xmlDoc.getElementsByTagName("dest")[0];
+          const total = xmlDoc.getElementsByTagName("total")[0];
+
+          if (infNFe && ide && dest) {
+             const nNF = ide.getElementsByTagName("nNF")[0]?.textContent || "";
+             const dhEmi = ide.getElementsByTagName("dhEmi")[0]?.textContent || ide.getElementsByTagName("dEmi")[0]?.textContent || "";
+             const xNome = dest.getElementsByTagName("xNome")[0]?.textContent || "Cliente Desconhecido";
+             const vProd = total?.getElementsByTagName("vProd")[0]?.textContent || "0";
+             
+             // Extract date YYYY-MM-DD
+             const formattedDate = dhEmi.split('T')[0];
+
+             newItems.push({
+               tempId: Math.random().toString(36).substr(2, 9),
+               nfeNumber: nNF,
+               emissionDate: formattedDate,
+               clientName: xNome,
+               totalValue: parseFloat(vProd),
+               fileName: file.name,
+               // Empty fields for user to fill
+               orderNumber: "",
+               saleDate: formattedDate, // Suggest emission date as sale date
+               repId: currentUser?.rep_in_codigo || null
+             });
+          }
+        } catch (err) {
+          console.error(`Error parsing ${file.name}`, err);
+        } finally {
+          processedCount++;
+          if (processedCount === files.length) {
+             setPendingXmls(prev => [...prev, ...newItems]);
+             setShowXmlModal(true);
+             // Clear input
+             event.target.value = '';
+          }
+        }
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  const updatePendingItem = (id: string, field: keyof PendingXmlItem, value: any) => {
+    setPendingXmls(prev => prev.map(item => item.tempId === id ? { ...item, [field]: value } : item));
+  };
+
+  const removePendingItem = (id: string) => {
+    setPendingXmls(prev => prev.filter(item => item.tempId !== id));
+  };
+
+  const confirmXmlImport = async () => {
+     // Validate
+     const invalid = pendingXmls.find(i => !i.orderNumber || !i.repId || !i.saleDate);
+     if (invalid) {
+       showNotification("Preencha Pedido, Data e Representante para todas as notas.", "error");
+       return;
+     }
+
+     setLoading(true);
+     try {
+       const salesToSync: Sale[] = pendingXmls.map(item => {
+          const repName = fullRepsList.find(r => r.code === item.repId)?.name || 'Rep Desconhecido';
+          
+          return {
+             "FIL_IN_CODIGO": 900, // Código fixo para Importação Manual
+             "FILIAL_NOME": "XML IMPORT",
+             "SER_ST_CODIGO": "XML",
+             "PED_IN_CODIGO": parseInt(item.orderNumber),
+             "ITP_IN_SEQUENCIA": 1, // Item único agregador
+             
+             "CLI_IN_CODIGO": 99999,
+             "CLIENTE_NOME": item.clientName.toUpperCase(),
+             
+             "PED_DT_EMISSAO": item.saleDate, // Data da Venda (Competência)
+             "PED_CH_SITUACAO": "F",
+             "PED_ST_STATUS": "FATURADO (XML)",
+             
+             "REP_IN_CODIGO": item.repId,
+             "REPRESENTANTE_NOME": repName,
+             
+             // Dados do Item Agregado
+             "PRO_IN_CODIGO": 0,
+             "PRO_ST_ALTERNATIVO": "NFE-" + item.nfeNumber,
+             "ITP_ST_DESCRICAO": `IMPORTAÇÃO XML NFE ${item.nfeNumber}`,
+             "ITP_RE_QUANTIDADE": 1,
+             "ITP_RE_VALORUNITARIO": item.totalValue,
+             "ITP_RE_VALORMERCADORIA": item.totalValue,
+             "ITP_ST_PEDIDOCLIENTE": "",
+             
+             "NF_NOT_IN_CODIGO": parseInt(item.nfeNumber),
+             "NOT_DT_EMISSAO": item.emissionDate,
+             
+             "IPE_DT_DATAENTREGA": item.emissionDate
+          };
+       });
+
+       await syncSalesToSupabase(salesToSync);
+       showNotification(`${salesToSync.length} notas importadas com sucesso!`, "success");
+       setPendingXmls([]);
+       setShowXmlModal(false);
+       loadData();
+     } catch (err: any) {
+       showNotification("Erro ao salvar importação: " + err.message, "error");
+     } finally {
+       setLoading(false);
+     }
+  };
+  // -------------------------
 
   const handleManualSync = async () => {
     if (!pbiToken) return showNotification("Informe o token do Power BI.", "error");
@@ -846,6 +992,79 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL DE IMPORTAÇÃO XML */}
+      {showXmlModal && (
+         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-white w-full max-w-4xl max-h-[90vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm">
+              <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                 <div className="flex items-center gap-3">
+                   <FileUp className="text-green-600" size={20} />
+                   <div>
+                      <h3 className="text-xs font-bold uppercase tracking-widest">Importação de NFe (XML)</h3>
+                      <p className="text-[9px] text-gray-500 font-medium">Preencha os dados faltantes para calcular as comissões</p>
+                   </div>
+                 </div>
+                 <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="text-gray-400 hover:text-red-500"><X size={18}/></button>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100 space-y-3">
+                 {pendingXmls.map(item => (
+                    <div key={item.tempId} className="bg-white border border-gray-200 p-3 shadow-sm rounded-sm flex flex-col md:flex-row gap-4 items-start animate-in slide-in-from-bottom-2">
+                       <div className="flex-1 min-w-[200px]">
+                          <div className="flex items-center gap-2 mb-1">
+                             <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-sm uppercase tracking-widest">NFe {item.nfeNumber}</span>
+                             <span className="text-[9px] text-gray-400">{item.fileName}</span>
+                          </div>
+                          <h4 className="text-xs font-bold text-gray-900 truncate">{item.clientName}</h4>
+                          <div className="mt-1 text-[10px] font-mono font-medium text-gray-600">Total: {currencyFormat(item.totalValue)}</div>
+                       </div>
+                       
+                       <div className="flex items-end gap-2 flex-wrap">
+                          <div className="w-24">
+                             <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Nº Pedido *</label>
+                             <input 
+                                type="text" 
+                                className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.orderNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                                placeholder="000"
+                                value={item.orderNumber}
+                                onChange={(e) => updatePendingItem(item.tempId, 'orderNumber', e.target.value)}
+                             />
+                          </div>
+                          <div className="w-28">
+                             <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Data Venda *</label>
+                             <input 
+                                type="date" 
+                                className={`w-full px-2 py-1.5 bg-gray-50 border text-[9px] outline-none focus:border-gray-900 ${!item.saleDate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                                value={item.saleDate}
+                                onChange={(e) => updatePendingItem(item.tempId, 'saleDate', e.target.value)}
+                             />
+                          </div>
+                          <div className="w-48">
+                             <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Representante *</label>
+                             <select 
+                                className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.repId ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                                value={item.repId || ''}
+                                onChange={(e) => updatePendingItem(item.tempId, 'repId', Number(e.target.value))}
+                             >
+                                <option value="">Selecione...</option>
+                                {fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}
+                             </select>
+                          </div>
+                          <button onClick={() => removePendingItem(item.tempId)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-sm transition-colors"><Trash2 size={14}/></button>
+                       </div>
+                    </div>
+                 ))}
+              </div>
+              <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0">
+                 <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="px-4 py-2 border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">Cancelar</button>
+                 <button onClick={confirmXmlImport} disabled={loading} className="px-6 py-2 bg-green-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg">
+                    {loading ? <RefreshCw size={14} className="animate-spin"/> : <CheckSquare size={14} />}
+                    Confirmar Importação
+                 </button>
+              </div>
+           </div>
+         </div>
+      )}
+
       {showTokenModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-md shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200">
@@ -1045,6 +1264,15 @@ export default function App() {
                    )}
 
                    <div className="flex items-center gap-2 ml-auto">
+                     {activeModuleId === 'COMISSAO' && (
+                        <div className="relative">
+                          <input type="file" id="xml-upload" multiple accept=".xml" className="hidden" onChange={handleXmlUpload} />
+                          <label htmlFor="xml-upload" className="px-2 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm cursor-pointer">
+                             <UploadCloud size={12}/> Importar XML
+                          </label>
+                        </div>
+                     )}
+
                      <button 
                        onClick={handleExportExcel} 
                        className="px-2 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm"
