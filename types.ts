@@ -10,6 +10,7 @@ export interface SortConfig {
 
 export interface FilterConfig {
   globalSearch: string;
+  cliente?: string;
   filial?: string;
   representante?: string;
   status?: string;

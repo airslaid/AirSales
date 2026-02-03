@@ -27,7 +27,6 @@ const toNumeric = (val: any): number => {
 
 const findValue = (obj: any, targetKey: string) => {
   const keys = Object.keys(obj);
-  // Remove underline e espaço para encontrar a chave vinda do PBI ou Mock
   const foundKey = keys.find(k => k.toUpperCase().replace(/[\s_]/g, '') === targetKey.toUpperCase().replace(/[\s_]/g, ''));
   return foundKey ? obj[foundKey] : null;
 };
@@ -43,19 +42,8 @@ const normalizeStatus = (text: string | null | undefined): string => {
 
 export const syncSalesToSupabase = async (sales: Sale[]) => {
   if (!sales || sales.length === 0) return;
-  
-  const incomingCount = sales.length;
-  
-  // VERIFICAÇÃO DE DADOS CRÍTICOS
-  const sample = sales[0];
-  const hasDeliveryDate = !!(findValue(sample, 'IPE_DT_DATAENTREGA'));
-  if (!hasDeliveryDate) {
-      console.warn("⚠️ AVISO CRÍTICO: O campo 'IPE_DT_DATAENTREGA' não foi detectado no pacote de dados vindo do Power BI. O Supabase receberá NULL.");
-  }
-
   try {
     const ordersMap = new Map<number, number>(); 
-
     const allRows = sales.map(s => {
       let rawSer = findValue(s, 'SER_ST_CODIGO') || s['SER_ST_CODIGO'];
       let serCod = String(rawSer || '').trim();
@@ -97,73 +85,80 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
         it_st_status: normalizeStatus(String(findValue(s, 'IT_ST_STATUS') || '').trim()),
         nf_not_in_codigo: Math.floor(toNumeric(findValue(s, 'NF_NOT_IN_CODIGO'))),
         not_dt_emissao: findValue(s, 'NOT_DT_EMISSAO') || null,
-        
-        // Mapeamento com log de segurança
         ipe_dt_dataentrega: findValue(s, 'IPE_DT_DATAENTREGA') || null
       };
     }).filter((row): row is NonNullable<typeof row> => row !== null);
 
     if (allRows.length === 0) return;
-
-    const uniqueKeyMap = new Map<string, any>();
-    allRows.forEach(r => {
-        const key = `${r.fil_in_codigo}-${r.ser_st_codigo}-${r.ped_in_codigo}-${r.itp_in_sequencia}`;
-        uniqueKeyMap.set(key, r);
-    });
-    
-    const rows = Array.from(uniqueKeyMap.values());
-
-    const { error } = await supabase.from('sales').upsert(rows, { 
-      onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' 
-    });
-    
-    if (error) {
-       const { error: error2 } = await supabase.from('sales').upsert(rows, { ignoreDuplicates: true });
-       if (error2) throw error2;
-    }
-
-    console.log(`%cSincronização OK! Enviado: ${rows.length}.`, 'color:green;font-weight:bold');
+    const { error } = await supabase.from('sales').upsert(allRows, { onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' });
+    if (error) throw error;
     return true;
   } catch (err: any) {
-    console.error("Erro Crítico no Sync Supabase:", err.message);
+    console.error("Erro no Sync Supabase:", err.message);
     return false;
   }
 };
 
-export const fetchAllRepresentatives = async (): Promise<{ code: number, name: string }[]> => {
-  try {
-    const { data, error } = await supabase
-      .from('sales')
-      .select('rep_in_codigo, representante_nome')
-      .not('rep_in_codigo', 'is', null)
-      .limit(5000);
+export const deleteSale = async (keys: { fil: number, ser: string, ped: number, seq: number }) => {
+  console.log("🛠️ [SupabaseService] Executando DELETE com chaves tipadas:", {
+    fil: Number(keys.fil),
+    ser: String(keys.ser),
+    ped: Number(keys.ped),
+    seq: Number(keys.seq)
+  });
 
+  try {
+    const { data, error, status, statusText } = await supabase
+      .from('sales')
+      .delete()
+      .match({ 
+        fil_in_codigo: Number(keys.fil),
+        ser_st_codigo: String(keys.ser),
+        ped_in_codigo: Number(keys.ped),
+        itp_in_sequencia: Number(keys.seq)
+      })
+      .select();
+
+    if (error) {
+      console.error("❌ [SupabaseService] Erro na query:", error);
+      throw error;
+    }
+
+    console.log(`📡 [SupabaseService] Resposta do Servidor: Status ${status} (${statusText})`);
+
+    if (!data || data.length === 0) {
+      console.warn("⚠️ [SupabaseService] Registro não encontrado no banco para exclusão. Verifique se as chaves existem na tabela 'sales'.");
+      return false;
+    }
+
+    console.log("✅ [SupabaseService] Registro removido do Supabase:", data);
+    return true;
+  } catch (e: any) {
+    console.error("❌ [SupabaseService] Falha catastrófica na exclusão:", e.message);
+    throw e;
+  }
+};
+
+export const fetchAllRepresentatives = async () => {
+  try {
+    const { data, error } = await supabase.from('sales').select('rep_in_codigo, representante_nome').not('rep_in_codigo', 'is', null).limit(5000);
     if (error) throw error;
-    const uniqueMap = new Map<number, string>();
+    const uniqueMap = new Map();
     data?.forEach((row: any) => {
       const code = Number(row.rep_in_codigo);
       const name = String(row.representante_nome || '').trim();
       if (!uniqueMap.has(code) && name.length > 0) uniqueMap.set(code, name);
     });
-    return Array.from(uniqueMap.entries())
-      .map(([code, name]) => ({ code, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  } catch (err: any) {
-    console.error("Erro ao buscar lista de representantes:", err.message);
-    return [];
-  }
+    return Array.from(uniqueMap.entries()).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) { return []; }
 };
 
 export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: number): Promise<Sale[]> => {
   try {
     let query = supabase.from('sales').select('*').eq('ser_st_codigo', filterCode.toUpperCase().trim());
     if (repCode) query = query.eq('rep_in_codigo', repCode);
-    
     const { data, error } = await query.order('ped_dt_emissao', { ascending: false }).limit(2000);
     if (error) throw error;
-
-    console.log(`Leitura Supabase [${filterCode}]: ${data?.length || 0} registros.`);
-    
     return (data || []).map(row => ({
       "SER_ST_CODIGO": row.ser_st_codigo,
       "PED_IN_CODIGO": row.ped_in_codigo,
@@ -188,44 +183,24 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
       "ITP_RE_VALORUNITARIO": row.itp_re_valorunitario,
       "ITP_RE_VALORMERCADORIA": row.itp_re_valormercadoria,
       "ITP_ST_PEDIDOCLIENTE": row.itp_st_pedidocliente,
-      
-      // Coluna de data mapeada
       "IPE_DT_DATAENTREGA": row.ipe_dt_dataentrega,
-      
       "PAGO_ASSISTENTE": row.pago_assistente || false,
       "PAGO_VENDEDOR": row.pago_vendedor || false,
       "PAGO_SUPERVISOR": row.pago_supervisor || false,
       "PAGO_POSVENDA": row.pago_posvenda || false,
       "PAGO_GERENTE": row.pago_gerente || false
     }));
-  } catch (err: any) {
-    console.error("Erro Supabase Fetch:", err.message);
-    return [];
-  }
+  } catch (err) { return []; }
 };
 
-export const updateSaleCommissionStatus = async (
-    keys: { fil: number, ser: string, ped: number, seq: number }, 
-    isPaid: boolean,
-    columnName: string 
-) => {
+export const updateSaleCommissionStatus = async (keys: any, isPaid: boolean, columnName: string) => {
     try {
-        const { error } = await supabase
-            .from('sales')
-            .update({ [columnName.toLowerCase()]: isPaid }) 
-            .match({ 
-                fil_in_codigo: keys.fil,
-                ser_st_codigo: keys.ser,
-                ped_in_codigo: keys.ped,
-                itp_in_sequencia: keys.seq
-            });
-
+        const { error } = await supabase.from('sales').update({ [columnName.toLowerCase()]: isPaid }).match({ 
+            fil_in_codigo: keys.fil, ser_st_codigo: keys.ser, ped_in_codigo: keys.ped, itp_in_sequencia: keys.seq 
+        });
         if (error) throw error;
         return true;
-    } catch (e: any) {
-        console.error("Erro ao atualizar status de comissão:", e.message);
-        throw e;
-    }
+    } catch (e) { throw e; }
 }
 
 export const fetchAppUsers = async (): Promise<AppUser[]> => {

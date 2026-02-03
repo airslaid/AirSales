@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Sale, ColumnConfig, SortConfig } from '../types';
-import { ArrowUp, ArrowDown, GripVertical, ChevronRight, ChevronDown, Package, Check, X as XIcon } from 'lucide-react';
+import { ArrowUp, ArrowDown, GripVertical, ChevronRight, ChevronDown, Package, Check, X as XIcon, Trash2, Edit2, Bookmark } from 'lucide-react';
 
 interface SalesTableProps {
   data: Sale[];
@@ -12,6 +12,8 @@ interface SalesTableProps {
   isLoading: boolean;
   isGroupedByOrder?: boolean;
   onTogglePayment?: (row: Sale) => Promise<void>;
+  onEditManual?: (row: Sale) => void;
+  onDeleteManual?: (row: Sale) => void;
 }
 
 export const SalesTable: React.FC<SalesTableProps> = ({ 
@@ -22,7 +24,9 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   onColumnReorder,
   isLoading,
   isGroupedByOrder = false,
-  onTogglePayment
+  onTogglePayment,
+  onEditManual,
+  onDeleteManual
 }) => {
   const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
@@ -122,15 +126,32 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   }, [data, isGroupedByOrder]);
 
   const renderFlatRows = () => {
-    return data.map((row, rIdx) => (
-      <tr key={rIdx} className={`hover:bg-gray-50/80 transition-colors border-b border-gray-50 last:border-0 ${row.COMISSAO_PAGA ? 'bg-green-50/30' : ''}`}>
-        {visibleColumns.map(col => (
-          <td key={col.key} className={`px-2 py-1 text-[10px] font-medium text-gray-700 whitespace-nowrap border-r border-gray-50 last:border-0 ${getAlignmentClass(col.key)}`}>
-            {renderCellContent(row, col)}
-          </td>
-        ))}
-      </tr>
-    ));
+    return data.map((row, rIdx) => {
+      const isManual = Number(row.FIL_IN_CODIGO) === 900;
+      
+      return (
+        <tr 
+          key={rIdx} 
+          className={`
+            hover:bg-gray-100/80 transition-colors border-b border-gray-100 last:border-0 relative
+            ${isManual ? 'bg-indigo-50/50' : row.COMISSAO_PAGA ? 'bg-green-50/30' : ''}
+          `}
+        >
+          {visibleColumns.map((col, cIdx) => (
+            <td 
+              key={col.key} 
+              className={`
+                px-2 py-1.5 text-[10px] font-medium text-gray-700 whitespace-nowrap border-r border-gray-50 last:border-0 
+                ${getAlignmentClass(col.key)}
+                ${isManual && cIdx === 0 ? 'border-l-4 border-l-indigo-500' : ''}
+              `}
+            >
+              {renderCellContent(row, col)}
+            </td>
+          ))}
+        </tr>
+      );
+    });
   };
 
   const renderGroupedRows = () => {
@@ -139,17 +160,28 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     return groupedData.map((group) => {
       const groupKey = group.summary.__groupKey as string;
       const isExpanded = expandedOrders.has(groupKey);
+      const isManual = Number(group.summary.FIL_IN_CODIGO) === 900;
 
       return (
         <React.Fragment key={groupKey}>
           <tr 
             onClick={() => toggleExpand(groupKey)}
-            className={`cursor-pointer transition-colors border-b border-gray-100 ${isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}`}
+            className={`
+              cursor-pointer transition-colors border-b border-gray-100 relative
+              ${isManual ? 'bg-indigo-100/30 hover:bg-indigo-100/50' : isExpanded ? 'bg-blue-50/30' : 'hover:bg-gray-50'}
+            `}
           >
             {visibleColumns.map((col, idx) => {
               const isFirstCol = idx === 0;
               return (
-                <td key={col.key} className={`px-2 py-1.5 text-[10px] font-bold text-gray-800 whitespace-nowrap border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}>
+                <td 
+                  key={col.key} 
+                  className={`
+                    px-2 py-1.5 text-[10px] font-bold text-gray-800 whitespace-nowrap border-r border-gray-100 last:border-0 
+                    ${getAlignmentClass(col.key)}
+                    ${isManual && idx === 0 ? 'border-l-4 border-l-indigo-500' : ''}
+                  `}
+                >
                    <div className={`flex items-center gap-2 ${getHeaderJustifyClass(col.key)}`}>
                       {isFirstCol && (
                         <div className="w-4 h-4 flex items-center justify-center text-gray-400">
@@ -164,9 +196,22 @@ export const SalesTable: React.FC<SalesTableProps> = ({
           </tr>
 
           {isExpanded && group.items.map((item, itemIdx) => (
-            <tr key={`${groupKey}-${itemIdx}`} className={`bg-gray-50/50 border-b border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200 ${item.COMISSAO_PAGA ? 'bg-green-50/50' : ''}`}>
+            <tr 
+              key={`${groupKey}-${itemIdx}`} 
+              className={`
+                bg-gray-50/50 border-b border-gray-100 animate-in fade-in slide-in-from-top-1 duration-200 
+                ${isManual ? 'bg-indigo-50/20' : item.COMISSAO_PAGA ? 'bg-green-50/50' : ''}
+              `}
+            >
               {visibleColumns.map((col, idx) => (
-                 <td key={col.key} className={`px-2 py-1 text-[9px] text-gray-500 whitespace-nowrap border-r border-gray-100 last:border-0 ${getAlignmentClass(col.key)}`}>
+                 <td 
+                   key={col.key} 
+                   className={`
+                     px-2 py-1 text-[9px] text-gray-500 whitespace-nowrap border-r border-gray-100 last:border-0 
+                     ${getAlignmentClass(col.key)}
+                     ${isManual && idx === 0 ? 'border-l-4 border-l-indigo-300' : ''}
+                   `}
+                 >
                     <div className={idx === 0 ? 'pl-6 flex items-center gap-1' : ''}>
                        {idx === 0 && <div className="w-1.5 h-px bg-gray-300"></div>}
                        {renderCellContent(item, col)}
@@ -181,6 +226,8 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   };
 
   const renderCellContent = (row: Sale, col: ColumnConfig, isParent = false) => {
+    const isManual = Number(row.FIL_IN_CODIGO) === 900;
+
     if (col.key === 'CHECK_PAGAMENTO') {
         if (isParent) return null;
         
@@ -207,6 +254,40 @@ export const SalesTable: React.FC<SalesTableProps> = ({
                 </button>
             </div>
         );
+    }
+
+    if (col.key === 'MANUAL_ACTIONS') {
+      if (isParent || !isManual) return null;
+      
+      return (
+        <div className="flex items-center justify-center gap-2" onClick={e => e.stopPropagation()}>
+           <button 
+              onClick={() => onEditManual?.(row)}
+              className="p-1.5 bg-white border border-gray-200 rounded shadow-sm text-gray-400 hover:text-blue-600 hover:border-blue-200 transition-all"
+              title="Editar lançamento manual"
+           >
+              <Edit2 size={12}/>
+           </button>
+           <button 
+              onClick={() => onDeleteManual?.(row)}
+              className="p-1.5 bg-white border border-gray-200 rounded shadow-sm text-gray-400 hover:text-red-600 hover:border-red-200 transition-all"
+              title="Excluir lançamento manual"
+           >
+              <Trash2 size={12}/>
+           </button>
+        </div>
+      );
+    }
+
+    if (col.key === 'PED_IN_CODIGO' && isManual) {
+       return (
+         <div className="flex items-center gap-1.5">
+            <span className="font-mono font-bold">{row[col.key]}</span>
+            <span className="bg-indigo-600 text-white text-[7px] font-black px-1 py-0.5 rounded flex items-center gap-0.5">
+               <Bookmark size={8} fill="currentColor" /> MANUAL
+            </span>
+         </div>
+       );
     }
 
     if (col.key.includes('STATUS')) {
