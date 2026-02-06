@@ -90,7 +90,17 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
     }).filter((row): row is NonNullable<typeof row> => row !== null);
 
     if (allRows.length === 0) return;
-    const { error } = await supabase.from('sales').upsert(allRows, { onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' });
+
+    // Remove Duplicates to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    const uniqueMap = new Map();
+    allRows.forEach(row => {
+      // Create a unique key based on the primary key constraint of the table
+      const key = `${row.fil_in_codigo}-${row.ser_st_codigo}-${row.ped_in_codigo}-${row.itp_in_sequencia}`;
+      uniqueMap.set(key, row);
+    });
+    const uniqueRows = Array.from(uniqueMap.values());
+
+    const { error } = await supabase.from('sales').upsert(uniqueRows, { onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' });
     if (error) throw error;
     return true;
   } catch (err: any) {
