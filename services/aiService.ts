@@ -2,9 +2,33 @@
 import { GoogleGenAI } from "@google/genai";
 import { Sale } from '../types';
 
+// Função robusta para obter a API Key em diferentes ambientes (Vite, Process, etc)
+const getApiKey = (): string => {
+  try {
+    // Tentativa 1: Padrão Vite (mais provável para este projeto)
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_API_KEY;
+    }
+  } catch (e) { console.debug('Vite env not found'); }
+
+  try {
+    // Tentativa 2: Padrão Node/Webpack (process.env)
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.VITE_API_KEY || process.env.API_KEY || '';
+    }
+  } catch (e) { console.debug('Process env not found'); }
+
+  return '';
+};
+
+const API_KEY = getApiKey();
+
 // Inicializa o cliente Gemini
-// O process.env.API_KEY deve estar configurado no ambiente de execução
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Se a chave não existir, passamos uma string vazia para não quebrar a inicialização, 
+// mas validamos antes de chamar os métodos.
+const ai = new GoogleGenAI({ apiKey: API_KEY || 'MISSING_KEY' });
 
 const parseValue = (val: any) => {
   if (typeof val === 'number') return val;
@@ -32,7 +56,7 @@ const buildDataContext = (salesData: Sale[], metrics: any) => {
     });
     const topClientes = Array.from(clientesMap.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10) // Aumentei para 10 para o chat ter mais contexto
+      .slice(0, 10) 
       .map(([nome, val]) => `${nome} (${formatCurrency(val)})`)
       .join(', ');
 
@@ -77,6 +101,10 @@ export const generateSalesInsights = async (
   context: string,
   metrics: any
 ): Promise<string> => {
+  if (!API_KEY) {
+    return "⚠️ **Erro de Configuração**: Chave de API não encontrada.\n\nPor favor, adicione a variável `VITE_API_KEY` nas configurações do Vercel com sua chave do Google Gemini.";
+  }
+
   try {
     const dataContext = buildDataContext(salesData, metrics);
     
@@ -109,7 +137,10 @@ export const generateSalesInsights = async (
 
   } catch (error: any) {
     console.error("Erro na IA:", error);
-    return "Ocorreu um erro ao comunicar com a Inteligência Artificial.";
+    if (error.message?.includes('API_KEY')) {
+        return "Erro de autenticação com a IA. Verifique se a chave API está correta.";
+    }
+    return `Ocorreu um erro ao comunicar com a Inteligência Artificial. (${error.message || 'Erro desconhecido'})`;
   }
 };
 
@@ -119,47 +150,33 @@ export const chatWithSalesData = async (
   metrics: any,
   lastMessage: string
 ): Promise<string> => {
+  if (!API_KEY) {
+    return "Erro: Chave de API (VITE_API_KEY) não configurada no servidor.";
+  }
+
   try {
     const dataContext = buildDataContext(salesData, metrics);
 
-    // Cria a sessão de chat
-    const chat = ai.chats.create({
-      model: 'gemini-3-flash-preview',
-      config: {
-        systemInstruction: `
-          Você é o assistente virtual do Air Sales, um especialista em análise de dados comerciais.
-          Você tem acesso aos dados resumidos de vendas listados abaixo.
-          
-          ${dataContext}
-          
-          REGRAS:
-          1. Responda APENAS com base nos dados fornecidos acima. Se a pergunta for sobre algo que não está nos dados, diga que não tem essa informação.
-          2. Seja prestativo, profissional e use formatação Markdown (negrito, listas) para facilitar a leitura.
-          3. Se o usuário perguntar "quem é o melhor cliente", olhe para o "Top Clientes".
-          4. Se o usuário pedir "estratégias", use seu conhecimento de vendas aplicado aos números fornecidos.
-          5. Mantenha as respostas curtas e objetivas, estilo chat.
-        `
-      }
-    });
-
-    // Envia a mensagem (o SDK gerencia o histórico na sessão, mas aqui estamos fazendo stateless para simplificar o frontend, 
-    // então passamos o histórico como contexto se necessário, mas para esse exemplo simples, vamos confiar no instruction + last prompt 
-    // ou reconstruir o histórico se fosse complexo. Para manter simples e robusto, enviamos o contexto atualizado a cada turn).
-    
-    // NOTA: O SDK @google/genai gerencia history internamente se usarmos a instância 'chat'.
-    // Como o componente React pode remontar, vamos passar o histórico anterior como mensagens prévias.
-    
     const chatHistory = history.map(h => ({
         role: h.role,
         parts: [{ text: h.text }]
     }));
 
-    // Hack: Recriamos o chat com histórico
     const chatSession = ai.chats.create({
         model: 'gemini-3-flash-preview',
         history: chatHistory,
         config: {
-            systemInstruction: `Você é o Air Sales AI. Dados atuais: ${dataContext}`
+            systemInstruction: `
+              Você é o assistente virtual do Air Sales, um especialista em análise de dados comerciais.
+              
+              CONTEXTO DE DADOS ATUALIZADO:
+              ${dataContext}
+              
+              REGRAS:
+              1. Responda APENAS com base nos dados fornecidos acima.
+              2. Seja prestativo, profissional e use formatação Markdown.
+              3. Mantenha as respostas curtas e objetivas.
+            `
         }
     });
 
@@ -168,6 +185,6 @@ export const chatWithSalesData = async (
 
   } catch (error: any) {
     console.error("Erro no Chat IA:", error);
-    return "Desculpe, tive um problema ao processar sua pergunta.";
+    return "Desculpe, tive um problema ao processar sua pergunta. Tente novamente.";
   }
 };
