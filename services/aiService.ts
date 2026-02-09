@@ -56,22 +56,27 @@ const buildDataContext = (salesData: Sale[], metrics: any) => {
     });
     const topClientes = Array.from(clientesMap.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10) 
+      .slice(0, 15) 
       .map(([nome, val]) => `${nome} (${formatCurrency(val)})`)
       .join(', ');
 
-    // Top Produtos
+    // Top Produtos (AGORA COM CÓDIGO)
     const produtosMap = new Map<string, number>();
     salesData.forEach(s => {
-      const nome = s.ITP_ST_DESCRICAO || s.PRO_ST_ALTERNATIVO || 'ITEM';
+      const codigo = s.PRO_ST_ALTERNATIVO || s.PRO_IN_CODIGO || '?';
+      const desc = s.ITP_ST_DESCRICAO || 'ITEM';
+      // Cria uma chave composta para garantir que a IA veja o código
+      const label = `[Cód: ${codigo}] ${desc}`;
+      
       const val = parseValue(s.ITP_RE_VALORMERCADORIA);
-      produtosMap.set(nome, (produtosMap.get(nome) || 0) + val);
+      produtosMap.set(label, (produtosMap.get(label) || 0) + val);
     });
+    
     const topProdutos = Array.from(produtosMap.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([nome, val]) => `${nome} (${formatCurrency(val)})`)
-      .join(', ');
+      .slice(0, 15) // Aumentei para 15 para dar mais contexto
+      .map(([nome, val]) => `${nome} - Total: ${formatCurrency(val)}`)
+      .join('\n'); // Usando quebra de linha para ficar mais claro para a IA
 
     // Status
     const statusMap = new Map<string, number>();
@@ -84,15 +89,21 @@ const buildDataContext = (salesData: Sale[], metrics: any) => {
       .join(', ');
 
     return `
-      DADOS ATUAIS (FILTRADOS):
-      - Total Vendas: ${formatCurrency(totalVendas)}
-      - Meta: ${formatCurrency(metrics.goal || 0)}
+      DADOS ATUAIS (FILTRADOS NA TELA):
+      - Total Geral Vendas: ${formatCurrency(totalVendas)}
+      - Meta do Período: ${formatCurrency(metrics.goal || 0)}
       - Atingimento Meta: ${metrics.achievement?.toFixed(1)}%
-      - Qtd Pedidos: ${salesData.length}
+      - Quantidade de Pedidos: ${salesData.length}
       - Ticket Médio: ${formatCurrency(ticketMedio)}
-      - Top Clientes: ${topClientes}
-      - Top Produtos: ${topProdutos}
-      - Status Pedidos: ${statusDist}
+      
+      TOP PRODUTOS (Mais Vendidos):
+      ${topProdutos}
+      
+      TOP CLIENTES (Maiores Compradores):
+      ${topClientes}
+      
+      DISTRIBUIÇÃO DE STATUS:
+      ${statusDist}
     `;
 };
 
@@ -175,7 +186,8 @@ export const chatWithSalesData = async (
               REGRAS:
               1. Responda APENAS com base nos dados fornecidos acima.
               2. Seja prestativo, profissional e use formatação Markdown.
-              3. Mantenha as respostas curtas e objetivas.
+              3. Se o usuário perguntar sobre códigos de produtos, use a informação que está entre colchetes [Cód: ...].
+              4. Mantenha as respostas curtas e objetivas.
             `
         }
     });
