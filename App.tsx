@@ -7,7 +7,7 @@ import {
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
   Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
-  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle
+  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -17,8 +17,11 @@ import autoTable from 'jspdf-autotable';
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
 import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale } from './services/supabaseService';
+import { generateSalesInsights } from './services/aiService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
+import { AIInsightsModal } from './components/AIInsightsModal';
+import { AIChatView } from './components/AIChatView';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
 
@@ -31,6 +34,7 @@ const MODULES = [
   { id: 'PERFORMANCE', label: 'Meta x Realizado', icon: BarChart3, adminOnly: false },
   { id: 'METAS', label: 'Metas', icon: Target, adminOnly: true },
   { id: 'USERS', label: 'Gestão de Acessos', icon: Users, adminOnly: true },
+  { id: 'IA_CHAT', label: 'Chat IA', icon: MessageSquare, adminOnly: false },
 ];
 
 const COMMISSION_ROLES = [
@@ -133,6 +137,11 @@ export default function App() {
   const [showXmlModal, setShowXmlModal] = useState(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<Sale | null>(null);
   
+  // AI States
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiInsights, setAiInsights] = useState<string | null>(null);
+
   const [pendingXmls, setPendingXmls] = useState<PendingXmlItem[]>([]);
   const [perfYear, setPerfYear] = useState(new Date().getFullYear());
   const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1);
@@ -186,7 +195,7 @@ export default function App() {
   const loadRepsForSelection = async () => { try { const data = await fetchAllRepresentatives(); setFullRepsList(data); } catch (e) {} };
 
   const loadData = async () => {
-    if (!currentUser || activeModuleId === 'USERS' || activeModuleId === 'METAS') return;
+    if (!currentUser || activeModuleId === 'USERS' || activeModuleId === 'METAS' || activeModuleId === 'IA_CHAT') return;
     setLoading(true);
     try {
       const activeModule = MODULES.find(m => m.id === activeModuleId);
@@ -422,8 +431,29 @@ export default function App() {
     const tableColumn = visibleCols.map(c => c.label);
     const tableRows = tableData.map(row => { return visibleCols.map(col => { return col.format ? col.format(row[col.key]) : String(row[col.key] || ''); }); });
     doc.setFontSize(10); doc.text(`Relatório Air Sales - ${MODULES.find(m => m.id === activeModuleId)?.label}`, 14, 15); doc.setFontSize(8); doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 20);
-    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 25, styles: { fontSize: 6, cellPadding: 1 }, headStyles: { fillColor: [26, 33, 48] }, });
+    autoTable(doc, { head: [tableColumn], body: tableRows, startY: 60, styles: { fontSize: 6, cellPadding: 1 }, headStyles: { fillColor: [26, 33, 48] }, });
     doc.save(`AirSales_Export_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
+  const handleGenerateAIInsights = async () => {
+    setAiLoading(true);
+    setAiInsights(null);
+    setShowAIModal(true);
+    
+    // Pequeno delay para a modal abrir e mostrar o loading state corretamente
+    setTimeout(async () => {
+      const activeModule = MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId;
+      const dataToAnalyze = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
+      
+      const insight = await generateSalesInsights(
+        dataToAnalyze, 
+        activeModule, 
+        metrics
+      );
+      
+      setAiInsights(insight);
+      setAiLoading(false);
+    }, 500);
   };
 
   const availableReps = useMemo(() => { if (currentUser && !currentUser?.is_admin && currentUser?.rep_in_codigo) return fullRepsList.filter(r => r.code === currentUser.rep_in_codigo); return fullRepsList; }, [fullRepsList, currentUser]);
@@ -553,6 +583,15 @@ export default function App() {
 
   return ( 
     <div className="flex h-screen w-screen bg-gray-100 font-sans text-gray-900 overflow-hidden"> 
+      {/* Modais e Overlays */}
+      <AIInsightsModal 
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        isLoading={aiLoading}
+        insights={aiInsights}
+        onGenerate={handleGenerateAIInsights}
+        contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId}
+      />
       {notification && ( 
         <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> 
           <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div> 
@@ -678,11 +717,31 @@ export default function App() {
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:block"><Menu size={18}/></button> 
             <h2 className="text-[10px] font-bold uppercase tracking-widest truncate">{MODULES.find(m => m.id === activeModuleId)?.label}</h2> 
           </div> 
-          {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && (<button onClick={handleAutomatedSync} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg"><RefreshCw size={12} className={loading || syncing ? 'animate-spin' : ''} /><span className="hidden sm:inline">Atualizar Base</span></button>)} 
+          <div className="flex items-center gap-2">
+            {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && activeModuleId !== 'IA_CHAT' && (
+              <>
+                 <button onClick={handleGenerateAIInsights} className="px-3 py-1.5 bg-gradient-to-r from-amber-200 to-amber-400 text-amber-900 text-[9px] font-bold uppercase tracking-widest hover:brightness-105 flex items-center gap-2 transition-all active:scale-95 shadow-lg border border-amber-300">
+                    <Sparkles size={12} />
+                    <span className="hidden sm:inline">IA Insights</span>
+                 </button>
+                 <button onClick={handleAutomatedSync} className="px-3 py-1.5 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black flex items-center gap-2 transition-all active:scale-95 shadow-lg">
+                    <RefreshCw size={12} className={loading || syncing ? 'animate-spin' : ''} />
+                    <span className="hidden sm:inline">Atualizar Base</span>
+                 </button>
+              </>
+            )}
+          </div>
         </header> 
         <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full"> 
-          {activeModuleId === 'METAS' ? ( 
+          {/* Renderização Condicional dos Módulos */}
+          {activeModuleId === 'IA_CHAT' ? (
+             <AIChatView 
+                salesData={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} 
+                metrics={metrics} 
+             />
+          ) : activeModuleId === 'METAS' ? ( 
             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+              {/* Conteúdo de Metas (Inalterado) */}
               <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}> 
                 <div className="flex items-center justify-between border-b pb-2"><h3 className="text-[10px] font-bold uppercase tracking-widest">{editingGoalId ? 'Editando Meta' : 'Nova Meta de Vendas'}</h3>{editingGoalId && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}</div> 
                 <div className="space-y-2"> 
