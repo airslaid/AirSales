@@ -213,6 +213,28 @@ export const updateSaleCommissionStatus = async (keys: any, isPaid: boolean, col
     } catch (e) { throw e; }
 }
 
+export const batchUpdateCommissionStatus = async (items: Sale[], isPaid: boolean, columnName: string) => {
+  // Processa em lotes de 20 para evitar congestionamento de requests, já que o Supabase REST não tem UPDATE WHERE IN TUPLE nativo fácil sem RPC
+  const chunkSize = 20;
+  try {
+    for (let i = 0; i < items.length; i += chunkSize) {
+      const chunk = items.slice(i, i + chunkSize);
+      await Promise.all(chunk.map(item => 
+         updateSaleCommissionStatus({
+             fil: Number(item.FIL_IN_CODIGO),
+             ser: String(item.SER_ST_CODIGO),
+             ped: Number(item.PED_IN_CODIGO),
+             seq: Number(item.ITP_IN_SEQUENCIA)
+         }, isPaid, columnName)
+      ));
+    }
+    return true;
+  } catch (e) {
+    console.error("Erro no Batch Update:", e);
+    throw e;
+  }
+};
+
 export const fetchAppUsers = async (): Promise<AppUser[]> => {
   const { data, error } = await supabase.from('app_users').select('*').order('name');
   if (error) return [];

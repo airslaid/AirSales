@@ -7,7 +7,7 @@ import {
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
   Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
-  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare
+  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, CheckCheck
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -16,7 +16,7 @@ import autoTable from 'jspdf-autotable';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
-import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale } from './services/supabaseService';
+import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale, batchUpdateCommissionStatus } from './services/supabaseService';
 import { generateSalesInsights } from './services/aiService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
@@ -142,6 +142,10 @@ export default function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiInsights, setAiInsights] = useState<string | null>(null);
 
+  // Batch Payment States
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
+
   const [pendingXmls, setPendingXmls] = useState<PendingXmlItem[]>([]);
   const [perfYear, setPerfYear] = useState(new Date().getFullYear());
   const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1);
@@ -210,6 +214,7 @@ export default function App() {
   };
 
   const handleXmlUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    // ... (rest of code omitted for brevity, same as previous)
     const files = event.target.files;
     if (!files || files.length === 0) return;
     const newItems: PendingXmlItem[] = [];
@@ -383,6 +388,50 @@ export default function App() {
     setSalesData(prev => prev.map(item => { if (item.FIL_IN_CODIGO === keys.fil && item.SER_ST_CODIGO === keys.ser && item.PED_IN_CODIGO === keys.ped && item.ITP_IN_SEQUENCIA === keys.seq) { return { ...item, [roleProp]: newStatus }; } return item; }));
     try { await updateSaleCommissionStatus(keys, newStatus, roleProp); showNotification(newStatus ? "Pagamento confirmado!" : "Pagamento estornado.", "success"); } 
     catch (error: any) { setSalesData(prev => prev.map(item => { if (item.FIL_IN_CODIGO === keys.fil && item.SER_ST_CODIGO === keys.ser && item.PED_IN_CODIGO === keys.ped && item.ITP_IN_SEQUENCIA === keys.seq) { return { ...item, [roleProp]: !newStatus }; } return item; })); showNotification(`Erro: ${error.message}`, "error"); }
+  };
+
+  // Função para aplicar pagamento em lote
+  const handleBatchPayment = async () => {
+    // Pega apenas os itens visíveis/filtrados que ainda não foram pagos
+    const itemsToPay = commissionData.filter(i => !i.COMISSAO_PAGA);
+    
+    if (itemsToPay.length === 0) {
+      showNotification("Nenhum item pendente para baixar neste filtro.", "warning");
+      setShowBatchModal(false);
+      return;
+    }
+
+    setBatchLoading(true);
+    const roleProp = `PAGO_${activeCommissionRole}`;
+    
+    try {
+       // Atualiza visualmente primeiro (Optimistic UI)
+       setSalesData(prev => prev.map(item => {
+           // Verifica se o item está na lista de pagamento
+           const inBatch = itemsToPay.some(batchItem => 
+             batchItem.FIL_IN_CODIGO === item.FIL_IN_CODIGO &&
+             batchItem.SER_ST_CODIGO === item.SER_ST_CODIGO &&
+             batchItem.PED_IN_CODIGO === item.PED_IN_CODIGO &&
+             item.ITP_IN_SEQUENCIA === batchItem.ITP_IN_SEQUENCIA
+           );
+           
+           if (inBatch) {
+               return { ...item, [roleProp]: true };
+           }
+           return item;
+       }));
+
+       await batchUpdateCommissionStatus(itemsToPay, true, roleProp);
+       
+       showNotification(`${itemsToPay.length} pagamentos baixados com sucesso!`, "success");
+       setShowBatchModal(false);
+    } catch (error: any) {
+        showNotification("Erro ao baixar lote: " + error.message, "error");
+        // Reverte em caso de erro (necessário recarregar dados para garantir integridade)
+        loadData();
+    } finally {
+        setBatchLoading(false);
+    }
   };
 
   const generateColumns = (data: Sale[]) => {
@@ -592,6 +641,45 @@ export default function App() {
         onGenerate={handleGenerateAIInsights}
         contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId}
       />
+
+      {/* MODAL DE BAIXA EM LOTE */}
+      {showBatchModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm">
+             <div className="p-6 text-center">
+                <div className="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <CheckCheck size={24} />
+                </div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-gray-900 mb-2">Confirmar Baixa em Lote?</h3>
+                <div className="bg-gray-50 p-3 rounded-sm text-left text-[10px] space-y-2 mb-4 border border-gray-100">
+                    <div className="flex justify-between">
+                        <span className="text-gray-500 font-bold">Período:</span>
+                        <span className="font-mono text-gray-900">{dateFormat(filters.startDate)} a {dateFormat(filters.endDate)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-gray-500 font-bold">Itens Pendentes:</span>
+                        <span className="font-mono text-gray-900">{commissionData.filter(i => !i.COMISSAO_PAGA).length} registros</span>
+                    </div>
+                    <div className="flex justify-between border-t border-gray-200 pt-1 mt-1">
+                        <span className="text-gray-500 font-bold">Valor Total a Pagar:</span>
+                        <span className="font-mono font-bold text-green-700">{currencyFormat(commissionData.filter(i => !i.COMISSAO_PAGA).reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))}</span>
+                    </div>
+                </div>
+                <p className="text-[10px] text-gray-400 leading-relaxed px-2">
+                   Esta ação marcará todos os itens filtrados acima como <strong>PAGOS</strong> para o perfil selecionado.
+                </p>
+             </div>
+             <div className="flex border-t border-gray-100">
+                <button onClick={() => setShowBatchModal(false)} disabled={batchLoading} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button onClick={handleBatchPayment} disabled={batchLoading} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white bg-green-600 hover:bg-green-700 transition-colors shadow-inner flex items-center justify-center gap-2">
+                    {batchLoading && <RefreshCw size={12} className="animate-spin" />}
+                    Confirmar Baixa
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
+
       {notification && ( 
         <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> 
           <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div> 
@@ -599,6 +687,7 @@ export default function App() {
           <button onClick={() => setNotification(null)} className="ml-auto text-gray-400 hover:text-gray-900"><X size={12}/></button> 
         </div> 
       )} 
+      {/* ... (Previous Delete Modal and XML Modal omitted for brevity, keeping existing code structure) ... */}
       {deleteConfirmItem && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
            <div className="bg-white w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm">
@@ -824,6 +913,11 @@ export default function App() {
                     </div> 
                   ) : ( <div className="flex items-center gap-2"><TableIcon size={14}/><h3 className="text-[9px] font-bold uppercase tracking-widest">Visão Analítica (Detalhamento por Item)</h3></div> )} 
                   <div className="flex items-center gap-2 ml-auto"> 
+                    {activeModuleId === 'PAGAMENTOS' && (
+                        <button onClick={() => setShowBatchModal(true)} className="px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm" title="Baixar todos os itens filtrados">
+                            <CheckCheck size={12} /> Baixar Lote
+                        </button>
+                    )}
                     {(activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') && ( <button onClick={() => setFilterOnlyManual(!filterOnlyManual)} className={`px-3 py-1.5 border text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${filterOnlyManual ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`} title="Exibir apenas notas importadas manualmente" > <DatabaseIcon size={12}/> {filterOnlyManual ? 'Manual Ativado' : 'Apenas Manuais'} </button> )} 
                     {activeModuleId === 'COMISSAO' && ( <div className="relative"> <input type="file" id="xml-upload" multiple accept=".xml" className="hidden" onChange={handleXmlUpload} /> <label htmlFor="xml-upload" className="px-2 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm cursor-pointer"> <UploadCloud size={12}/> Importar XML </label> </div> )} 
                     <button onClick={handleExportExcel} className="px-2 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm" title="Exportar para Excel" > <FileSpreadsheet size={12}/> Excel </button> 
