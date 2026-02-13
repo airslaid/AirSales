@@ -33,6 +33,7 @@ export interface AppUser {
   password?: string;
   rep_in_codigo: number | null;
   is_admin: boolean;
+  allowed_modules?: string[]; // IDs dos módulos permitidos
 }
 
 export interface SalesGoal {

@@ -7,7 +7,8 @@ import {
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
   Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
-  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, CheckCheck
+  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, CheckCheck,
+  Grid
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -29,12 +30,12 @@ const MODULES = [
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
   { id: 'DV', label: 'Desenvolvimento', icon: Hammer, table: 'PEDIDOS_DETALHADOS' },
-  { id: 'COMISSAO', label: 'Comissões', icon: Percent, adminOnly: false },
-  { id: 'PAGAMENTOS', label: 'Controle Pagamentos', icon: Wallet, adminOnly: true },
-  { id: 'PERFORMANCE', label: 'Meta x Realizado', icon: BarChart3, adminOnly: false },
-  { id: 'METAS', label: 'Metas', icon: Target, adminOnly: true },
-  { id: 'USERS', label: 'Gestão de Acessos', icon: Users, adminOnly: true },
-  { id: 'IA_CHAT', label: 'Chat IA', icon: MessageSquare, adminOnly: false },
+  { id: 'COMISSAO', label: 'Comissões', icon: Percent },
+  { id: 'PAGAMENTOS', label: 'Controle Pagamentos', icon: Wallet },
+  { id: 'PERFORMANCE', label: 'Meta x Realizado', icon: BarChart3 },
+  { id: 'METAS', label: 'Metas', icon: Target },
+  { id: 'USERS', label: 'Gestão de Acessos', icon: Users },
+  { id: 'IA_CHAT', label: 'Chat IA', icon: MessageSquare },
 ];
 
 const COMMISSION_ROLES = [
@@ -160,7 +161,7 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   
-  const [newUser, setNewUser] = useState<AppUser>({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false });
+  const [newUser, setNewUser] = useState<AppUser>({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] });
   const [newGoal, setNewGoal] = useState<SalesGoal>({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 });
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   
@@ -452,11 +453,35 @@ export default function App() {
   const handleEditGoal = (goal: SalesGoal) => { setNewGoal({ rep_in_codigo: goal.rep_in_codigo, rep_nome: goal.rep_nome, ano: goal.ano, mes: goal.mes, valor_meta: goal.valor_meta }); setEditingGoalId(goal.id || null); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const handleCancelEdit = () => { setNewGoal({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 }); setEditingGoalId(null); };
 
-  const handleLogin = (e: React.FormEvent) => { e.preventDefault(); const user = appUsers.find(u => u.email.toLowerCase() === loginEmail.toLowerCase() && u.password === loginPassword); if (user) setCurrentUser(user); else setLoginError("Acesso inválido."); };
+  const handleLogin = (e: React.FormEvent) => { 
+    e.preventDefault(); 
+    const user = appUsers.find(u => u.email.toLowerCase() === loginEmail.toLowerCase() && u.password === loginPassword); 
+    if (user) {
+      setCurrentUser(user);
+      // Se o usuário não tiver permissão para o módulo padrão 'PD', muda para o primeiro permitido
+      if (!user.is_admin && user.allowed_modules && user.allowed_modules.length > 0) {
+        if (!user.allowed_modules.includes('PD')) {
+           setActiveModuleId(user.allowed_modules[0]);
+        }
+      }
+    } else setLoginError("Acesso inválido."); 
+  };
 
   const handleSaveUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password) return showNotification("Dados incompletos.", "error");
-    try { await upsertAppUser(newUser); setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false }); loadAppUsers(); showNotification("Acesso criado.", "success"); } 
+    
+    // Se não for admin e nenhum módulo foi selecionado, alerta (opcional, pode ser intencional)
+    if (!newUser.is_admin && (!newUser.allowed_modules || newUser.allowed_modules.length === 0)) {
+       showNotification("Selecione ao menos um módulo de acesso para o usuário.", "warning");
+       return;
+    }
+
+    try { 
+      await upsertAppUser(newUser); 
+      setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] }); 
+      loadAppUsers(); 
+      showNotification("Acesso criado.", "success"); 
+    } 
     catch (e: any) { showNotification(e.message, "error"); }
   };
 
@@ -505,11 +530,31 @@ export default function App() {
     }, 500);
   };
 
+  const toggleModuleForUser = (moduleId: string) => {
+    setNewUser(prev => {
+        const currentModules = prev.allowed_modules || [];
+        if (currentModules.includes(moduleId)) {
+            return { ...prev, allowed_modules: currentModules.filter(id => id !== moduleId) };
+        } else {
+            return { ...prev, allowed_modules: [...currentModules, moduleId] };
+        }
+    });
+  };
+
   const availableReps = useMemo(() => { if (currentUser && !currentUser?.is_admin && currentUser?.rep_in_codigo) return fullRepsList.filter(r => r.code === currentUser.rep_in_codigo); return fullRepsList; }, [fullRepsList, currentUser]);
   const availableStatuses = useMemo(() => { const set = new Set<string>(); salesData.forEach(s => { const status = String(s.PED_ST_STATUS || s.SITUACAO || ''); if (status) set.add(status.toUpperCase()); }); return Array.from(set).sort(); }, [salesData]);
   const availableFiliais = useMemo(() => { const set = new Set<string>(); salesData.forEach(s => { const filial = String(s.FILIAL_NOME || ''); if (filial) set.add(filial.toUpperCase()); }); return Array.from(set).sort(); }, [salesData]);
   const filteredGoals = useMemo(() => { let goals = [...salesGoals]; if (newGoal.rep_in_codigo !== 0 && !editingGoalId) goals = goals.filter(g => g.rep_in_codigo === newGoal.rep_in_codigo); return goals.sort((a, b) => (a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)); }, [salesGoals, newGoal.rep_in_codigo, editingGoalId]);
   const totalGoalsFiltered = useMemo(() => filteredGoals.reduce((acc, curr) => acc + curr.valor_meta, 0), [filteredGoals]);
+  
+  // Lógica de visibilidade dos módulos na sidebar
+  const visibleModules = useMemo(() => {
+     if (!currentUser) return [];
+     if (currentUser.is_admin) return MODULES;
+     
+     // Se não for admin, filtra pelos módulos permitidos no cadastro
+     return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id));
+  }, [currentUser]);
 
   const processedData = useMemo(() => {
     let result = [...salesData];
@@ -781,7 +826,10 @@ export default function App() {
       <aside className={`flex flex-col border-r border-gray-200 bg-white transition-all duration-300 z-30 flex-shrink-0 ${mobileSidebarOpen ? 'fixed inset-y-0 left-0 shadow-2xl w-64 translate-x-0' : 'hidden lg:flex relative'} ${!mobileSidebarOpen && sidebarOpen ? 'w-56' : ''} ${!mobileSidebarOpen && !sidebarOpen ? 'w-16' : ''} `}> 
         <div className="h-12 flex items-center px-4 border-b border-gray-100 bg-gray-50 shrink-0"><div className="flex items-center gap-2 text-gray-900"><Hexagon size={20}/><span className={`font-bold uppercase text-xs transition-opacity duration-200 ${!sidebarOpen && !mobileSidebarOpen ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>AIR SALES</span></div></div> 
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar"> 
-          {MODULES.filter(m => !m.adminOnly || currentUser?.is_admin).map(m => ( 
+          {visibleModules.length === 0 && (
+             <div className="px-2 text-center text-[10px] text-gray-400 uppercase font-bold">Nenhum módulo permitido</div>
+          )}
+          {visibleModules.map(m => ( 
             <button key={m.id} onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all rounded-sm whitespace-nowrap ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'} ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`} title={!sidebarOpen && !mobileSidebarOpen ? m.label : ''} > 
               <m.icon size={16} className="shrink-0" /> 
               {(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>} 
@@ -856,8 +904,68 @@ export default function App() {
             </div> 
           ) : activeModuleId === 'USERS' ? ( 
             <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar"> 
-              <div className="col-span-12 lg:col-span-4 bg-white border border-gray-200 p-3 space-y-2 shadow-sm"><h3 className="text-[10px] font-bold uppercase tracking-widest border-b pb-2">Novo Acesso</h3><div className="space-y-2"><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Nome Completo</label><input type="text" placeholder="Ex: João da Silva" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.name} onChange={e => setNewUser(p => ({...p, name: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">E-mail Corporativo</label><input type="email" placeholder="usuario@empresa.com.br" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.email} onChange={e => setNewUser(p => ({...p, email: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Senha de Acesso</label><input type="password" placeholder="••••••••" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.password || ''} onChange={e => setNewUser(p => ({...p, password: e.target.value}))} /></div><div className="pt-1 flex items-center gap-2 p-2 bg-gray-50 border border-dashed border-gray-200"><input type="checkbox" id="is_admin" className="w-3 h-3 accent-gray-900" checked={newUser.is_admin} onChange={e => setNewUser(p => ({...p, is_admin: e.target.checked, rep_in_codigo: e.target.checked ? null : p.rep_in_codigo}))} /><label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label></div>{!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}</div><button onClick={handleSaveUser} className="w-full py-2.5 bg-[#1a2130] text-white text-[9px] font-bold uppercase tracking-widest shadow-xl hover:bg-black transition-all">Criar Acesso</button></div> 
-              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-right">Ação</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-right"><button onClick={async () => { if(confirm(`Remover acesso de ${u.name}?`)) { await deleteAppUser(u.id!); loadAppUsers(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div></div> 
+              <div className="col-span-12 lg:col-span-4 bg-white border border-gray-200 p-3 space-y-2 shadow-sm">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest border-b pb-2">Novo Acesso</h3>
+                  <div className="space-y-2">
+                      <div className="space-y-0.5">
+                          <label className="text-[9px] font-black uppercase text-gray-400">Nome Completo</label>
+                          <input type="text" placeholder="Ex: João da Silva" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.name} onChange={e => setNewUser(p => ({...p, name: e.target.value}))} />
+                      </div>
+                      <div className="space-y-0.5">
+                          <label className="text-[9px] font-black uppercase text-gray-400">E-mail Corporativo</label>
+                          <input type="email" placeholder="usuario@empresa.com.br" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.email} onChange={e => setNewUser(p => ({...p, email: e.target.value}))} />
+                      </div>
+                      <div className="space-y-0.5">
+                          <label className="text-[9px] font-black uppercase text-gray-400">Senha de Acesso</label>
+                          <input type="password" placeholder="••••••••" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.password || ''} onChange={e => setNewUser(p => ({...p, password: e.target.value}))} />
+                      </div>
+                      
+                      {/* Seção de Permissões de Módulo */}
+                      <div className="space-y-1 pt-2 border-t border-gray-100">
+                          <label className="text-[9px] font-black uppercase text-gray-400 mb-1 block">Permissões de Acesso</label>
+                          {newUser.is_admin ? (
+                             <div className="p-2 bg-gray-100 border border-gray-200 rounded text-center">
+                                <ShieldCheck size={16} className="mx-auto text-gray-900 mb-1" />
+                                <span className="text-[9px] font-bold uppercase text-gray-600 block">Acesso Total (Admin)</span>
+                             </div>
+                          ) : (
+                             <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2 rounded border border-gray-100 max-h-[150px] overflow-y-auto custom-scrollbar">
+                                {MODULES.map(module => (
+                                   <label key={module.id} className="flex items-center gap-2 cursor-pointer group">
+                                      <div className={`w-3 h-3 border flex items-center justify-center rounded-sm transition-colors ${newUser.allowed_modules?.includes(module.id) ? 'bg-blue-500 border-blue-500' : 'bg-white border-gray-300 group-hover:border-gray-400'}`}>
+                                          {newUser.allowed_modules?.includes(module.id) && <Check size={8} className="text-white" strokeWidth={4} />}
+                                      </div>
+                                      <input 
+                                         type="checkbox" 
+                                         className="hidden" 
+                                         checked={newUser.allowed_modules?.includes(module.id) || false}
+                                         onChange={() => toggleModuleForUser(module.id)}
+                                      />
+                                      <span className="text-[9px] font-medium text-gray-600 group-hover:text-gray-900">{module.label}</span>
+                                   </label>
+                                ))}
+                             </div>
+                          )}
+                      </div>
+
+                      <div className="pt-2 flex items-center gap-2 p-2 bg-gray-50 border border-dashed border-gray-200">
+                          <input type="checkbox" id="is_admin" className="w-3 h-3 accent-gray-900" checked={newUser.is_admin} onChange={e => setNewUser(p => ({...p, is_admin: e.target.checked, rep_in_codigo: e.target.checked ? null : p.rep_in_codigo}))} />
+                          <label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label>
+                      </div>
+                      
+                      {!newUser.is_admin && (
+                          <div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200">
+                              <label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label>
+                              <select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}>
+                                  <option value="">Selecionar Representante</option>
+                                  {fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}
+                              </select>
+                          </div>
+                      )}
+                  </div>
+                  <button onClick={handleSaveUser} className="w-full py-2.5 bg-[#1a2130] text-white text-[9px] font-bold uppercase tracking-widest shadow-xl hover:bg-black transition-all">Criar Acesso</button>
+              </div> 
+              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-center">Módulos</th><th className="px-4 py-2 text-right">Ação</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-center">{u.is_admin ? <span className="text-[9px] font-bold text-gray-400">TODOS</span> : (u.allowed_modules && u.allowed_modules.length > 0 ? <div className="flex flex-wrap gap-1 justify-center">{u.allowed_modules.slice(0, 3).map(mid => (<span key={mid} className="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-[8px] font-mono">{mid}</span>))}{u.allowed_modules.length > 3 && <span className="text-[8px] text-gray-400 self-center">+{u.allowed_modules.length - 3}</span>}</div> : <span className="text-[9px] text-red-400">Nenhum</span>)}</td><td className="px-4 py-2 text-right"><button onClick={async () => { if(confirm(`Remover acesso de ${u.name}?`)) { await deleteAppUser(u.id!); loadAppUsers(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div></div> 
             </div> 
           ) : ( 
             <div className="flex flex-col h-full gap-2 overflow-hidden"> 
