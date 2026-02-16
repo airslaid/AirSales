@@ -33,7 +33,6 @@ export interface AppUser {
   password?: string;
   rep_in_codigo: number | null;
   is_admin: boolean;
-  allowed_modules?: string[]; // IDs dos módulos permitidos
 }
 
 export interface SalesGoal {
@@ -44,6 +43,27 @@ export interface SalesGoal {
   mes: number;
   valor_meta: number;
   created_at?: string;
+}
+
+export interface CRMAppointment {
+  id: string;
+  title: string;
+  client_id?: number;
+  client_name?: string;
+  rep_in_codigo: number;
+  start_date: string; // ISO String
+  end_date: string;   // ISO String
+  start_time: string; // HH:mm
+  end_time: string;   // HH:mm
+  activity_type: 'REUNIAO' | 'TELEFONEMA' | 'COMPROMISSO' | 'VISITA' | 'EMAIL';
+  priority: 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
+  status: 'AGENDADO' | 'EM_ANDAMENTO' | 'CONCLUIDO' | 'CANCELADO';
+  recurrence: 'UNICO' | 'DIARIA' | 'SEMANAL' | 'MENSAL' | 'ANUAL';
+  description?: string;
+  location?: string;
+  req_confirmation: boolean;
+  notify_email: boolean;
+  hide_appointment: boolean;
 }
 
 export interface ServicePrincipalConfig {
