@@ -323,6 +323,31 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
         };
         
         await updateOrderStatus(keys, newStatusText);
+
+        // --- GERAÇÃO AUTOMÁTICA DE FOLLOW-UP ---
+        const oldStatus = order.PED_ST_STATUS || 'STATUS ANTERIOR';
+        const now = new Date();
+        const autoFollowUp: CRMAppointment = {
+            id: '', // Supabase/Service gera o ID
+            title: `Mudança de Status: ${newStatusText}`,
+            client_name: order.CLIENTE_NOME,
+            rep_in_codigo: Number(order.REP_IN_CODIGO),
+            start_date: now.toISOString().split('T')[0],
+            end_date: now.toISOString().split('T')[0],
+            start_time: now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+            end_time: now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+            activity_type: 'COMPROMISSO', // Tipo neutro para log de sistema
+            priority: 'BAIXA',
+            status: 'CONCLUIDO',
+            recurrence: 'UNICO',
+            description: `[FOLLOW-UP ORÇAMENTO #${order.PED_IN_CODIGO}] Mudança de status de ${oldStatus} para ${newStatusText}`,
+            req_confirmation: false,
+            notify_email: false,
+            hide_appointment: false
+        };
+        
+        await upsertCRMAppointment(autoFollowUp);
+        // ---------------------------------------
         
         if (onRefresh) {
             await onRefresh();
@@ -331,6 +356,8 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
         // Se estiver com modal aberto, atualiza o objeto local
         if (selectedOrder && selectedOrder.PED_IN_CODIGO === order.PED_IN_CODIGO) {
             setSelectedOrder({ ...selectedOrder, PED_ST_STATUS: newStatusText });
+            // Recarrega appointments para aparecer no modal
+            loadAppointments();
         }
 
     } catch (error) {
