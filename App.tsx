@@ -7,7 +7,8 @@ import {
   Save, Download, FileSpreadsheet, FileType, ChevronUp, Target, BarChart3, ArrowUpRight,
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
   Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
-  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, Handshake
+  FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, Handshake,
+  CheckSquare2, LayoutDashboard
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -16,17 +17,19 @@ import autoTable from 'jspdf-autotable';
 
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
-import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale } from './services/supabaseService';
+import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale, deleteAllSales } from './services/supabaseService';
 import { generateSalesInsights } from './services/aiService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
 import { AIInsightsModal } from './components/AIInsightsModal';
 import { AIChatView } from './components/AIChatView';
 import { CRMView } from './components/CRMView';
+import { Overview } from './components/Overview'; // Importação do novo componente
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
 
 const MODULES = [
+  { id: 'OVERVIEW', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: false },
   { id: 'CRM', label: 'CRM Operacional', icon: Handshake, adminOnly: false },
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
@@ -118,7 +121,7 @@ const getCurrentMonthRange = () => {
 };
 
 export default function App() {
-  const [activeModuleId, setActiveModuleId] = useState<string>('CRM');
+  const [activeModuleId, setActiveModuleId] = useState<string>('OVERVIEW');
   const [activeCommissionRole, setActiveCommissionRole] = useState<string>('ASSISTENTE');
   const [commissionViewMode, setCommissionViewMode] = useState<'FATURADO' | 'ABERTO'>('FATURADO');
   const [filterOnlyManual, setFilterOnlyManual] = useState(false);
@@ -151,6 +154,10 @@ export default function App() {
   const [showPerfRepSelector, setShowPerfRepSelector] = useState(false);
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error' | 'warning'} | null>(null);
   
+  // Danger Zone States
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
   const columnSelectorRef = useRef<HTMLDivElement>(null);
   const perfRepSelectorRef = useRef<HTMLDivElement>(null);
   
@@ -158,7 +165,7 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   
-  const [newUser, setNewUser] = useState<AppUser>({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false });
+  const [newUser, setNewUser] = useState<AppUser>({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] });
   const [newGoal, setNewGoal] = useState<SalesGoal>({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 });
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   
@@ -184,7 +191,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (currentUser) loadData();
+    if (currentUser) {
+        // Verifica se o módulo ativo ainda é válido para o usuário, senão redireciona
+        const userModules = getAvailableModules();
+        const hasAccess = userModules.some(m => m.id === activeModuleId);
+        
+        if (!hasAccess && userModules.length > 0) {
+            setActiveModuleId(userModules[0].id);
+        } else if (userModules.length > 0 && activeModuleId === '') {
+            setActiveModuleId(userModules[0].id);
+        }
+
+        loadData();
+    }
   }, [currentUser, activeModuleId]);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'warning') => {
@@ -204,20 +223,19 @@ export default function App() {
       const tableName = activeModule?.table || 'PEDIDOS_DETALHADOS';
       const repCode = currentUser?.is_admin ? undefined : currentUser?.rep_in_codigo;
       
-      // Para o CRM, precisamos de dados de OV e PD, vamos carregar 'PD' como padrão, mas o backend
-      // fetchFromSupabase com filtro vazio retorna tudo ou podemos fazer duas chamadas.
-      // Simplificando: CRM usa 'PD' mas a gente busca tudo se o filtro for vazio ou customizado.
       let filterToUse = activeModuleId;
-      if (activeModuleId === 'CRM') filterToUse = ''; // Busca tudo para popular pipeline e clientes
+      if (activeModuleId === 'CRM') filterToUse = ''; 
+      if (activeModuleId === 'OVERVIEW') filterToUse = ''; // Traz tudo para o overview
       if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD';
       
       const data = await fetchData('supabase', "", tableName, filterToUse);
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
       setSalesData(filtered);
-      if (activeModuleId !== 'PERFORMANCE' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'CRM') { generateColumns(filtered); }
+      if (activeModuleId !== 'PERFORMANCE' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'CRM' && activeModuleId !== 'OVERVIEW') { generateColumns(filtered); }
     } catch (error) {} finally { setLoading(false); }
   };
 
+  // ... (Handlers XML e Manual Edit omitidos para brevidade - inalterados) ...
   const handleXmlUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -323,14 +341,12 @@ export default function App() {
      if (invalid) { showNotification("Preencha Pedido, Data e Representante para todas as notas.", "error"); return; }
      setLoading(true);
      try {
-       // Track order sequences for this batch to prevent duplicates on same order number
        const orderSequenceMap = new Map<number, number>();
 
        const salesToSync: Sale[] = pendingXmls.map(item => {
           const repName = fullRepsList.find(r => r.code === item.repId)?.name || 'Rep Desconhecido';
           const orderId = parseInt(item.orderNumber);
           
-          // Auto-increment sequence for items with same order number in this batch
           const currentSeq = orderSequenceMap.get(orderId) || 0;
           const nextSeq = currentSeq + 1;
           orderSequenceMap.set(orderId, nextSeq);
@@ -354,7 +370,8 @@ export default function App() {
        else { throw new Error("Erro ao salvar dados no Supabase."); }
      } catch (err: any) { showNotification("Erro ao salvar: " + err.message, "error"); } finally { setLoading(false); }
   };
-
+  
+  // ... (Sync Handlers e Auth omitidos para brevidade - inalterados) ...
   const handleManualSync = async () => {
     if (!pbiToken) return showNotification("Informe o token do Power BI.", "error");
     setSyncing(true);
@@ -412,12 +429,64 @@ export default function App() {
   const handleEditGoal = (goal: SalesGoal) => { setNewGoal({ rep_in_codigo: goal.rep_in_codigo, rep_nome: goal.rep_nome, ano: goal.ano, mes: goal.mes, valor_meta: goal.valor_meta }); setEditingGoalId(goal.id || null); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const handleCancelEdit = () => { setNewGoal({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 }); setEditingGoalId(null); };
 
-  const handleLogin = (e: React.FormEvent) => { e.preventDefault(); const user = appUsers.find(u => u.email.toLowerCase() === loginEmail.toLowerCase() && u.password === loginPassword); if (user) setCurrentUser(user); else setLoginError("Acesso inválido."); };
+  const handleLogin = (e: React.FormEvent) => { 
+    e.preventDefault(); 
+    const user = appUsers.find(u => u.email.toLowerCase() === loginEmail.toLowerCase() && u.password === loginPassword); 
+    if (user) {
+        setCurrentUser(user);
+    } else {
+        setLoginError("Acesso inválido."); 
+    }
+  };
+
+  const handleEditUser = (user: AppUser) => {
+    let initialModules = user.allowed_modules || [];
+    if (!user.allowed_modules || user.allowed_modules.length === 0) {
+        if (user.is_admin) {
+            initialModules = MODULES.map(m => m.id);
+        } else {
+            initialModules = MODULES.filter(m => !m.adminOnly).map(m => m.id);
+        }
+    }
+    setNewUser({ ...user, allowed_modules: initialModules });
+  };
+
+  const handleCancelEditUser = () => {
+    setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] });
+  };
+
+  const handleToggleModule = (moduleId: string) => {
+      const currentModules = newUser.allowed_modules || [];
+      if (currentModules.includes(moduleId)) {
+          setNewUser({ ...newUser, allowed_modules: currentModules.filter(id => id !== moduleId) });
+      } else {
+          setNewUser({ ...newUser, allowed_modules: [...currentModules, moduleId] });
+      }
+  };
 
   const handleSaveUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password) return showNotification("Dados incompletos.", "error");
-    try { await upsertAppUser(newUser); setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false }); loadAppUsers(); showNotification("Acesso criado.", "success"); } 
+    try { 
+      await upsertAppUser(newUser); 
+      setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] }); 
+      loadAppUsers(); 
+      showNotification(newUser.id ? "Acesso atualizado." : "Acesso criado.", "success"); 
+    } 
     catch (e: any) { showNotification(e.message, "error"); }
+  };
+
+  const executeResetDatabase = async () => {
+     setResetting(true);
+     try {
+        await deleteAllSales();
+        showNotification("Banco de dados limpo com sucesso!", "success");
+        setSalesData([]);
+        setShowResetConfirm(false);
+     } catch (err: any) {
+        showNotification("Erro ao limpar banco: " + err.message, "error");
+     } finally {
+        setResetting(false);
+     }
   };
 
   const handleColumnReorder = (fromIndex: number, toIndex: number) => { const newCols = [...salesColumns]; const [moved] = newCols.splice(fromIndex, 1); newCols.splice(toIndex, 0, moved); setSalesColumns(newCols); };
@@ -448,18 +517,10 @@ export default function App() {
     setAiLoading(true);
     setAiInsights(null);
     setShowAIModal(true);
-    
-    // Pequeno delay para a modal abrir e mostrar o loading state corretamente
     setTimeout(async () => {
       const activeModule = MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId;
       const dataToAnalyze = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
-      
-      const insight = await generateSalesInsights(
-        dataToAnalyze, 
-        activeModule, 
-        metrics
-      );
-      
+      const insight = await generateSalesInsights(dataToAnalyze, activeModule, metrics);
       setAiInsights(insight);
       setAiLoading(false);
     }, 500);
@@ -473,26 +534,13 @@ export default function App() {
 
   const processedData = useMemo(() => {
     let result = [...salesData];
-    
-    // REGRA DE NEGÓCIO: Filtrar importações XML (Filial 900) da visualização de Pedidos de Venda (PD)
-    if (activeModuleId === 'PD') {
-        result = result.filter(item => Number(item.FIL_IN_CODIGO) !== 900);
-    }
-    
-    // REGRA DE NEGÓCIO CRM: Exibir SOMENTE Orçamentos (OV) no Pipeline
-    if (activeModuleId === 'CRM') {
-       result = result.filter(item => String(item.SER_ST_CODIGO).trim().toUpperCase() === 'OV');
-    }
-
+    if (activeModuleId === 'PD') { result = result.filter(item => Number(item.FIL_IN_CODIGO) !== 900); }
     if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
     if (filters.cliente) { const c = filters.cliente.toLowerCase(); result = result.filter(item => String(item.CLIENTE_NOME || '').toLowerCase().includes(c)); }
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
     const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') ? 'NOT_DT_EMISSAO' : 'PED_DT_EMISSAO';
-    
-    // No CRM, queremos ver o pipeline, então filtramos pelo período dos filtros SE definidos
     if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
     if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
-    
     if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
     if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
     if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
@@ -500,29 +548,32 @@ export default function App() {
     return result;
   }, [salesData, filters, sortConfig, activeModuleId, commissionViewMode]);
 
+  // Novo Memo para Overview Data (Todos os dados, mas com filtros aplicados exceto data)
+  const overviewData = useMemo(() => {
+    let result = [...salesData];
+    // Aplica filtros exceto data
+    if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
+    if (filters.cliente) { const c = filters.cliente.toLowerCase(); result = result.filter(item => String(item.CLIENTE_NOME || '').toLowerCase().includes(c)); }
+    if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
+    if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
+    if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
+    
+    return result;
+  }, [salesData, filters.globalSearch, filters.cliente, filters.representante, filters.status, filters.filial]);
+
   const commissionData = useMemo(() => {
     const monthlyMetrics = new Map<string, number>();
     salesData.forEach(sale => { const dt = sale['PED_DT_EMISSAO']; if (!dt) return; const d = new Date(dt); const year = d.getFullYear(); const month = d.getMonth() + 1; const repCode = Number(sale['REP_IN_CODIGO']); const val = parseBrNumber(sale['ITP_RE_VALORMERCADORIA']); const globalKey = `${year}-${month}-GLOBAL`; monthlyMetrics.set(globalKey, (monthlyMetrics.get(globalKey) || 0) + val); if (repCode) { const repKey = `${year}-${month}-${repCode}`; monthlyMetrics.set(repKey, (monthlyMetrics.get(repKey) || 0) + val); } });
     const getGoalContext = (emissionDateStr: string, repCode: number) => { if (!emissionDateStr) return { goal: 0, realized: 0, percent: 0 }; const d = new Date(emissionDateStr); const year = d.getFullYear(); const month = d.getMonth() + 1; if (activeCommissionRole === 'GERENTE') { const globalKey = `${year}-${month}-GLOBAL`; const realized = monthlyMetrics.get(globalKey) || 0; const goal = salesGoals.filter(g => g.ano === year && g.mes === month).reduce((acc, curr) => acc + curr.valor_meta, 0); return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; } else { const repKey = `${year}-${month}-${repCode}`; const realized = monthlyMetrics.get(repKey) || 0; const goalObj = salesGoals.find(g => g.ano === year && g.mes === month && g.rep_in_codigo === repCode); const goal = goalObj?.valor_meta || 0; return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; } };
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
-    
-    // Filtramos processedData, que já excluiu XML de PD se o activeModuleId for PD.
-    // Mas se o activeModuleId for COMISSAO, o filtro de XML não é aplicado em processedData, então eles aparecem aqui.
-    // Garantimos que 'filteredByMode' contenha tudo que processedData tem, e depois aplicamos regras de comissão.
-    
-    let filteredByMode = processedData.filter(item => { 
-        const status = String(item.PED_ST_STATUS || '').toUpperCase(); 
-        const hasInvoice = !!item.NOT_DT_EMISSAO; 
-        if (isPaymentModule) { 
-            if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice; 
-            return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
-        } 
-        if (commissionViewMode === 'FATURADO') { 
-            return status.includes('FATURADO') || hasInvoice; 
-        } 
-        return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+    let dataToUse = processedData;
+    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' || activeModuleId === 'OVERVIEW') { dataToUse = salesData; }
+    let filteredByMode = dataToUse.filter(item => { 
+        if (activeModuleId === 'OVERVIEW') return !String(item.PED_ST_STATUS || '').includes('CANCEL');
+        const status = String(item.PED_ST_STATUS || '').toUpperCase(); const hasInvoice = !!item.NOT_DT_EMISSAO; 
+        if (isPaymentModule) { if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice; return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); } 
+        if (commissionViewMode === 'FATURADO') { return status.includes('FATURADO') || hasInvoice; } return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
     });
-    
     if ((isCommissionModule || isPaymentModule) && filterOnlyManual) { filteredByMode = filteredByMode.filter(item => Number(item.FIL_IN_CODIGO) === 900); }
     return filteredByMode.map(item => { const valMercadoria = parseBrNumber(item['ITP_RE_VALORMERCADORIA']); const repCode = Number(item['REP_IN_CODIGO']); const emissionDate = item['PED_DT_EMISSAO']; let percentual = 0; let atingimentoMeta = 0; if (String(item.PED_ST_STATUS).toUpperCase().includes('CANCEL')) { return { ...item, PERCENTUAL_COMISSAO: 0, VALOR_COMISSAO: 0, ATINGIMENTO_META_ORIGEM: 0 }; } if (activeCommissionRole === 'ASSISTENTE') { percentual = 0.0005; } else { const { percent } = getGoalContext(emissionDate, repCode); atingimentoMeta = percent; if (activeCommissionRole === 'GERENTE') { percentual = percent <= 0.85 ? 0.0035 : 0.0050; } else if (activeCommissionRole === 'SUPERVISOR' || activeCommissionRole === 'POSVENDA') { percentual = percent <= 0.85 ? 0.0015 : 0.0025; } else if (activeCommissionRole === 'VENDEDOR') { if (percent <= 0.65) percentual = 0.01; else if (percent <= 0.85) percentual = 0.015; else percentual = 0.02; } } const valorComissao = valMercadoria * percentual; const rolePaymentKey = `PAGO_${activeCommissionRole}`; const isPaid = !!item[rolePaymentKey]; return { ...item, PERCENTUAL_COMISSAO: percentual, VALOR_COMISSAO: valorComissao, ATINGIMENTO_META_ORIGEM: atingimentoMeta, COMISSAO_PAGA: isPaid }; });
   }, [processedData, activeCommissionRole, commissionViewMode, salesGoals, salesData, activeModuleId, filterOnlyManual]);
@@ -555,179 +606,44 @@ export default function App() {
     return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement };
   }, [processedData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
 
-  const paymentMetrics = useMemo(() => {
-      if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 };
-      let toPay = 0; let paid = 0; let projected = 0; commissionData.forEach((d: any) => { const val = d.VALOR_COMISSAO || 0; const status = String(d.PED_ST_STATUS || '').toUpperCase(); const hasInvoice = !!d.NOT_DT_EMISSAO; const isRealized = status.includes('FATURADO') || hasInvoice; if (isRealized) { if (d.COMISSAO_PAGA) { paid += val; } else { toPay += val; } } else { if (!status.includes('CANCEL')) { projected += val; } } });
-      return { toPay, paid, projected };
-  }, [commissionData, activeModuleId]);
-
-  const performanceData = useMemo(() => {
-      const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); const relevantSales = salesData.filter(s => { if (!s.PED_DT_EMISSAO) return false; const dt = new Date(s.PED_DT_EMISSAO); return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth; });
-      const repMap = new Map(); relevantGoals.forEach(g => { const current = repMap.get(g.rep_in_codigo) || { name: g.rep_nome, goal: 0, realized: 0 }; current.goal += g.valor_meta; current.name = g.rep_nome; repMap.set(g.rep_in_codigo, current); });
-      relevantSales.forEach(s => { const code = Number(s.REP_IN_CODIGO); if (!code) return; const val = parseBrNumber(s['ITP_RE_VALORMERCADORIA'] || 0); const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 }; current.realized += val; if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME; repMap.set(code, current); });
-      let result = Array.from(repMap.entries()).map(([code, data]) => ({ code, name: data.name || `Rep ${code}`, goal: data.goal, realized: data.realized, percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0 }));
-      if (!currentUser?.is_admin && currentUser?.rep_in_codigo) result = result.filter(r => r.code === currentUser.rep_in_codigo); else if (perfSelectedReps.length > 0) result = result.filter(r => perfSelectedReps.includes(r.code));
-      return result.sort((a, b) => b.percent - a.percent);
-  }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps]);
-
+  // ... (Demais Memos omitidos para brevidade - inalterados) ...
+  const paymentMetrics = useMemo(() => { if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 }; let toPay = 0; let paid = 0; let projected = 0; commissionData.forEach((d: any) => { const val = d.VALOR_COMISSAO || 0; const status = String(d.PED_ST_STATUS || '').toUpperCase(); const hasInvoice = !!d.NOT_DT_EMISSAO; const isRealized = status.includes('FATURADO') || hasInvoice; if (isRealized) { if (d.COMISSAO_PAGA) { paid += val; } else { toPay += val; } } else { if (!status.includes('CANCEL')) { projected += val; } } }); return { toPay, paid, projected }; }, [commissionData, activeModuleId]);
+  const performanceData = useMemo(() => { const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); const relevantSales = salesData.filter(s => { if (!s.PED_DT_EMISSAO) return false; const dt = new Date(s.PED_DT_EMISSAO); return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth; }); const repMap = new Map(); relevantGoals.forEach(g => { const current = repMap.get(g.rep_in_codigo) || { name: g.rep_nome, goal: 0, realized: 0 }; current.goal += g.valor_meta; current.name = g.rep_nome; repMap.set(g.rep_in_codigo, current); }); relevantSales.forEach(s => { const code = Number(s.REP_IN_CODIGO); if (!code) return; const val = parseBrNumber(s['ITP_RE_VALORMERCADORIA'] || 0); const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 }; current.realized += val; if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME; repMap.set(code, current); }); let result = Array.from(repMap.entries()).map(([code, data]) => ({ code, name: data.name || `Rep ${code}`, goal: data.goal, realized: data.realized, percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0 })); if (!currentUser?.is_admin && currentUser?.rep_in_codigo) result = result.filter(r => r.code === currentUser.rep_in_codigo); else if (perfSelectedReps.length > 0) result = result.filter(r => perfSelectedReps.includes(r.code)); return result.sort((a, b) => b.percent - a.percent); }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps]);
   const perfMetrics = useMemo(() => { const totalGoal = performanceData.reduce((acc, curr) => acc + curr.goal, 0); const totalRealized = performanceData.reduce((acc, curr) => acc + curr.realized, 0); const totalPercent = totalGoal > 0 ? (totalRealized / totalGoal) * 100 : 0; return { totalGoal, totalRealized, totalPercent }; }, [performanceData]);
   const togglePerfRepSelection = (repCode: number) => { setPerfSelectedReps(prev => prev.includes(repCode) ? prev.filter(c => c !== repCode) : [...prev, repCode]); };
   const clearFilters = () => { const range = getCurrentMonthRange(); setFilters({ globalSearch: '', cliente: '', status: '', filial: '', representante: currentUser?.is_admin ? '' : String(currentUser?.rep_in_codigo || ''), startDate: range.start, endDate: range.end }); setFilterOnlyManual(false); };
 
-  if (!currentUser) { 
-    return ( 
-      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center p-4"> 
-        <div className="w-full max-w-md bg-white border border-gray-200 shadow-2xl"> 
-          <div className="p-8 border-b border-gray-100 bg-gray-50 flex items-center gap-4"> 
-            <div className="w-12 h-12 bg-gray-900 flex items-center justify-center text-white font-bold text-xl">AS</div> 
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-gray-900 uppercase">AIR SALES</h1>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics 4.0</p>
-            </div> 
-          </div> 
-          <form onSubmit={handleLogin} className="p-10 space-y-6"> 
-            {loginError && <div className="p-3 bg-red-50 border-l-4 border-red-500 text-[11px] font-bold text-red-600">{loginError}</div>} 
-            <div className="space-y-4"> 
-              <input type="email" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="E-mail" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} /> 
-              <input type="password" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} /> 
-            </div> 
-            <button type="submit" className="w-full py-4 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest hover:bg-black">Acessar Painel</button> 
-          </form> 
-        </div> 
-      </div> 
-    ); 
-  }
+  const getAvailableModules = () => { if (!currentUser) return []; if (currentUser.is_admin) { if (currentUser.allowed_modules && currentUser.allowed_modules.length > 0) { return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id)); } return MODULES; } if (currentUser.allowed_modules && currentUser.allowed_modules.length > 0) { return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id)); } return MODULES.filter(m => !m.adminOnly); };
+  const visibleModules = getAvailableModules();
+
+  if (!currentUser) { return ( <div className="h-screen w-screen bg-gray-900 flex items-center justify-center p-4"> <div className="w-full max-w-md bg-white border border-gray-200 shadow-2xl"> <div className="p-8 border-b border-gray-100 bg-gray-50 flex items-center gap-4"> <div className="w-12 h-12 bg-gray-900 flex items-center justify-center text-white font-bold text-xl">AS</div> <div> <h1 className="text-xl font-bold tracking-tight text-gray-900 uppercase">AIR SALES</h1> <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics 4.0</p> </div> </div> <form onSubmit={handleLogin} className="p-10 space-y-6"> {loginError && <div className="p-3 bg-red-50 border-l-4 border-red-500 text-[11px] font-bold text-red-600">{loginError}</div>} <div className="space-y-4"> <input type="email" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="E-mail" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} /> <input type="password" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} /> </div> <button type="submit" className="w-full py-4 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest hover:bg-black">Acessar Painel</button> </form> </div> </div> ); }
 
   return ( 
     <div className="flex h-screen w-screen bg-gray-100 font-sans text-gray-900 overflow-hidden"> 
-      {/* Modais e Overlays */}
-      <AIInsightsModal 
-        isOpen={showAIModal}
-        onClose={() => setShowAIModal(false)}
-        isLoading={aiLoading}
-        insights={aiInsights}
-        onGenerate={handleGenerateAIInsights}
-        contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId}
-      />
-      {notification && ( 
-        <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> 
-          <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div> 
-          <div><h4 className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${notification.type === 'success' ? 'text-green-800' : notification.type === 'warning' ? 'text-amber-800' : 'text-red-800'}`}>{notification.type === 'success' ? 'Sucesso' : 'Erro'}</h4><p className="text-[10px] font-medium text-gray-600 leading-tight break-words">{notification.message}</p></div> 
-          <button onClick={() => setNotification(null)} className="ml-auto text-gray-400 hover:text-gray-900"><X size={12}/></button> 
-        </div> 
-      )} 
-      {deleteConfirmItem && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
-           <div className="bg-white w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm">
-              <div className="p-6 text-center">
-                 <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <AlertTriangle size={24} />
-                 </div>
-                 <h3 className="text-sm font-black uppercase tracking-widest text-gray-900 mb-2">Excluir Lançamento?</h3>
-                 <p className="text-[10px] text-gray-500 font-medium leading-relaxed px-4">
-                    Deseja realmente excluir permanentemente o pedido <strong>{deleteConfirmItem.PED_IN_CODIGO}</strong> do cliente <strong>{deleteConfirmItem.CLIENTE_NOME}</strong>?
-                 </p>
-              </div>
-              <div className="flex border-t border-gray-100">
-                 <button onClick={() => setDeleteConfirmItem(null)} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-gray-50 transition-colors">Cancelar</button>
-                 <button onClick={executeDeleteManual} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner">Confirmar Exclusão</button>
-              </div>
-           </div>
-        </div>
-      )}
-      {showXmlModal && ( 
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> 
-          <div className="bg-white w-full max-w-4xl max-h-[90vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm"> 
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0"> 
-              <div className="flex items-center gap-3"> 
-                <FileUp className="text-green-600" size={20} /> 
-                <div> 
-                  <h3 className="text-xs font-bold uppercase tracking-widest">{pendingXmls[0]?.isExisting ? 'Editar Lançamento Manual' : 'Importação de NFe (XML)'}</h3> 
-                  <p className="text-[9px] text-gray-500 font-medium">Preencha os dados faltantes para calcular as comissões</p> 
-                </div> 
-              </div> 
-              <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="text-gray-400 hover:text-red-500"><X size={18}/></button> 
-            </div> 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100 space-y-3"> 
-              {pendingXmls.map(item => ( 
-                <div key={item.tempId} className="bg-white border border-gray-200 p-3 shadow-sm rounded-sm flex flex-col md:flex-row gap-4 items-start animate-in slide-in-from-bottom-2"> 
-                  <div className="flex-1 min-w-[200px]"> 
-                    <div className="flex items-center gap-2 mb-1"> 
-                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-sm uppercase tracking-widest">NFe {item.nfeNumber}</span> 
-                      <span className="text-[9px] text-gray-400">{item.fileName}</span> 
-                    </div> 
-                    <h4 className="text-xs font-bold text-gray-900 truncate">{item.clientName}</h4> 
-                    <div className="mt-1 text-[10px] font-mono font-medium text-gray-600">Total: {currencyFormat(item.totalValue)}</div> 
-                  </div> 
-                  <div className="flex items-end gap-2 flex-wrap"> 
-                    <div className="w-24"> 
-                      <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Nº Pedido *</label> 
-                      <input type="text" className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.orderNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="000" value={item.orderNumber} onChange={(e) => updatePendingItem(item.tempId, 'orderNumber', e.target.value)} /> 
-                    </div> 
-                    <div className="w-28"> 
-                      <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Data Venda *</label> 
-                      <input type="date" className={`w-full px-2 py-1.5 bg-gray-50 border text-[9px] outline-none focus:border-gray-900 ${!item.saleDate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.saleDate} onChange={(e) => updatePendingItem(item.tempId, 'saleDate', e.target.value)} /> 
-                    </div> 
-                    <div className="w-48"> 
-                      <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Representante *</label> 
-                      <select className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.repId ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.repId || ''} onChange={(e) => updatePendingItem(item.tempId, 'repId', Number(e.target.value))} > 
-                        <option value="">Selecione...</option> 
-                        {fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name}</option>)} 
-                      </select> 
-                    </div> 
-                    {!item.isExisting && ( 
-                      <button onClick={() => removePendingItem(item.tempId)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-sm transition-colors"><Trash2 size={14}/></button> 
-                    )} 
-                  </div> 
-                </div> 
-              ))} 
-            </div> 
-            <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0"> 
-              <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="px-4 py-2 border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">Cancelar</button> 
-              <button onClick={confirmXmlImport} disabled={loading} className="px-6 py-2 bg-green-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg"> 
-                {loading ? <RefreshCw size={14} className="animate-spin"/> : <CheckSquare size={14} />} 
-                {pendingXmls[0]?.isExisting ? 'Salvar Alterações' : 'Confirmar Importação'} 
-              </button> 
-            </div> 
-          </div> 
-        </div> 
-      )} 
-      {showTokenModal && ( 
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> 
-          <div className="bg-white w-full max-md shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200"> 
-            <div className="p-6 border-b bg-gray-50 flex justify-between items-center"> 
-              <div className="flex items-center gap-3"><Globe className="text-blue-600" size={20} /><h3 className="text-xs font-bold uppercase tracking-widest">Sincronizar Power BI</h3></div> 
-              <button onClick={() => setShowTokenModal(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button> 
-            </div> 
-            <div className="p-8 space-y-6"> 
-              <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-400">Bearer Token de Acesso</label><textarea className="w-full p-4 bg-gray-50 border border-gray-200 text-xs font-mono min-h-[120px] outline-none focus:border-gray-900 transition-colors" placeholder="Cole aqui o token gerado no Power BI API..." value={pbiToken} onChange={e => setPbiToken(e.target.value)} autoFocus /></div> 
-              <div className="flex flex-col gap-3"><button onClick={handleManualSync} disabled={syncing} className="w-full py-4 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black flex items-center justify-center gap-3 transition-all disabled:opacity-50">{syncing ? <RefreshCw size={14} className="animate-spin" /> : <DatabaseZap size={14} />}{syncing ? 'Processando Sincronização...' : 'Iniciar Sincronização TOTAL'}</button><button onClick={loadData} className="w-full py-3 bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Apenas Atualizar Visualização Local</button></div> 
-            </div> 
-          </div> 
-        </div> 
-      )} 
+      {/* ... (Modais omitidos - inalterados) ... */}
+      <AIInsightsModal isOpen={showAIModal} onClose={() => setShowAIModal(false)} isLoading={aiLoading} insights={aiInsights} onGenerate={handleGenerateAIInsights} contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId} />
+      {notification && ( <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div> <div><h4 className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${notification.type === 'success' ? 'text-green-800' : notification.type === 'warning' ? 'text-amber-800' : 'text-red-800'}`}>{notification.type === 'success' ? 'Sucesso' : 'Erro'}</h4><p className="text-[10px] font-medium text-gray-600 leading-tight break-words">{notification.message}</p></div> <button onClick={() => setNotification(null)} className="ml-auto text-gray-400 hover:text-gray-900"><X size={12}/></button> </div> )} 
+      {/* ... (Modais de Reset/Danger omitidos - inalterados) ... */}
+      {showResetConfirm && ( <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300"> <div className="bg-white w-full max-w-sm shadow-2xl border border-red-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm"> <div className="p-6 text-center"> <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"> <AlertTriangle size={24} /> </div> <h3 className="text-sm font-black uppercase tracking-widest text-red-600 mb-2">Atenção: Ação Destrutiva</h3> <p className="text-[11px] text-gray-600 font-medium leading-relaxed px-4 mb-4"> Você está prestes a <strong>EXCLUIR TODAS AS VENDAS</strong> do banco de dados. Isso removerá Orçamentos, Pedidos e Histórico. </p> <p className="text-[10px] bg-red-50 text-red-800 p-2 rounded border border-red-100 font-mono"> Esta ação não pode ser desfeita. </p> </div> <div className="flex border-t border-gray-100"> <button onClick={() => setShowResetConfirm(false)} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-colors">Cancelar</button> <button onClick={executeResetDatabase} disabled={resetting} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner flex items-center justify-center gap-2"> {resetting ? <RefreshCw size={12} className="animate-spin"/> : <Trash2 size={12}/>} Confirmar Limpeza </button> </div> </div> </div> )}
+      {deleteConfirmItem && ( <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300"> <div className="bg-white w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm"> <div className="p-6 text-center"> <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"> <AlertTriangle size={24} /> </div> <h3 className="text-sm font-black uppercase tracking-widest text-gray-900 mb-2">Excluir Lançamento?</h3> <p className="text-[10px] text-gray-500 font-medium leading-relaxed px-4"> Deseja realmente excluir permanentemente o pedido <strong>{deleteConfirmItem.PED_IN_CODIGO}</strong> do cliente <strong>{deleteConfirmItem.CLIENTE_NOME}</strong>? </p> </div> <div className="flex border-t border-gray-100"> <button onClick={() => setDeleteConfirmItem(null)} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-gray-50 transition-colors">Cancelar</button> <button onClick={executeDeleteManual} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner">Confirmar Exclusão</button> </div> </div> </div> )}
+      {showXmlModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> <div className="bg-white w-full max-w-4xl max-h-[90vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm"> <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0"> <div className="flex items-center gap-3"> <FileUp className="text-green-600" size={20} /> <div> <h3 className="text-xs font-bold uppercase tracking-widest">{pendingXmls[0]?.isExisting ? 'Editar Lançamento Manual' : 'Importação de NFe (XML)'}</h3> <p className="text-[9px] text-gray-500 font-medium">Preencha os dados faltantes para calcular as comissões</p> </div> </div> <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="text-gray-400 hover:text-red-500"><X size={18}/></button> </div> <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100 space-y-3"> {pendingXmls.map(item => ( <div key={item.tempId} className="bg-white border border-gray-200 p-3 shadow-sm rounded-sm flex flex-col md:flex-row gap-4 items-start animate-in slide-in-from-bottom-2"> <div className="flex-1 min-w-[200px]"> <div className="flex items-center gap-2 mb-1"> <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-sm uppercase tracking-widest">NFe {item.nfeNumber}</span> <span className="text-[9px] text-gray-400">{item.fileName}</span> </div> <h4 className="text-xs font-bold text-gray-900 truncate">{item.clientName}</h4> <div className="mt-1 text-[10px] font-mono font-medium text-gray-600">Total: {currencyFormat(item.totalValue)}</div> </div> <div className="flex items-end gap-2 flex-wrap"> <div className="w-24"> <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Nº Pedido *</label> <input type="text" className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.orderNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="000" value={item.orderNumber} onChange={(e) => updatePendingItem(item.tempId, 'orderNumber', e.target.value)} /> </div> <div className="w-28"> <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Data Venda *</label> <input type="date" className={`w-full px-2 py-1.5 bg-gray-50 border text-[9px] outline-none focus:border-gray-900 ${!item.saleDate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.saleDate} onChange={(e) => updatePendingItem(item.tempId, 'saleDate', e.target.value)} /> </div> <div className="w-48"> <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Representante *</label> <select className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.repId ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.repId || ''} onChange={(e) => updatePendingItem(item.tempId, 'repId', Number(e.target.value))} > <option value="">Selecione...</option> {fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name}</option>)} </select> </div> {!item.isExisting && ( <button onClick={() => removePendingItem(item.tempId)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-sm transition-colors"><Trash2 size={14}/></button> )} </div> </div> ))} </div> <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0"> <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="px-4 py-2 border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">Cancelar</button> <button onClick={confirmXmlImport} disabled={loading} className="px-6 py-2 bg-green-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg"> {loading ? <RefreshCw size={14} className="animate-spin"/> : <CheckSquare size={14} />} {pendingXmls[0]?.isExisting ? 'Salvar Alterações' : 'Confirmar Importação'} </button> </div> </div> </div> )}
+      {showTokenModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> <div className="bg-white w-full max-md shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200"> <div className="p-6 border-b bg-gray-50 flex justify-between items-center"> <div className="flex items-center gap-3"><Globe className="text-blue-600" size={20} /><h3 className="text-xs font-bold uppercase tracking-widest">Sincronizar Power BI</h3></div> <button onClick={() => setShowTokenModal(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button> </div> <div className="p-8 space-y-6"> <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-400">Bearer Token de Acesso</label><textarea className="w-full p-4 bg-gray-50 border border-gray-200 text-xs font-mono min-h-[120px] outline-none focus:border-gray-900 transition-colors" placeholder="Cole aqui o token gerado no Power BI API..." value={pbiToken} onChange={e => setPbiToken(e.target.value)} autoFocus /></div> <div className="flex flex-col gap-3"><button onClick={handleManualSync} disabled={syncing} className="w-full py-4 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black flex items-center justify-center gap-3 transition-all disabled:opacity-50">{syncing ? <RefreshCw size={14} className="animate-spin" /> : <DatabaseZap size={14} />}{syncing ? 'Processando Sincronização...' : 'Iniciar Sincronização TOTAL'}</button><button onClick={loadData} className="w-full py-3 bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Apenas Atualizar Visualização Local</button></div> </div> </div> </div> )} 
+      
+      {/* ... (Sidebar e outros elementos omitidos - inalterados) ... */}
       <aside className={`flex flex-col border-r border-gray-200 bg-white transition-all duration-300 z-30 flex-shrink-0 ${mobileSidebarOpen ? 'fixed inset-y-0 left-0 shadow-2xl w-64 translate-x-0' : 'hidden lg:flex relative'} ${!mobileSidebarOpen && sidebarOpen ? 'w-56' : ''} ${!mobileSidebarOpen && !sidebarOpen ? 'w-16' : ''} `}> 
         <div className="h-12 flex items-center px-4 border-b border-gray-100 bg-gray-50 shrink-0"><div className="flex items-center gap-2 text-gray-900"><Hexagon size={20}/><span className={`font-bold uppercase text-xs transition-opacity duration-200 ${!sidebarOpen && !mobileSidebarOpen ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>AIR SALES</span></div></div> 
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar"> 
-          {MODULES.filter(m => !m.adminOnly || currentUser?.is_admin).map(m => ( 
-            <button key={m.id} onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all rounded-sm whitespace-nowrap ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'} ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`} title={!sidebarOpen && !mobileSidebarOpen ? m.label : ''} > 
-              <m.icon size={16} className="shrink-0" /> 
-              {(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>} 
-            </button> 
-          ))} 
+          {visibleModules.map(m => ( <button key={m.id} onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all rounded-sm whitespace-nowrap ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'} ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`} title={!sidebarOpen && !mobileSidebarOpen ? m.label : ''} > <m.icon size={16} className="shrink-0" /> {(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>} </button> ))} 
         </nav> 
         <div className="p-3 border-t border-gray-100 shrink-0"> 
-          {(sidebarOpen || mobileSidebarOpen) && ( 
-            <div className="px-3 py-2 mb-1"> 
-              <p className="text-[9px] font-bold text-gray-400 uppercase">Usuário</p> 
-              <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser?.name}</p></div> 
-            </div> 
-          )} 
-          <button onClick={() => setCurrentUser(null)} className={`w-full flex items-center gap-2 p-2 text-gray-400 hover:text-red-600 text-[10px] font-bold uppercase ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`}><LogOut size={14} />{(sidebarOpen || mobileSidebarOpen) && 'Sair'}</button> 
+          {(sidebarOpen || mobileSidebarOpen) && ( <div className="px-3 py-2 mb-1"> <p className="text-[9px] font-bold text-gray-400 uppercase">Usuário</p> <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser?.name}</p></div> </div> )} 
+          <button onClick={() => { setCurrentUser(null); setLoginEmail(''); setLoginPassword(''); }} className={`w-full flex items-center gap-2 p-2 text-gray-400 hover:text-red-600 text-[10px] font-bold uppercase ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`}><LogOut size={14} />{(sidebarOpen || mobileSidebarOpen) && 'Sair'}</button> 
         </div> 
       </aside> 
       {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)} />} 
+      
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative"> 
+        {/* Header */}
         <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center shrink-0 z-10 shadow-sm"> 
           <div className="flex items-center gap-4"> 
             <button onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} className="lg:hidden"><Menu size={18}/></button> 
@@ -735,7 +651,7 @@ export default function App() {
             <h2 className="text-[10px] font-bold uppercase tracking-widest truncate">{MODULES.find(m => m.id === activeModuleId)?.label}</h2> 
           </div> 
           <div className="flex items-center gap-2">
-            {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && activeModuleId !== 'IA_CHAT' && activeModuleId !== 'CRM' && (
+            {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && activeModuleId !== 'IA_CHAT' && activeModuleId !== 'CRM' && activeModuleId !== 'OVERVIEW' && (
               <>
                  <button onClick={handleGenerateAIInsights} className="px-3 py-1.5 bg-gradient-to-r from-amber-200 to-amber-400 text-amber-900 text-[9px] font-bold uppercase tracking-widest hover:brightness-105 flex items-center gap-2 transition-all active:scale-95 shadow-lg border border-amber-300">
                     <Sparkles size={12} />
@@ -747,12 +663,25 @@ export default function App() {
                  </button>
               </>
             )}
-             {/* CRM has simpler header for now */}
           </div>
         </header> 
+        
         <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full"> 
           {/* Renderização Condicional dos Módulos */}
-          {activeModuleId === 'IA_CHAT' ? (
+          {activeModuleId === 'OVERVIEW' ? (
+             <Overview 
+                user={currentUser} 
+                salesData={overviewData} // Usamos dados SEM filtro de data global, para que o componente calcule "faturado" por data de nota
+                commissionData={commissionData}
+                goals={salesGoals}
+                metrics={metrics}
+                availableReps={availableReps}
+                currentRep={filters.representante || ''}
+                onRepChange={(val) => setFilters(prev => ({ ...prev, representante: val }))}
+                dateRange={{ start: filters.startDate || '', end: filters.endDate || '' }}
+                onDateRangeChange={(start, end) => setFilters(prev => ({ ...prev, startDate: start, endDate: end }))}
+             />
+          ) : activeModuleId === 'IA_CHAT' ? (
              <AIChatView 
                 salesData={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} 
                 metrics={metrics} 
@@ -760,8 +689,8 @@ export default function App() {
           ) : activeModuleId === 'CRM' ? (
              <CRMView data={processedData} salesData={salesData} onRefresh={loadData} />
           ) : activeModuleId === 'METAS' ? ( 
-            <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
-              {/* Conteúdo de Metas (Inalterado) */}
+             // ... (Conteúdo de Metas - Inalterado) ...
+             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}> 
                 <div className="flex items-center justify-between border-b pb-2"><h3 className="text-[10px] font-bold uppercase tracking-widest">{editingGoalId ? 'Editando Meta' : 'Nova Meta de Vendas'}</h3>{editingGoalId && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}</div> 
                 <div className="space-y-2"> 
@@ -778,7 +707,8 @@ export default function App() {
               </div> 
             </div> 
           ) : activeModuleId === 'PERFORMANCE' ? ( 
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+             // ... (Conteúdo Performance - Inalterado) ...
+             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-0 z-10"> 
                 <div className="flex items-center gap-2"><div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div><div><h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Relatório de Atingimento</h3><p className="text-[9px] text-gray-500 font-medium">Comparativo Meta x Realizado (Pedidos)</p></div></div> 
                 <div className="flex items-center gap-2 w-full sm:w-auto">{currentUser?.is_admin && (<div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label><button onClick={() => setShowPerfRepSelector(!showPerfRepSelector)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"><span className="truncate">{perfSelectedReps.length === 0 ? 'Todos os Representantes' : perfSelectedReps.length === 1 ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado' : `${perfSelectedReps.length} Selecionados`}</span><ChevronDown size={12} className="text-gray-500"/></button>{showPerfRepSelector && (<div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100"><div onClick={() => setPerfSelectedReps([])} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>{perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span></div>{availableReps.map(r => {const isSelected = perfSelectedReps.includes(r.code); return (<div key={r.code} onClick={() => togglePerfRepSelection(r.code)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>{isSelected && <CheckCircle2 size={10} className="text-white"/>}</div><div className="flex flex-col"><span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span><span className="text-[7px] text-gray-300 font-mono">{r.code}</span></div></div>);})}</div>)}</div>)}<div className="flex-1 sm:w-24"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="flex-1 sm:w-32"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>{MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div></div></div> 
@@ -786,12 +716,54 @@ export default function App() {
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden"><div className="p-3 bg-gray-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold uppercase text-gray-500">Performance por Representante</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Representante</th><th className="px-4 py-2 text-left w-1/3">Progresso da Meta</th><th className="px-4 py-2 text-right">Meta (R$)</th><th className="px-4 py-2 text-right">Realizado (R$)</th><th className="px-4 py-2 text-center">% Ating.</th></tr></thead><tbody className="divide-y divide-gray-100">{performanceData.length === 0 ? (<tr><td colSpan={5} className="p-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sem dados para o período selecionado</td></tr>) : (performanceData.map((row) => (<tr key={row.code} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-3"><div className="font-bold text-gray-900">{row.name}</div><div className="text-[8px] text-gray-400 font-mono">COD: {row.code}</div></td><td className="px-4 py-3 align-middle"><div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${row.percent >= 100 ? 'bg-green-500' : row.percent >= 70 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(row.percent, 100)}%` }}></div></div></td><td className="px-4 py-3 text-right font-mono text-gray-500">{currencyFormat(row.goal)}</td><td className="px-4 py-3 text-right font-mono font-bold text-gray-900">{currencyFormat(row.realized)}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${row.percent >= 100 ? 'bg-green-100 text-green-700' : row.percent >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{row.percent.toFixed(1)}%</span></td></tr>)))}</tbody></table></div></div> 
             </div> 
           ) : activeModuleId === 'USERS' ? ( 
-            <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar"> 
-              <div className="col-span-12 lg:col-span-4 bg-white border border-gray-200 p-3 space-y-2 shadow-sm"><h3 className="text-[10px] font-bold uppercase tracking-widest border-b pb-2">Novo Acesso</h3><div className="space-y-2"><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Nome Completo</label><input type="text" placeholder="Ex: João da Silva" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.name} onChange={e => setNewUser(p => ({...p, name: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">E-mail Corporativo</label><input type="email" placeholder="usuario@empresa.com.br" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.email} onChange={e => setNewUser(p => ({...p, email: e.target.value}))} /></div><div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Senha de Acesso</label><input type="password" placeholder="••••••••" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.password || ''} onChange={e => setNewUser(p => ({...p, password: e.target.value}))} /></div><div className="pt-1 flex items-center gap-2 p-2 bg-gray-50 border border-dashed border-gray-200"><input type="checkbox" id="is_admin" className="w-3 h-3 accent-gray-900" checked={newUser.is_admin} onChange={e => setNewUser(p => ({...p, is_admin: e.target.checked, rep_in_codigo: e.target.checked ? null : p.rep_in_codigo}))} /><label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label></div>{!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}</div><button onClick={handleSaveUser} className="w-full py-2.5 bg-[#1a2130] text-white text-[9px] font-bold uppercase tracking-widest shadow-xl hover:bg-black transition-all">Criar Acesso</button></div> 
-              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-right">Ação</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-right"><button onClick={async () => { if(confirm(`Remover acesso de ${u.name}?`)) { await deleteAppUser(u.id!); loadAppUsers(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><Trash2 size={14}/></button></td></tr>))}</tbody></table></div></div> 
+             // ... (Conteúdo de Usuários - Inalterado) ...
+             <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar"> 
+              <div className={`col-span-12 lg:col-span-4 bg-white border ${newUser.id ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest">{newUser.id ? 'Editar Acesso' : 'Novo Acesso'}</h3>
+                  {newUser.id && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}
+                </div>
+                <div className="space-y-2">
+                    <div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Nome Completo</label><input type="text" placeholder="Ex: João da Silva" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.name} onChange={e => setNewUser(p => ({...p, name: e.target.value}))} /></div>
+                    <div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">E-mail Corporativo</label><input type="email" placeholder="usuario@empresa.com.br" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.email} onChange={e => setNewUser(p => ({...p, email: e.target.value}))} /></div>
+                    <div className="space-y-0.5"><label className="text-[9px] font-black uppercase text-gray-400">Senha de Acesso</label><input type="password" placeholder="••••••••" className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.password || ''} onChange={e => setNewUser(p => ({...p, password: e.target.value}))} /></div>
+                    
+                    <div className="pt-1 flex items-center gap-2 p-2 bg-gray-50 border border-dashed border-gray-200">
+                        <input type="checkbox" id="is_admin" className="w-3 h-3 accent-gray-900" checked={newUser.is_admin} onChange={e => setNewUser(p => ({...p, is_admin: e.target.checked, rep_in_codigo: e.target.checked ? null : p.rep_in_codigo}))} />
+                        <label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label>
+                    </div>
+
+                    <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                        <label className="text-[9px] font-black uppercase text-gray-400">Permissões de Acesso (Menus)</label>
+                        <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2 border border-gray-100 rounded-sm">
+                            {MODULES.map(module => (
+                                <label key={module.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors">
+                                    <input type="checkbox" className="w-3 h-3 accent-gray-900 rounded-sm" checked={newUser.allowed_modules?.includes(module.id)} onChange={() => handleToggleModule(module.id)} />
+                                    <div className="flex items-center gap-1.5">
+                                        <module.icon size={10} className="text-gray-500" />
+                                        <span className={`text-[9px] font-bold uppercase ${newUser.allowed_modules?.includes(module.id) ? 'text-gray-900' : 'text-gray-400'}`}>{module.label}</span>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    {!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200 pt-2"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <button onClick={handleSaveUser} className={`w-full py-2.5 text-white text-[9px] font-bold uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] ${newUser.id ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#1a2130] hover:bg-black'}`}>{newUser.id ? 'Salvar Alterações' : 'Criar Acesso'}</button>
+                  {newUser.id && <button onClick={handleCancelEditUser} className="w-full py-2 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Cancelar Edição</button>}
+                </div>
+                <div className="mt-8 pt-6 border-t border-gray-100">
+                    <h4 className="text-[9px] font-black uppercase text-red-400 tracking-widest mb-2 flex items-center gap-1"><AlertTriangle size={10} /> Zona de Perigo</h4>
+                    <button onClick={() => setShowResetConfirm(true)} className="w-full py-2.5 border border-red-200 bg-red-50 text-red-600 text-[9px] font-bold uppercase tracking-widest hover:bg-red-100 transition-colors flex items-center justify-center gap-2" > <Trash2 size={12} /> Limpar Todas as Vendas </button>
+                    <p className="text-[8px] text-gray-400 mt-1 text-center">Use para resetar o banco antes de uma carga limpa.</p>
+                </div>
+              </div> 
+              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-center">Ações</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className={`hover:bg-gray-50 transition-colors ${newUser.id === u.id ? 'bg-amber-50' : ''}`}><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => handleEditUser(u)} className={`p-1.5 transition-colors ${newUser.id === u.id ? 'text-amber-600' : 'text-gray-300 hover:text-blue-600'}`} title="Editar Usuário"><Edit2 size={14}/></button><button onClick={async () => { if(confirm(`Remover acesso de ${u.name}?`)) { await deleteAppUser(u.id!); loadAppUsers(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Excluir Usuário"><Trash2 size={14}/></button></div></td></tr>))}</tbody></table></div></div> 
             </div> 
           ) : ( 
             <div className="flex flex-col h-full gap-2 overflow-hidden"> 
+              {/* ... (Filtros e Lista Padrão - Inalterados) ... */}
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden animate-in fade-in duration-300 shrink-0"> 
                 <div className="p-2 border-b bg-gray-50 flex items-center justify-between cursor-pointer" onClick={() => setFiltersExpanded(!filtersExpanded)}> 
                   <div className="flex items-center gap-2"><Filter size={12} className="text-gray-900" /><span className="text-[9px] font-bold uppercase tracking-widest">Painel de Inteligência</span></div> 

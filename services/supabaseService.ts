@@ -43,8 +43,26 @@ const normalizeStatus = (text: string | null | undefined): string => {
 export const syncSalesToSupabase = async (sales: Sale[]) => {
   if (!sales || sales.length === 0) return;
   try {
+    // FIX CRÍTICO: Ordenação Determinística
+    // Ordenamos os dados recebidos antes de gerar sequenciais.
+    // Isso garante que o mesmo item sempre receba o mesmo ITP_IN_SEQUENCIA,
+    // permitindo que o UPSERT atualize o registro existente (mudança de status)
+    // ao invés de criar uma duplicata.
+    const sortedSales = [...sales].sort((a, b) => {
+        // 1. Agrupa por Pedido
+        const pedA = Math.floor(toNumeric(findValue(a, 'PED_IN_CODIGO')));
+        const pedB = Math.floor(toNumeric(findValue(b, 'PED_IN_CODIGO')));
+        if (pedA !== pedB) return pedA - pedB;
+
+        // 2. Se mesmo pedido, ordena por Produto/Descrição para estabilizar a sequência
+        const prodA = String(findValue(a, 'PRO_ST_ALTERNATIVO') || findValue(a, 'ITP_ST_DESCRICAO') || '');
+        const prodB = String(findValue(b, 'PRO_ST_ALTERNATIVO') || findValue(b, 'ITP_ST_DESCRICAO') || '');
+        return prodA.localeCompare(prodB);
+    });
+
     const ordersMap = new Map<number, number>(); 
-    const allRows = sales.map(s => {
+    
+    const allRows = sortedSales.map(s => {
       let rawSer = findValue(s, 'SER_ST_CODIGO') || s['SER_ST_CODIGO'];
       let serCod = String(rawSer || '').trim();
       const pedNum = Math.floor(toNumeric(findValue(s, 'PED_IN_CODIGO')));
@@ -53,11 +71,13 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
       
       if (!pedNum || pedNum === 0) return null;
 
+      // Lógica de Geração de Sequência Estável
       if (itpSeq === 0) {
           const currentCount = ordersMap.get(pedNum) || 0;
           itpSeq = currentCount + 1;
           ordersMap.set(pedNum, itpSeq);
       } else {
+          // Se já vier com sequência, respeitamos, mas atualizamos o mapa para evitar colisão se misturar
           ordersMap.set(pedNum, Math.max(ordersMap.get(pedNum) || 0, itpSeq));
       }
 
@@ -92,7 +112,7 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
 
     if (allRows.length === 0) return;
 
-    // Remove Duplicates to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    // Remove Duplicates (client-side check)
     const uniqueMap = new Map();
     allRows.forEach(row => {
       // Create a unique key based on the primary key constraint of the table
@@ -194,6 +214,28 @@ export const deleteSale = async (keys: { fil: number, ser: string, ped: number, 
   }
 };
 
+export const deleteAllSales = async () => {
+  console.log("⚠️ [SupabaseService] Executando DELETE ALL SALES");
+
+  try {
+    const { error, status } = await supabase
+      .from('sales')
+      .delete()
+      .neq('ped_in_codigo', -999999); // Deletes everything
+
+    if (error) {
+      console.error("❌ [SupabaseService] Erro ao limpar tabela sales:", error);
+      throw error;
+    }
+
+    console.log(`✅ [SupabaseService] Tabela sales limpa. Status: ${status}`);
+    return true;
+  } catch (e: any) {
+    console.error("❌ [SupabaseService] Falha ao limpar banco:", e.message);
+    throw e;
+  }
+};
+
 export const fetchAllRepresentatives = async () => {
   try {
     const { data, error } = await supabase.from('sales').select('rep_in_codigo, representante_nome').not('rep_in_codigo', 'is', null).limit(5000);
@@ -212,6 +254,7 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
   try {
     let query = supabase.from('sales').select('*');
     
+    // Se filterCode for vazio, não filtra por série (traz OV e PD)
     if (filterCode && filterCode.trim() !== '') {
         query = query.eq('ser_st_codigo', filterCode.toUpperCase().trim());
     }
