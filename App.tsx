@@ -24,7 +24,7 @@ import { StatCard } from './components/StatCard';
 import { AIInsightsModal } from './components/AIInsightsModal';
 import { AIChatView } from './components/AIChatView';
 import { CRMView } from './components/CRMView';
-import { Overview } from './components/Overview'; // Importação do novo componente
+import { OverviewPanel } from './components/OverviewPanel'; // Importação do novo componente
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
 
@@ -944,7 +944,7 @@ export default function App() {
         <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full"> 
           {/* Renderização Condicional dos Módulos */}
           {activeModuleId === 'OVERVIEW' ? (
-             <Overview 
+             <OverviewPanel 
                 user={currentUser} 
                 salesData={processedData} // Usa processedData para respeitar filtros globais se houver (mas sem filtro de status)
                 commissionData={commissionData} // Usa commissionData já calculada
