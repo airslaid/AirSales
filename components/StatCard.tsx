@@ -17,7 +17,7 @@ export const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, co
   const iconColorClass = color;
 
   return (
-    <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors flex items-center justify-between group">
+    <div className="bg-white p-3 border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-300 flex items-center justify-between group cursor-default">
       <div>
         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-1">{title}</p>
         <h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums truncate">

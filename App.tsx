@@ -40,6 +40,7 @@ const MODULES = [
   { id: 'METAS', label: 'Metas', icon: Target, adminOnly: true },
   { id: 'USERS', label: 'Gestão de Acessos', icon: Users, adminOnly: true },
   { id: 'IA_CHAT', label: 'Chat IA', icon: MessageSquare, adminOnly: false },
+  { id: 'IA_SETTINGS', label: 'Configurações IA', icon: Sparkles, adminOnly: false },
 ];
 
 const COMMISSION_ROLES = [
@@ -142,10 +143,64 @@ export default function App() {
   const [showXmlModal, setShowXmlModal] = useState(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<Sale | null>(null);
   
+  // Local LLM States
+  const [llmConfig, setLlmConfig] = useState(() => {
+    const saved = localStorage.getItem('AIR_SALES_LLM_CONFIG');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return { useLocal: false, baseUrl: 'http://127.0.0.1:1234/v1', model: 'google/gemma-3n-e4b' };
+  });
+
+  const saveLlmConfig = (newConfig: any) => {
+    setLlmConfig(newConfig);
+    localStorage.setItem('AIR_SALES_LLM_CONFIG', JSON.stringify(newConfig));
+    showNotification("Configuração de IA salva!", "success");
+  };
+  
   // AI States
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiInsights, setAiInsights] = useState<string | null>(null);
+
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean, message: string } | null>(null);
+
+  const handleTestConnection = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const response = await fetch(`${llmConfig.baseUrl}/models`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.data || [];
+        const found = models.some((m: any) => m.id === llmConfig.model);
+        
+        if (found) {
+          setTestResult({ success: true, message: `Conexão bem-sucedida! Modelo "${llmConfig.model}" encontrado.` });
+        } else {
+          setTestResult({ success: true, message: `Conectado, mas o modelo "${llmConfig.model}" não foi encontrado na lista do servidor.` });
+        }
+      } else {
+        setTestResult({ success: false, message: `Erro no servidor: ${response.status} ${response.statusText}` });
+      }
+    } catch (err: any) {
+      console.error(err);
+      let msg = "Falha na conexão. ";
+      if (err.message.includes('fetch')) {
+        msg += "Verifique se o LM Studio está aberto, o servidor está rodando e o CORS está habilitado.";
+      } else {
+        msg += err.message;
+      }
+      setTestResult({ success: false, message: msg });
+    } finally {
+      setTestLoading(false);
+    }
+  };
 
   const [pendingXmls, setPendingXmls] = useState<PendingXmlItem[]>([]);
   const [perfYear, setPerfYear] = useState(new Date().getFullYear());
@@ -235,7 +290,6 @@ export default function App() {
     } catch (error) {} finally { setLoading(false); }
   };
 
-  // ... (Handlers XML e Manual Edit omitidos para brevidade - inalterados) ...
   const handleXmlUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -370,8 +424,7 @@ export default function App() {
        else { throw new Error("Erro ao salvar dados no Supabase."); }
      } catch (err: any) { showNotification("Erro ao salvar: " + err.message, "error"); } finally { setLoading(false); }
   };
-  
-  // ... (Sync Handlers e Auth omitidos para brevidade - inalterados) ...
+
   const handleManualSync = async () => {
     if (!pbiToken) return showNotification("Informe o token do Power BI.", "error");
     setSyncing(true);
@@ -440,14 +493,18 @@ export default function App() {
   };
 
   const handleEditUser = (user: AppUser) => {
+    // Se o usuário não tiver allowed_modules definido (legado), inicializamos.
+    // Se era admin, damos acesso a tudo. Se não, damos acesso ao básico.
     let initialModules = user.allowed_modules || [];
     if (!user.allowed_modules || user.allowed_modules.length === 0) {
         if (user.is_admin) {
             initialModules = MODULES.map(m => m.id);
         } else {
+            // Default para users antigos: Modulos basicos que nao sao adminOnly
             initialModules = MODULES.filter(m => !m.adminOnly).map(m => m.id);
         }
     }
+    
     setNewUser({ ...user, allowed_modules: initialModules });
   };
 
@@ -517,10 +574,17 @@ export default function App() {
     setAiLoading(true);
     setAiInsights(null);
     setShowAIModal(true);
+    
     setTimeout(async () => {
       const activeModule = MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId;
       const dataToAnalyze = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
-      const insight = await generateSalesInsights(dataToAnalyze, activeModule, metrics);
+      
+      const insight = await generateSalesInsights(
+        dataToAnalyze, 
+        activeModule, 
+        metrics
+      );
+      
       setAiInsights(insight);
       setAiLoading(false);
     }, 500);
@@ -534,13 +598,28 @@ export default function App() {
 
   const processedData = useMemo(() => {
     let result = [...salesData];
-    if (activeModuleId === 'PD') { result = result.filter(item => Number(item.FIL_IN_CODIGO) !== 900); }
+    
+    // Overview e CRM precisam ver tudo para classificar corretamente
+    // As outras views já têm seus filtros no fetch ou aqui
+    if (activeModuleId === 'PD') {
+        result = result.filter(item => Number(item.FIL_IN_CODIGO) !== 900);
+    }
+    
+    if (activeModuleId === 'CRM') {
+       // Mantemos a lógica do CRM que usa pipeline via status, mas aqui filtramos apenas o que é "Budget/OV" 
+       // Se o CRM espera receber TUDO para montar o pipeline (inclusive PDs ganhos), removemos este filtro.
+       // Vou manter um filtro mais permissivo para o CRM:
+       // result = result; (Deixa passar tudo, o componente CRMView filtra)
+    }
+
     if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
     if (filters.cliente) { const c = filters.cliente.toLowerCase(); result = result.filter(item => String(item.CLIENTE_NOME || '').toLowerCase().includes(c)); }
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
     const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') ? 'NOT_DT_EMISSAO' : 'PED_DT_EMISSAO';
+    
     if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
     if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
+    
     if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
     if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
     if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
@@ -548,32 +627,43 @@ export default function App() {
     return result;
   }, [salesData, filters, sortConfig, activeModuleId, commissionViewMode]);
 
-  // Novo Memo para Overview Data (Todos os dados, mas com filtros aplicados exceto data)
-  const overviewData = useMemo(() => {
-    let result = [...salesData];
-    // Aplica filtros exceto data
-    if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
-    if (filters.cliente) { const c = filters.cliente.toLowerCase(); result = result.filter(item => String(item.CLIENTE_NOME || '').toLowerCase().includes(c)); }
-    if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
-    if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
-    if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
-    
-    return result;
-  }, [salesData, filters.globalSearch, filters.cliente, filters.representante, filters.status, filters.filial]);
-
   const commissionData = useMemo(() => {
     const monthlyMetrics = new Map<string, number>();
     salesData.forEach(sale => { const dt = sale['PED_DT_EMISSAO']; if (!dt) return; const d = new Date(dt); const year = d.getFullYear(); const month = d.getMonth() + 1; const repCode = Number(sale['REP_IN_CODIGO']); const val = parseBrNumber(sale['ITP_RE_VALORMERCADORIA']); const globalKey = `${year}-${month}-GLOBAL`; monthlyMetrics.set(globalKey, (monthlyMetrics.get(globalKey) || 0) + val); if (repCode) { const repKey = `${year}-${month}-${repCode}`; monthlyMetrics.set(repKey, (monthlyMetrics.get(repKey) || 0) + val); } });
     const getGoalContext = (emissionDateStr: string, repCode: number) => { if (!emissionDateStr) return { goal: 0, realized: 0, percent: 0 }; const d = new Date(emissionDateStr); const year = d.getFullYear(); const month = d.getMonth() + 1; if (activeCommissionRole === 'GERENTE') { const globalKey = `${year}-${month}-GLOBAL`; const realized = monthlyMetrics.get(globalKey) || 0; const goal = salesGoals.filter(g => g.ano === year && g.mes === month).reduce((acc, curr) => acc + curr.valor_meta, 0); return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; } else { const repKey = `${year}-${month}-${repCode}`; const realized = monthlyMetrics.get(repKey) || 0; const goalObj = salesGoals.find(g => g.ano === year && g.mes === month && g.rep_in_codigo === repCode); const goal = goalObj?.valor_meta || 0; return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; } };
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
+    
+    // Para Overview e outras telas que não sejam comissão, calculamos o básico sem filtros de viewMode restritivos
+    // Mas usamos processedData para respeitar filtros globais se necessário
     let dataToUse = processedData;
-    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' || activeModuleId === 'OVERVIEW') { dataToUse = salesData; }
+    
+    // Se for especificamente modulo de comissão, aplicamos filtro Faturado/Aberto
+    // ANTERIORMENTE: Forçava salesData bruto, ignorando filtros de data.
+    // AGORA: Usa processedData para respeitar o filtro de data (Faturamento ou Emissão) definido no useMemo do processedData.
+    if (activeModuleId === 'OVERVIEW') {
+         // No Overview, queremos que os cards de comissão respeitem o filtro de data do Overview (que usa PED_DT_EMISSAO)
+         // Então processedData é adequado.
+         dataToUse = processedData;
+    }
+
     let filteredByMode = dataToUse.filter(item => { 
+        // No overview queremos calcular tudo, então não filtramos muito aqui,
+        // mas a lógica abaixo é específica da tela de comissão.
+        // Se for Overview, passamos tudo que não é cancelado.
         if (activeModuleId === 'OVERVIEW') return !String(item.PED_ST_STATUS || '').includes('CANCEL');
-        const status = String(item.PED_ST_STATUS || '').toUpperCase(); const hasInvoice = !!item.NOT_DT_EMISSAO; 
-        if (isPaymentModule) { if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice; return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); } 
-        if (commissionViewMode === 'FATURADO') { return status.includes('FATURADO') || hasInvoice; } return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+
+        const status = String(item.PED_ST_STATUS || '').toUpperCase(); 
+        const hasInvoice = !!item.NOT_DT_EMISSAO; 
+        if (isPaymentModule) { 
+            if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice; 
+            return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+        } 
+        if (commissionViewMode === 'FATURADO') { 
+            return status.includes('FATURADO') || hasInvoice; 
+        } 
+        return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
     });
+    
     if ((isCommissionModule || isPaymentModule) && filterOnlyManual) { filteredByMode = filteredByMode.filter(item => Number(item.FIL_IN_CODIGO) === 900); }
     return filteredByMode.map(item => { const valMercadoria = parseBrNumber(item['ITP_RE_VALORMERCADORIA']); const repCode = Number(item['REP_IN_CODIGO']); const emissionDate = item['PED_DT_EMISSAO']; let percentual = 0; let atingimentoMeta = 0; if (String(item.PED_ST_STATUS).toUpperCase().includes('CANCEL')) { return { ...item, PERCENTUAL_COMISSAO: 0, VALOR_COMISSAO: 0, ATINGIMENTO_META_ORIGEM: 0 }; } if (activeCommissionRole === 'ASSISTENTE') { percentual = 0.0005; } else { const { percent } = getGoalContext(emissionDate, repCode); atingimentoMeta = percent; if (activeCommissionRole === 'GERENTE') { percentual = percent <= 0.85 ? 0.0035 : 0.0050; } else if (activeCommissionRole === 'SUPERVISOR' || activeCommissionRole === 'POSVENDA') { percentual = percent <= 0.85 ? 0.0015 : 0.0025; } else if (activeCommissionRole === 'VENDEDOR') { if (percent <= 0.65) percentual = 0.01; else if (percent <= 0.85) percentual = 0.015; else percentual = 0.02; } } const valorComissao = valMercadoria * percentual; const rolePaymentKey = `PAGO_${activeCommissionRole}`; const isPaid = !!item[rolePaymentKey]; return { ...item, PERCENTUAL_COMISSAO: percentual, VALOR_COMISSAO: valorComissao, ATINGIMENTO_META_ORIGEM: atingimentoMeta, COMISSAO_PAGA: isPaid }; });
   }, [processedData, activeCommissionRole, commissionViewMode, salesGoals, salesData, activeModuleId, filterOnlyManual]);
@@ -606,44 +696,229 @@ export default function App() {
     return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement };
   }, [processedData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
 
-  // ... (Demais Memos omitidos para brevidade - inalterados) ...
-  const paymentMetrics = useMemo(() => { if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 }; let toPay = 0; let paid = 0; let projected = 0; commissionData.forEach((d: any) => { const val = d.VALOR_COMISSAO || 0; const status = String(d.PED_ST_STATUS || '').toUpperCase(); const hasInvoice = !!d.NOT_DT_EMISSAO; const isRealized = status.includes('FATURADO') || hasInvoice; if (isRealized) { if (d.COMISSAO_PAGA) { paid += val; } else { toPay += val; } } else { if (!status.includes('CANCEL')) { projected += val; } } }); return { toPay, paid, projected }; }, [commissionData, activeModuleId]);
-  const performanceData = useMemo(() => { const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); const relevantSales = salesData.filter(s => { if (!s.PED_DT_EMISSAO) return false; const dt = new Date(s.PED_DT_EMISSAO); return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth; }); const repMap = new Map(); relevantGoals.forEach(g => { const current = repMap.get(g.rep_in_codigo) || { name: g.rep_nome, goal: 0, realized: 0 }; current.goal += g.valor_meta; current.name = g.rep_nome; repMap.set(g.rep_in_codigo, current); }); relevantSales.forEach(s => { const code = Number(s.REP_IN_CODIGO); if (!code) return; const val = parseBrNumber(s['ITP_RE_VALORMERCADORIA'] || 0); const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 }; current.realized += val; if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME; repMap.set(code, current); }); let result = Array.from(repMap.entries()).map(([code, data]) => ({ code, name: data.name || `Rep ${code}`, goal: data.goal, realized: data.realized, percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0 })); if (!currentUser?.is_admin && currentUser?.rep_in_codigo) result = result.filter(r => r.code === currentUser.rep_in_codigo); else if (perfSelectedReps.length > 0) result = result.filter(r => perfSelectedReps.includes(r.code)); return result.sort((a, b) => b.percent - a.percent); }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps]);
+  const paymentMetrics = useMemo(() => {
+      if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 };
+      let toPay = 0; let paid = 0; let projected = 0; commissionData.forEach((d: any) => { const val = d.VALOR_COMISSAO || 0; const status = String(d.PED_ST_STATUS || '').toUpperCase(); const hasInvoice = !!d.NOT_DT_EMISSAO; const isRealized = status.includes('FATURADO') || hasInvoice; if (isRealized) { if (d.COMISSAO_PAGA) { paid += val; } else { toPay += val; } } else { if (!status.includes('CANCEL')) { projected += val; } } });
+      return { toPay, paid, projected };
+  }, [commissionData, activeModuleId]);
+
+  const performanceData = useMemo(() => {
+      const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); const relevantSales = salesData.filter(s => { if (!s.PED_DT_EMISSAO) return false; const dt = new Date(s.PED_DT_EMISSAO); return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth; });
+      const repMap = new Map(); relevantGoals.forEach(g => { const current = repMap.get(g.rep_in_codigo) || { name: g.rep_nome, goal: 0, realized: 0 }; current.goal += g.valor_meta; current.name = g.rep_nome; repMap.set(g.rep_in_codigo, current); });
+      relevantSales.forEach(s => { const code = Number(s.REP_IN_CODIGO); if (!code) return; const val = parseBrNumber(s['ITP_RE_VALORMERCADORIA'] || 0); const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 }; current.realized += val; if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME; repMap.set(code, current); });
+      let result = Array.from(repMap.entries()).map(([code, data]) => ({ code, name: data.name || `Rep ${code}`, goal: data.goal, realized: data.realized, percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0 }));
+      if (!currentUser?.is_admin && currentUser?.rep_in_codigo) result = result.filter(r => r.code === currentUser.rep_in_codigo); else if (perfSelectedReps.length > 0) result = result.filter(r => perfSelectedReps.includes(r.code));
+      return result.sort((a, b) => b.percent - a.percent);
+  }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps]);
+
   const perfMetrics = useMemo(() => { const totalGoal = performanceData.reduce((acc, curr) => acc + curr.goal, 0); const totalRealized = performanceData.reduce((acc, curr) => acc + curr.realized, 0); const totalPercent = totalGoal > 0 ? (totalRealized / totalGoal) * 100 : 0; return { totalGoal, totalRealized, totalPercent }; }, [performanceData]);
   const togglePerfRepSelection = (repCode: number) => { setPerfSelectedReps(prev => prev.includes(repCode) ? prev.filter(c => c !== repCode) : [...prev, repCode]); };
   const clearFilters = () => { const range = getCurrentMonthRange(); setFilters({ globalSearch: '', cliente: '', status: '', filial: '', representante: currentUser?.is_admin ? '' : String(currentUser?.rep_in_codigo || ''), startDate: range.start, endDate: range.end }); setFilterOnlyManual(false); };
 
-  const getAvailableModules = () => { if (!currentUser) return []; if (currentUser.is_admin) { if (currentUser.allowed_modules && currentUser.allowed_modules.length > 0) { return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id)); } return MODULES; } if (currentUser.allowed_modules && currentUser.allowed_modules.length > 0) { return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id)); } return MODULES.filter(m => !m.adminOnly); };
+  // --- LOGICA DE MÓDULOS PERMITIDOS ---
+  const getAvailableModules = () => {
+      if (!currentUser) return [];
+      
+      // Se for admin, por padrão tem acesso a tudo, mas também respeita a lista se estiver definida e não vazia.
+      // Se a lista estiver vazia e for admin, assume tudo.
+      if (currentUser.is_admin) {
+          if (currentUser.allowed_modules && currentUser.allowed_modules.length > 0) {
+              return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id));
+          }
+          return MODULES;
+      }
+      
+      // Se não for admin, segue estritamente a lista
+      if (currentUser.allowed_modules && currentUser.allowed_modules.length > 0) {
+          return MODULES.filter(m => currentUser.allowed_modules?.includes(m.id));
+      }
+      
+      // Fallback para usuários antigos sem lista definida: Acesso básico
+      return MODULES.filter(m => !m.adminOnly);
+  };
+  
   const visibleModules = getAvailableModules();
 
-  if (!currentUser) { return ( <div className="h-screen w-screen bg-gray-900 flex items-center justify-center p-4"> <div className="w-full max-w-md bg-white border border-gray-200 shadow-2xl"> <div className="p-8 border-b border-gray-100 bg-gray-50 flex items-center gap-4"> <div className="w-12 h-12 bg-gray-900 flex items-center justify-center text-white font-bold text-xl">AS</div> <div> <h1 className="text-xl font-bold tracking-tight text-gray-900 uppercase">AIR SALES</h1> <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics 4.0</p> </div> </div> <form onSubmit={handleLogin} className="p-10 space-y-6"> {loginError && <div className="p-3 bg-red-50 border-l-4 border-red-500 text-[11px] font-bold text-red-600">{loginError}</div>} <div className="space-y-4"> <input type="email" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="E-mail" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} /> <input type="password" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} /> </div> <button type="submit" className="w-full py-4 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest hover:bg-black">Acessar Painel</button> </form> </div> </div> ); }
+  if (!currentUser) { 
+    return ( 
+      <div className="h-screen w-screen bg-gray-900 flex items-center justify-center p-4"> 
+        <div className="w-full max-w-md bg-white border border-gray-200 shadow-2xl"> 
+          <div className="p-8 border-b border-gray-100 bg-gray-50 flex items-center gap-4"> 
+            <div className="w-12 h-12 bg-gray-900 flex items-center justify-center text-white font-bold text-xl">AS</div> 
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-gray-900 uppercase">AIR SALES</h1>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Analytics 4.0</p>
+            </div> 
+          </div> 
+          <form onSubmit={handleLogin} className="p-10 space-y-6"> 
+            {loginError && <div className="p-3 bg-red-50 border-l-4 border-red-500 text-[11px] font-bold text-red-600">{loginError}</div>} 
+            <div className="space-y-4"> 
+              <input type="email" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="E-mail" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} /> 
+              <input type="password" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 text-sm focus:border-gray-900 outline-none" placeholder="Senha" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} /> 
+            </div> 
+            <button type="submit" className="w-full py-4 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest hover:bg-black">Acessar Painel</button> 
+          </form> 
+        </div> 
+      </div> 
+    ); 
+  }
 
   return ( 
     <div className="flex h-screen w-screen bg-gray-100 font-sans text-gray-900 overflow-hidden"> 
-      {/* ... (Modais omitidos - inalterados) ... */}
-      <AIInsightsModal isOpen={showAIModal} onClose={() => setShowAIModal(false)} isLoading={aiLoading} insights={aiInsights} onGenerate={handleGenerateAIInsights} contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId} />
-      {notification && ( <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div> <div><h4 className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${notification.type === 'success' ? 'text-green-800' : notification.type === 'warning' ? 'text-amber-800' : 'text-red-800'}`}>{notification.type === 'success' ? 'Sucesso' : 'Erro'}</h4><p className="text-[10px] font-medium text-gray-600 leading-tight break-words">{notification.message}</p></div> <button onClick={() => setNotification(null)} className="ml-auto text-gray-400 hover:text-gray-900"><X size={12}/></button> </div> )} 
-      {/* ... (Modais de Reset/Danger omitidos - inalterados) ... */}
-      {showResetConfirm && ( <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300"> <div className="bg-white w-full max-w-sm shadow-2xl border border-red-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm"> <div className="p-6 text-center"> <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"> <AlertTriangle size={24} /> </div> <h3 className="text-sm font-black uppercase tracking-widest text-red-600 mb-2">Atenção: Ação Destrutiva</h3> <p className="text-[11px] text-gray-600 font-medium leading-relaxed px-4 mb-4"> Você está prestes a <strong>EXCLUIR TODAS AS VENDAS</strong> do banco de dados. Isso removerá Orçamentos, Pedidos e Histórico. </p> <p className="text-[10px] bg-red-50 text-red-800 p-2 rounded border border-red-100 font-mono"> Esta ação não pode ser desfeita. </p> </div> <div className="flex border-t border-gray-100"> <button onClick={() => setShowResetConfirm(false)} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-colors">Cancelar</button> <button onClick={executeResetDatabase} disabled={resetting} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner flex items-center justify-center gap-2"> {resetting ? <RefreshCw size={12} className="animate-spin"/> : <Trash2 size={12}/>} Confirmar Limpeza </button> </div> </div> </div> )}
-      {deleteConfirmItem && ( <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300"> <div className="bg-white w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm"> <div className="p-6 text-center"> <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"> <AlertTriangle size={24} /> </div> <h3 className="text-sm font-black uppercase tracking-widest text-gray-900 mb-2">Excluir Lançamento?</h3> <p className="text-[10px] text-gray-500 font-medium leading-relaxed px-4"> Deseja realmente excluir permanentemente o pedido <strong>{deleteConfirmItem.PED_IN_CODIGO}</strong> do cliente <strong>{deleteConfirmItem.CLIENTE_NOME}</strong>? </p> </div> <div className="flex border-t border-gray-100"> <button onClick={() => setDeleteConfirmItem(null)} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-gray-50 transition-colors">Cancelar</button> <button onClick={executeDeleteManual} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner">Confirmar Exclusão</button> </div> </div> </div> )}
-      {showXmlModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> <div className="bg-white w-full max-w-4xl max-h-[90vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm"> <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0"> <div className="flex items-center gap-3"> <FileUp className="text-green-600" size={20} /> <div> <h3 className="text-xs font-bold uppercase tracking-widest">{pendingXmls[0]?.isExisting ? 'Editar Lançamento Manual' : 'Importação de NFe (XML)'}</h3> <p className="text-[9px] text-gray-500 font-medium">Preencha os dados faltantes para calcular as comissões</p> </div> </div> <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="text-gray-400 hover:text-red-500"><X size={18}/></button> </div> <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100 space-y-3"> {pendingXmls.map(item => ( <div key={item.tempId} className="bg-white border border-gray-200 p-3 shadow-sm rounded-sm flex flex-col md:flex-row gap-4 items-start animate-in slide-in-from-bottom-2"> <div className="flex-1 min-w-[200px]"> <div className="flex items-center gap-2 mb-1"> <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-sm uppercase tracking-widest">NFe {item.nfeNumber}</span> <span className="text-[9px] text-gray-400">{item.fileName}</span> </div> <h4 className="text-xs font-bold text-gray-900 truncate">{item.clientName}</h4> <div className="mt-1 text-[10px] font-mono font-medium text-gray-600">Total: {currencyFormat(item.totalValue)}</div> </div> <div className="flex items-end gap-2 flex-wrap"> <div className="w-24"> <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Nº Pedido *</label> <input type="text" className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.orderNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="000" value={item.orderNumber} onChange={(e) => updatePendingItem(item.tempId, 'orderNumber', e.target.value)} /> </div> <div className="w-28"> <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Data Venda *</label> <input type="date" className={`w-full px-2 py-1.5 bg-gray-50 border text-[9px] outline-none focus:border-gray-900 ${!item.saleDate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.saleDate} onChange={(e) => updatePendingItem(item.tempId, 'saleDate', e.target.value)} /> </div> <div className="w-48"> <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Representante *</label> <select className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.repId ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.repId || ''} onChange={(e) => updatePendingItem(item.tempId, 'repId', Number(e.target.value))} > <option value="">Selecione...</option> {fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name}</option>)} </select> </div> {!item.isExisting && ( <button onClick={() => removePendingItem(item.tempId)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-sm transition-colors"><Trash2 size={14}/></button> )} </div> </div> ))} </div> <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0"> <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="px-4 py-2 border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">Cancelar</button> <button onClick={confirmXmlImport} disabled={loading} className="px-6 py-2 bg-green-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg"> {loading ? <RefreshCw size={14} className="animate-spin"/> : <CheckSquare size={14} />} {pendingXmls[0]?.isExisting ? 'Salvar Alterações' : 'Confirmar Importação'} </button> </div> </div> </div> )}
-      {showTokenModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> <div className="bg-white w-full max-md shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200"> <div className="p-6 border-b bg-gray-50 flex justify-between items-center"> <div className="flex items-center gap-3"><Globe className="text-blue-600" size={20} /><h3 className="text-xs font-bold uppercase tracking-widest">Sincronizar Power BI</h3></div> <button onClick={() => setShowTokenModal(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button> </div> <div className="p-8 space-y-6"> <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-400">Bearer Token de Acesso</label><textarea className="w-full p-4 bg-gray-50 border border-gray-200 text-xs font-mono min-h-[120px] outline-none focus:border-gray-900 transition-colors" placeholder="Cole aqui o token gerado no Power BI API..." value={pbiToken} onChange={e => setPbiToken(e.target.value)} autoFocus /></div> <div className="flex flex-col gap-3"><button onClick={handleManualSync} disabled={syncing} className="w-full py-4 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black flex items-center justify-center gap-3 transition-all disabled:opacity-50">{syncing ? <RefreshCw size={14} className="animate-spin" /> : <DatabaseZap size={14} />}{syncing ? 'Processando Sincronização...' : 'Iniciar Sincronização TOTAL'}</button><button onClick={loadData} className="w-full py-3 bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Apenas Atualizar Visualização Local</button></div> </div> </div> </div> )} 
-      
-      {/* ... (Sidebar e outros elementos omitidos - inalterados) ... */}
+      {/* Modais e Overlays */}
+      <AIInsightsModal 
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        isLoading={aiLoading}
+        insights={aiInsights}
+        onGenerate={handleGenerateAIInsights}
+        contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId}
+      />
+      {notification && ( 
+        <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> 
+          <div className={`p-1 rounded-full ${notification.type === 'success' ? 'bg-green-100' : notification.type === 'warning' ? 'bg-amber-100' : 'bg-red-100'}`}>{notification.type === 'success' ? <CheckCircle2 size={16} className="text-green-600"/> : notification.type === 'warning' ? <AlertCircle size={16} className="text-amber-600"/> : <AlertCircle size={16} className="text-red-600"/>}</div> 
+          <div><h4 className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${notification.type === 'success' ? 'text-green-800' : notification.type === 'warning' ? 'text-amber-800' : 'text-red-800'}`}>{notification.type === 'success' ? 'Sucesso' : 'Erro'}</h4><p className="text-[10px] font-medium text-gray-600 leading-tight break-words">{notification.message}</p></div> 
+          <button onClick={() => setNotification(null)} className="ml-auto text-gray-400 hover:text-gray-900"><X size={12}/></button> 
+        </div> 
+      )} 
+      {/* Modal de Confirmação de Reset (Danger Zone) */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white w-full max-w-sm shadow-2xl border border-red-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm">
+              <div className="p-6 text-center">
+                 <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertTriangle size={24} />
+                 </div>
+                 <h3 className="text-sm font-black uppercase tracking-widest text-red-600 mb-2">Atenção: Ação Destrutiva</h3>
+                 <p className="text-[11px] text-gray-600 font-medium leading-relaxed px-4 mb-4">
+                    Você está prestes a <strong>EXCLUIR TODAS AS VENDAS</strong> do banco de dados. 
+                    Isso removerá Orçamentos, Pedidos e Histórico.
+                 </p>
+                 <p className="text-[10px] bg-red-50 text-red-800 p-2 rounded border border-red-100 font-mono">
+                    Esta ação não pode ser desfeita.
+                 </p>
+              </div>
+              <div className="flex border-t border-gray-100">
+                 <button onClick={() => setShowResetConfirm(false)} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 transition-colors">Cancelar</button>
+                 <button onClick={executeResetDatabase} disabled={resetting} className="flex-1 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner flex items-center justify-center gap-2">
+                    {resetting ? <RefreshCw size={12} className="animate-spin"/> : <Trash2 size={12}/>} Confirmar Limpeza
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+      {deleteConfirmItem && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+           <div className="bg-white w-full max-w-sm shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 rounded-sm">
+              <div className="p-6 text-center">
+                 <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <AlertTriangle size={24} />
+                 </div>
+                 <h3 className="text-sm font-black uppercase tracking-widest text-gray-900 mb-2">Excluir Lançamento?</h3>
+                 <p className="text-[10px] text-gray-500 font-medium leading-relaxed px-4">
+                    Deseja realmente excluir permanentemente o pedido <strong>{deleteConfirmItem.PED_IN_CODIGO}</strong> do cliente <strong>{deleteConfirmItem.CLIENTE_NOME}</strong>?
+                 </p>
+              </div>
+              <div className="flex border-t border-gray-100">
+                 <button onClick={() => setDeleteConfirmItem(null)} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-gray-50 transition-colors">Cancelar</button>
+                 <button onClick={executeDeleteManual} className="flex-1 px-4 py-3 text-[9px] font-black uppercase tracking-widest text-white bg-red-600 hover:bg-red-700 transition-colors shadow-inner">Confirmar Exclusão</button>
+              </div>
+           </div>
+        </div>
+      )}
+      {showXmlModal && ( 
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> 
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm"> 
+            <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0"> 
+              <div className="flex items-center gap-3"> 
+                <FileUp className="text-green-600" size={20} /> 
+                <div> 
+                  <h3 className="text-xs font-bold uppercase tracking-widest">{pendingXmls[0]?.isExisting ? 'Editar Lançamento Manual' : 'Importação de NFe (XML)'}</h3> 
+                  <p className="text-[9px] text-gray-500 font-medium">Preencha os dados faltantes para calcular as comissões</p> 
+                </div> 
+              </div> 
+              <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="text-gray-400 hover:text-red-500"><X size={18}/></button> 
+            </div> 
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100 space-y-3"> 
+              {pendingXmls.map(item => ( 
+                <div key={item.tempId} className="bg-white border border-gray-200 p-3 shadow-sm rounded-sm flex flex-col md:flex-row gap-4 items-start animate-in slide-in-from-bottom-2"> 
+                  <div className="flex-1 min-w-[200px]"> 
+                    <div className="flex items-center gap-2 mb-1"> 
+                      <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[8px] font-bold rounded-sm uppercase tracking-widest">NFe {item.nfeNumber}</span> 
+                      <span className="text-[9px] text-gray-400">{item.fileName}</span> 
+                    </div> 
+                    <h4 className="text-xs font-bold text-gray-900 truncate">{item.clientName}</h4> 
+                    <div className="mt-1 text-[10px] font-mono font-medium text-gray-600">Total: {currencyFormat(item.totalValue)}</div> 
+                  </div> 
+                  <div className="flex items-end gap-2 flex-wrap"> 
+                    <div className="w-24"> 
+                      <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Nº Pedido *</label> 
+                      <input type="text" className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.orderNumber ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} placeholder="000" value={item.orderNumber} onChange={(e) => updatePendingItem(item.tempId, 'orderNumber', e.target.value)} /> 
+                    </div> 
+                    <div className="w-28"> 
+                      <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Data Venda *</label> 
+                      <input type="date" className={`w-full px-2 py-1.5 bg-gray-50 border text-[9px] outline-none focus:border-gray-900 ${!item.saleDate ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.saleDate} onChange={(e) => updatePendingItem(item.tempId, 'saleDate', e.target.value)} /> 
+                    </div> 
+                    <div className="w-48"> 
+                      <label className="text-[8px] font-black uppercase text-gray-400 block mb-0.5">Representante *</label> 
+                      <select className={`w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900 ${!item.repId ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} value={item.repId || ''} onChange={(e) => updatePendingItem(item.tempId, 'repId', Number(e.target.value))} > 
+                        <option value="">Selecione...</option> 
+                        {fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name}</option>)} 
+                      </select> 
+                    </div> 
+                    {!item.isExisting && ( 
+                      <button onClick={() => removePendingItem(item.tempId)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-sm transition-colors"><Trash2 size={14}/></button> 
+                    )} 
+                  </div> 
+                </div> 
+              ))} 
+            </div> 
+            <div className="p-4 border-t bg-white flex justify-end gap-3 shrink-0"> 
+              <button onClick={() => {setShowXmlModal(false); setPendingXmls([]);}} className="px-4 py-2 border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-colors">Cancelar</button> 
+              <button onClick={confirmXmlImport} disabled={loading} className="px-6 py-2 bg-green-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-green-700 transition-colors flex items-center gap-2 disabled:opacity-50 shadow-lg"> 
+                {loading ? <RefreshCw size={14} className="animate-spin"/> : <CheckSquare size={14} />} 
+                {pendingXmls[0]?.isExisting ? 'Salvar Alterações' : 'Confirmar Importação'} 
+              </button> 
+            </div> 
+          </div> 
+        </div> 
+      )} 
+      {showTokenModal && ( 
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"> 
+          <div className="bg-white w-full max-md shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200"> 
+            <div className="p-6 border-b bg-gray-50 flex justify-between items-center"> 
+              <div className="flex items-center gap-3"><Globe className="text-blue-600" size={20} /><h3 className="text-xs font-bold uppercase tracking-widest">Sincronizar Power BI</h3></div> 
+              <button onClick={() => setShowTokenModal(false)} className="text-gray-400 hover:text-red-500"><X size={18}/></button> 
+            </div> 
+            <div className="p-8 space-y-6"> 
+              <div className="space-y-2"><label className="text-[9px] font-black uppercase text-gray-400">Bearer Token de Acesso</label><textarea className="w-full p-4 bg-gray-50 border border-gray-200 text-xs font-mono min-h-[120px] outline-none focus:border-gray-900 transition-colors" placeholder="Cole aqui o token gerado no Power BI API..." value={pbiToken} onChange={e => setPbiToken(e.target.value)} autoFocus /></div> 
+              <div className="flex flex-col gap-3"><button onClick={handleManualSync} disabled={syncing} className="w-full py-4 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black flex items-center justify-center gap-3 transition-all disabled:opacity-50">{syncing ? <RefreshCw size={14} className="animate-spin" /> : <DatabaseZap size={14} />}{syncing ? 'Processando Sincronização...' : 'Iniciar Sincronização TOTAL'}</button><button onClick={loadData} className="w-full py-3 bg-gray-100 text-gray-600 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Apenas Atualizar Visualização Local</button></div> 
+            </div> 
+          </div> 
+        </div> 
+      )} 
       <aside className={`flex flex-col border-r border-gray-200 bg-white transition-all duration-300 z-30 flex-shrink-0 ${mobileSidebarOpen ? 'fixed inset-y-0 left-0 shadow-2xl w-64 translate-x-0' : 'hidden lg:flex relative'} ${!mobileSidebarOpen && sidebarOpen ? 'w-56' : ''} ${!mobileSidebarOpen && !sidebarOpen ? 'w-16' : ''} `}> 
         <div className="h-12 flex items-center px-4 border-b border-gray-100 bg-gray-50 shrink-0"><div className="flex items-center gap-2 text-gray-900"><Hexagon size={20}/><span className={`font-bold uppercase text-xs transition-opacity duration-200 ${!sidebarOpen && !mobileSidebarOpen ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>AIR SALES</span></div></div> 
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar"> 
-          {visibleModules.map(m => ( <button key={m.id} onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all rounded-sm whitespace-nowrap ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'} ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`} title={!sidebarOpen && !mobileSidebarOpen ? m.label : ''} > <m.icon size={16} className="shrink-0" /> {(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>} </button> ))} 
+          {visibleModules.map(m => ( 
+            <button key={m.id} onClick={() => { setActiveModuleId(m.id); setMobileSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 transition-all rounded-sm whitespace-nowrap ${activeModuleId === m.id ? 'bg-[#1a2130] text-white' : 'text-gray-500 hover:bg-gray-50'} ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`} title={!sidebarOpen && !mobileSidebarOpen ? m.label : ''} > 
+              <m.icon size={16} className="shrink-0" /> 
+              {(sidebarOpen || mobileSidebarOpen) && <span className="text-[10px] uppercase font-semibold">{m.label}</span>} 
+            </button> 
+          ))} 
         </nav> 
         <div className="p-3 border-t border-gray-100 shrink-0"> 
-          {(sidebarOpen || mobileSidebarOpen) && ( <div className="px-3 py-2 mb-1"> <p className="text-[9px] font-bold text-gray-400 uppercase">Usuário</p> <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser?.name}</p></div> </div> )} 
+          {(sidebarOpen || mobileSidebarOpen) && ( 
+            <div className="px-3 py-2 mb-1"> 
+              <p className="text-[9px] font-bold text-gray-400 uppercase">Usuário</p> 
+              <div className="flex items-center gap-2 mt-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><p className="text-[10px] font-bold text-gray-700 truncate max-w-[120px]">{currentUser?.name}</p></div> 
+            </div> 
+          )} 
           <button onClick={() => { setCurrentUser(null); setLoginEmail(''); setLoginPassword(''); }} className={`w-full flex items-center gap-2 p-2 text-gray-400 hover:text-red-600 text-[10px] font-bold uppercase ${!sidebarOpen && !mobileSidebarOpen ? 'justify-center' : ''}`}><LogOut size={14} />{(sidebarOpen || mobileSidebarOpen) && 'Sair'}</button> 
         </div> 
       </aside> 
       {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)} />} 
-      
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative"> 
-        {/* Header */}
         <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center shrink-0 z-10 shadow-sm"> 
           <div className="flex items-center gap-4"> 
             <button onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} className="lg:hidden"><Menu size={18}/></button> 
@@ -663,34 +938,159 @@ export default function App() {
                  </button>
               </>
             )}
+             {/* CRM has simpler header for now */}
           </div>
         </header> 
-        
         <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full"> 
           {/* Renderização Condicional dos Módulos */}
           {activeModuleId === 'OVERVIEW' ? (
              <Overview 
                 user={currentUser} 
-                salesData={overviewData} // Usamos dados SEM filtro de data global, para que o componente calcule "faturado" por data de nota
-                commissionData={commissionData}
+                salesData={processedData} // Usa processedData para respeitar filtros globais se houver (mas sem filtro de status)
+                commissionData={commissionData} // Usa commissionData já calculada
                 goals={salesGoals}
                 metrics={metrics}
                 availableReps={availableReps}
                 currentRep={filters.representante || ''}
                 onRepChange={(val) => setFilters(prev => ({ ...prev, representante: val }))}
                 dateRange={{ start: filters.startDate || '', end: filters.endDate || '' }}
-                onDateRangeChange={(start, end) => setFilters(prev => ({ ...prev, startDate: start, endDate: end }))}
+                onDateRangeChange={(range) => setFilters(prev => ({ ...prev, startDate: range.start, endDate: range.end }))}
              />
           ) : activeModuleId === 'IA_CHAT' ? (
              <AIChatView 
-                salesData={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} 
+                salesData={processedData} 
                 metrics={metrics} 
              />
+          ) : activeModuleId === 'IA_SETTINGS' ? (
+            <div className="max-w-2xl mx-auto w-full space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 py-8">
+              <div className="bg-white border border-gray-200 shadow-xl overflow-hidden rounded-xl">
+                <div className="p-6 bg-gray-900 text-white flex items-center gap-4">
+                  <div className="p-3 bg-white/10 rounded-lg backdrop-blur-md">
+                    <Sparkles size={24} className="text-amber-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-tighter">Configurações de Inteligência Artificial</h2>
+                    <p className="text-xs text-gray-400 font-medium">Escolha entre o Google Gemini ou seu modelo local (LM Studio/Ollama)</p>
+                  </div>
+                </div>
+
+                <div className="p-8 space-y-8">
+                  {/* Toggle Switch */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg transition-colors ${llmConfig.useLocal ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
+                        {llmConfig.useLocal ? <DatabaseIcon size={20} /> : <Globe size={20} />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">Usar Modelo Local (LM Studio)</p>
+                        <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Bypass Google Gemini</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => saveLlmConfig({ ...llmConfig, useLocal: !llmConfig.useLocal })}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${llmConfig.useLocal ? 'bg-amber-500' : 'bg-gray-200'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${llmConfig.useLocal ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+
+                  {llmConfig.useLocal ? (
+                    <div className="space-y-6 animate-in zoom-in-95 duration-300">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
+                          <Globe size={12} /> Endpoint da API Local
+                        </label>
+                        <input 
+                          type="text" 
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all"
+                          placeholder="http://localhost:1234/v1"
+                          value={llmConfig.baseUrl}
+                          onChange={e => setLlmConfig({ ...llmConfig, baseUrl: e.target.value })}
+                        />
+                        <p className="text-[10px] text-gray-400 italic">Padrão LM Studio: http://localhost:1234/v1 | Ollama: http://localhost:11434/v1</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
+                          <Package size={12} /> Nome do Modelo
+                        </label>
+                        <input 
+                          type="text" 
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition-all"
+                          placeholder="google/gemma-3n-e4b"
+                          value={llmConfig.model}
+                          onChange={e => setLlmConfig({ ...llmConfig, model: e.target.value })}
+                        />
+                        <p className="text-[10px] text-gray-400 italic">Certifique-se que o modelo está carregado no LM Studio.</p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => saveLlmConfig(llmConfig)}
+                          className="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-amber-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                          <Save size={18} /> Salvar
+                        </button>
+                        <button 
+                          onClick={handleTestConnection}
+                          disabled={testLoading}
+                          className={`flex-1 py-4 border-2 font-black uppercase tracking-widest rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${testLoading ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white border-amber-500 text-amber-600 hover:bg-amber-50'}`}
+                        >
+                          {testLoading ? <RefreshCw size={18} className="animate-spin" /> : <DatabaseZap size={18} />}
+                          {testLoading ? 'Testando...' : 'Testar Conexão'}
+                        </button>
+                      </div>
+
+                      {testResult && (
+                        <div className={`p-4 rounded-xl border animate-in fade-in zoom-in-95 duration-300 flex flex-col gap-2 ${testResult.success ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                          <div className="flex gap-3">
+                            {testResult.success ? <CheckCircle2 size={20} className="shrink-0" /> : <AlertTriangle size={20} className="shrink-0" />}
+                            <p className="text-xs font-bold leading-relaxed">{testResult.message}</p>
+                          </div>
+                          {!testResult.success && (
+                            <div className="mt-2 p-3 bg-white/50 rounded-lg border border-red-100 space-y-2">
+                              <p className="text-[10px] font-black uppercase text-red-900">Guia de Correção Rápida:</p>
+                              <ul className="text-[10px] space-y-1 list-disc ml-4 text-red-800">
+                                <li>Verifique se o IP <strong>{llmConfig.baseUrl.split('/')[2]}</strong> é o mesmo que aparece no seu LM Studio.</li>
+                                <li>No LM Studio, o botão <strong>"Start Server"</strong> deve estar verde.</li>
+                                <li>O <strong>CORS</strong> deve estar <strong>ON</strong> nas configurações do servidor do LM Studio.</li>
+                                <li><strong>CRÍTICO:</strong> Clique no cadeado da URL deste site {'>'} Configurações {'>'} Conteúdo Inseguro {'>'} <strong>Permitir</strong>.</li>
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-6 border border-dashed border-blue-200 bg-blue-50 rounded-xl flex flex-col items-center text-center space-y-3">
+                      <div className="p-3 bg-white rounded-full shadow-sm">
+                        <Sparkles size={24} className="text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-blue-900">Google Gemini Ativo</p>
+                        <p className="text-xs text-blue-700/70">O sistema está utilizando a infraestrutura de nuvem do Google para análises e chat.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3">
+                <AlertCircle size={20} className="text-amber-600 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-amber-900 uppercase tracking-tight">Nota sobre Conectividade Local</p>
+                  <p className="text-[10px] text-amber-800 leading-relaxed">
+                    Para conectar ao LM Studio rodando em sua máquina, certifique-se de que o servidor está com o **CORS habilitado** ou use um proxy. 
+                    No LM Studio, vá em "Server Settings" e habilite "Cross-Origin Resource Sharing (CORS)".
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : activeModuleId === 'CRM' ? (
              <CRMView data={processedData} salesData={salesData} onRefresh={loadData} />
           ) : activeModuleId === 'METAS' ? ( 
-             // ... (Conteúdo de Metas - Inalterado) ...
-             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+            <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+              {/* Conteúdo de Metas (Inalterado) */}
               <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}> 
                 <div className="flex items-center justify-between border-b pb-2"><h3 className="text-[10px] font-bold uppercase tracking-widest">{editingGoalId ? 'Editando Meta' : 'Nova Meta de Vendas'}</h3>{editingGoalId && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}</div> 
                 <div className="space-y-2"> 
@@ -707,8 +1107,7 @@ export default function App() {
               </div> 
             </div> 
           ) : activeModuleId === 'PERFORMANCE' ? ( 
-             // ... (Conteúdo Performance - Inalterado) ...
-             <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-0 z-10"> 
                 <div className="flex items-center gap-2"><div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div><div><h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Relatório de Atingimento</h3><p className="text-[9px] text-gray-500 font-medium">Comparativo Meta x Realizado (Pedidos)</p></div></div> 
                 <div className="flex items-center gap-2 w-full sm:w-auto">{currentUser?.is_admin && (<div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label><button onClick={() => setShowPerfRepSelector(!showPerfRepSelector)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"><span className="truncate">{perfSelectedReps.length === 0 ? 'Todos os Representantes' : perfSelectedReps.length === 1 ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado' : `${perfSelectedReps.length} Selecionados`}</span><ChevronDown size={12} className="text-gray-500"/></button>{showPerfRepSelector && (<div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100"><div onClick={() => setPerfSelectedReps([])} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>{perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span></div>{availableReps.map(r => {const isSelected = perfSelectedReps.includes(r.code); return (<div key={r.code} onClick={() => togglePerfRepSelection(r.code)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>{isSelected && <CheckCircle2 size={10} className="text-white"/>}</div><div className="flex flex-col"><span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span><span className="text-[7px] text-gray-300 font-mono">{r.code}</span></div></div>);})}</div>)}</div>)}<div className="flex-1 sm:w-24"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="flex-1 sm:w-32"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>{MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div></div></div> 
@@ -716,8 +1115,7 @@ export default function App() {
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden"><div className="p-3 bg-gray-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold uppercase text-gray-500">Performance por Representante</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Representante</th><th className="px-4 py-2 text-left w-1/3">Progresso da Meta</th><th className="px-4 py-2 text-right">Meta (R$)</th><th className="px-4 py-2 text-right">Realizado (R$)</th><th className="px-4 py-2 text-center">% Ating.</th></tr></thead><tbody className="divide-y divide-gray-100">{performanceData.length === 0 ? (<tr><td colSpan={5} className="p-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sem dados para o período selecionado</td></tr>) : (performanceData.map((row) => (<tr key={row.code} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-3"><div className="font-bold text-gray-900">{row.name}</div><div className="text-[8px] text-gray-400 font-mono">COD: {row.code}</div></td><td className="px-4 py-3 align-middle"><div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${row.percent >= 100 ? 'bg-green-500' : row.percent >= 70 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(row.percent, 100)}%` }}></div></div></td><td className="px-4 py-3 text-right font-mono text-gray-500">{currencyFormat(row.goal)}</td><td className="px-4 py-3 text-right font-mono font-bold text-gray-900">{currencyFormat(row.realized)}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${row.percent >= 100 ? 'bg-green-100 text-green-700' : row.percent >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{row.percent.toFixed(1)}%</span></td></tr>)))}</tbody></table></div></div> 
             </div> 
           ) : activeModuleId === 'USERS' ? ( 
-             // ... (Conteúdo de Usuários - Inalterado) ...
-             <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar"> 
+            <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar"> 
               <div className={`col-span-12 lg:col-span-4 bg-white border ${newUser.id ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}>
                 <div className="flex items-center justify-between border-b pb-2">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest">{newUser.id ? 'Editar Acesso' : 'Novo Acesso'}</h3>
@@ -733,12 +1131,18 @@ export default function App() {
                         <label htmlFor="is_admin" className="text-[9px] font-bold uppercase text-gray-700 cursor-pointer">Acesso de Administrador</label>
                     </div>
 
+                    {/* SELEÇÃO DE MÓDULOS */}
                     <div className="space-y-1.5 pt-2 border-t border-gray-100">
                         <label className="text-[9px] font-black uppercase text-gray-400">Permissões de Acesso (Menus)</label>
                         <div className="grid grid-cols-2 gap-2 bg-gray-50 p-2 border border-gray-100 rounded-sm">
                             {MODULES.map(module => (
                                 <label key={module.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded transition-colors">
-                                    <input type="checkbox" className="w-3 h-3 accent-gray-900 rounded-sm" checked={newUser.allowed_modules?.includes(module.id)} onChange={() => handleToggleModule(module.id)} />
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-3 h-3 accent-gray-900 rounded-sm"
+                                        checked={newUser.allowed_modules?.includes(module.id)}
+                                        onChange={() => handleToggleModule(module.id)}
+                                    />
                                     <div className="flex items-center gap-1.5">
                                         <module.icon size={10} className="text-gray-500" />
                                         <span className={`text-[9px] font-bold uppercase ${newUser.allowed_modules?.includes(module.id) ? 'text-gray-900' : 'text-gray-400'}`}>{module.label}</span>
@@ -747,15 +1151,23 @@ export default function App() {
                             ))}
                         </div>
                     </div>
+
                     {!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200 pt-2"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}
                 </div>
+                
                 <div className="space-y-1.5 pt-1">
                   <button onClick={handleSaveUser} className={`w-full py-2.5 text-white text-[9px] font-bold uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] ${newUser.id ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#1a2130] hover:bg-black'}`}>{newUser.id ? 'Salvar Alterações' : 'Criar Acesso'}</button>
                   {newUser.id && <button onClick={handleCancelEditUser} className="w-full py-2 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all">Cancelar Edição</button>}
                 </div>
+                
                 <div className="mt-8 pt-6 border-t border-gray-100">
                     <h4 className="text-[9px] font-black uppercase text-red-400 tracking-widest mb-2 flex items-center gap-1"><AlertTriangle size={10} /> Zona de Perigo</h4>
-                    <button onClick={() => setShowResetConfirm(true)} className="w-full py-2.5 border border-red-200 bg-red-50 text-red-600 text-[9px] font-bold uppercase tracking-widest hover:bg-red-100 transition-colors flex items-center justify-center gap-2" > <Trash2 size={12} /> Limpar Todas as Vendas </button>
+                    <button 
+                        onClick={() => setShowResetConfirm(true)}
+                        className="w-full py-2.5 border border-red-200 bg-red-50 text-red-600 text-[9px] font-bold uppercase tracking-widest hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
+                    >
+                        <Trash2 size={12} /> Limpar Todas as Vendas
+                    </button>
                     <p className="text-[8px] text-gray-400 mt-1 text-center">Use para resetar o banco antes de uma carga limpa.</p>
                 </div>
               </div> 
@@ -763,7 +1175,6 @@ export default function App() {
             </div> 
           ) : ( 
             <div className="flex flex-col h-full gap-2 overflow-hidden"> 
-              {/* ... (Filtros e Lista Padrão - Inalterados) ... */}
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden animate-in fade-in duration-300 shrink-0"> 
                 <div className="p-2 border-b bg-gray-50 flex items-center justify-between cursor-pointer" onClick={() => setFiltersExpanded(!filtersExpanded)}> 
                   <div className="flex items-center gap-2"><Filter size={12} className="text-gray-900" /><span className="text-[9px] font-bold uppercase tracking-widest">Painel de Inteligência</span></div> 

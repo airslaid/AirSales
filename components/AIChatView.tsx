@@ -52,9 +52,7 @@ export const AIChatView: React.FC<AIChatViewProps> = ({ salesData, metrics }) =>
     setIsTyping(true);
 
     try {
-      // Prepara histórico para API (excluindo a msg de boas vindas se quiser, ou mantendo)
       const historyForApi = messages.map(m => ({ role: m.role, text: m.text }));
-      
       const responseText = await chatWithSalesData(historyForApi, salesData, metrics, userMsg.text);
 
       const aiMsg: Message = {
@@ -64,14 +62,15 @@ export const AIChatView: React.FC<AIChatViewProps> = ({ salesData, metrics }) =>
         timestamp: new Date()
       };
       setMessages(prev => [...prev, aiMsg]);
-    } catch (error) {
-      const errorMsg: Message = {
+    } catch (error: any) {
+      console.error("Erro no Chat:", error);
+      const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: "Desculpe, ocorreu um erro ao conectar com o servidor.",
+        text: error.message || "Desculpe, ocorreu um erro ao conectar com o servidor.",
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages(prev => [...prev, aiMsg]);
     } finally {
       setIsTyping(false);
     }
