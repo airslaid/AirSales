@@ -67,6 +67,23 @@ export interface CRMAppointment {
   hide_appointment: boolean;
 }
 
+export interface CRMTask {
+  id: string;
+  title: string;
+  description: string;
+  client_id?: number;
+  client_name?: string;
+  rep_in_codigo: number;
+  rep_nome: string;
+  created_by_id: string;
+  created_by_name: string;
+  created_at: string;
+  status: 'PENDENTE' | 'CONCLUIDA' | 'CANCELADA';
+  completed_at?: string;
+  due_date?: string;
+  priority: 'BAIXA' | 'MEDIA' | 'ALTA';
+}
+
 export interface ServicePrincipalConfig {
   tenantId: string;
   clientId: string;

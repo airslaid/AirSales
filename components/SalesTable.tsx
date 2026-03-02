@@ -31,6 +31,13 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleDragStart = (e: React.DragEvent<HTMLTableCellElement>, index: number) => {
     setDraggedColIndex(index);
@@ -317,42 +324,188 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     );
   };
 
+  const renderMobileCards = () => {
+    if (isGroupedByOrder && groupedData) {
+      return groupedData.map((group) => {
+        const groupKey = group.summary.__groupKey as string;
+        const isExpanded = expandedOrders.has(groupKey);
+        const isManual = Number(group.summary.FIL_IN_CODIGO) === 900;
+
+        return (
+          <div key={groupKey} className={`mb-3 border rounded-sm overflow-hidden ${isManual ? 'border-indigo-200' : 'border-gray-200'} bg-white shadow-sm`}>
+            <div 
+              onClick={() => toggleExpand(groupKey)}
+              className={`p-3 flex flex-col gap-2 cursor-pointer ${isManual ? 'bg-indigo-50/50' : isExpanded ? 'bg-blue-50/30' : 'bg-white'}`}
+            >
+              <div className="flex justify-between items-start">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-gray-900">PED: {group.summary.PED_IN_CODIGO}</span>
+                    {isManual && (
+                      <span className="bg-indigo-600 text-white text-[7px] font-black px-1 py-0.5 rounded flex items-center gap-0.5">
+                        <Bookmark size={8} fill="currentColor" /> MANUAL
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-bold text-gray-600 uppercase truncate max-w-[200px]">{group.summary.CLIENTE_NOME}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-black text-gray-900">{columns.find(c => c.key === 'ITP_RE_VALORMERCADORIA')?.format?.(group.summary.ITP_RE_VALORMERCADORIA) || group.summary.ITP_RE_VALORMERCADORIA}</span>
+                  <span className="text-[9px] text-gray-400 font-bold">{columns.find(c => c.key === 'PED_DT_EMISSAO')?.format?.(group.summary.PED_DT_EMISSAO) || group.summary.PED_DT_EMISSAO}</span>
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center pt-1 border-t border-gray-100">
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 border text-[8px] font-bold uppercase tracking-widest ${
+                    String(group.summary.PED_ST_STATUS).toLowerCase().includes('faturado') ? 'bg-green-50 text-green-600 border-green-100' : 
+                    String(group.summary.PED_ST_STATUS).toLowerCase().includes('cancel') ? 'bg-red-50 text-red-600 border-red-100' :
+                    String(group.summary.PED_ST_STATUS).toLowerCase().includes('aprov') ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                    'bg-gray-50 text-gray-600 border-gray-100'
+                  }`}>
+                    {group.summary.PED_ST_STATUS}
+                  </span>
+                  <span className="text-[9px] text-gray-400 font-medium italic">{group.items.length} Itens</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {onTogglePayment && columns.some(c => c.key === 'CHECK_PAGAMENTO' && c.visible) && (
+                    <div onClick={e => e.stopPropagation()}>
+                      {renderCellContent(group.summary, { key: 'CHECK_PAGAMENTO', label: '', visible: true }, false)}
+                    </div>
+                  )}
+                  {isExpanded ? <ChevronDown size={14} className="text-gray-400" /> : <ChevronRight size={14} className="text-gray-400" />}
+                </div>
+              </div>
+            </div>
+
+            {isExpanded && (
+              <div className="bg-gray-50 border-t border-gray-100 divide-y divide-gray-100">
+                {group.items.map((item, idx) => (
+                  <div key={idx} className="p-3 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="text-[10px] font-bold text-gray-700 leading-tight">{item.ITP_ST_DESCRICAO}</p>
+                        <p className="text-[9px] text-gray-400 font-mono mt-0.5">{item.PRO_ST_ALTERNATIVO}</p>
+                      </div>
+                      <div className="text-right ml-4">
+                        <p className="text-[10px] font-bold text-gray-900">{columns.find(c => c.key === 'ITP_RE_VALORMERCADORIA')?.format?.(item.ITP_RE_VALORMERCADORIA) || item.ITP_RE_VALORMERCADORIA}</p>
+                        <p className="text-[9px] text-gray-400 font-medium">Qtd: {item.ITP_RE_QUANTIDADE}</p>
+                      </div>
+                    </div>
+                    {columns.some(c => c.key === 'VALOR_COMISSAO' && c.visible) && (
+                      <div className="flex justify-between items-center bg-white/50 p-1.5 rounded-sm border border-gray-100">
+                        <span className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Comissão</span>
+                        <span className="text-[10px] font-bold text-amber-600">{columns.find(c => c.key === 'VALOR_COMISSAO')?.format?.(item.VALOR_COMISSAO) || item.VALOR_COMISSAO}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      });
+    }
+
+    return data.map((row, idx) => {
+      const isManual = Number(row.FIL_IN_CODIGO) === 900;
+      return (
+        <div key={idx} className={`mb-3 p-3 border rounded-sm ${isManual ? 'border-indigo-200 bg-indigo-50/30' : 'border-gray-200 bg-white'} shadow-sm space-y-3`}>
+          <div className="flex justify-between items-start">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-gray-900">PED: {row.PED_IN_CODIGO}</span>
+                {isManual && (
+                  <span className="bg-indigo-600 text-white text-[7px] font-black px-1 py-0.5 rounded flex items-center gap-0.5">
+                    <Bookmark size={8} fill="currentColor" /> MANUAL
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-gray-600 uppercase truncate max-w-[200px]">{row.CLIENTE_NOME}</span>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="text-xs font-black text-gray-900">{columns.find(c => c.key === 'ITP_RE_VALORMERCADORIA')?.format?.(row.ITP_RE_VALORMERCADORIA) || row.ITP_RE_VALORMERCADORIA}</span>
+              <span className="text-[9px] text-gray-400 font-bold">{columns.find(c => c.key === 'PED_DT_EMISSAO')?.format?.(row.PED_DT_EMISSAO) || row.PED_DT_EMISSAO}</span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold text-gray-700 leading-tight">{row.ITP_ST_DESCRICAO}</p>
+            <p className="text-[9px] text-gray-400 font-mono">{row.PRO_ST_ALTERNATIVO}</p>
+          </div>
+
+          <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-2">
+              <span className={`px-1.5 py-0.5 border text-[8px] font-bold uppercase tracking-widest ${
+                String(row.PED_ST_STATUS).toLowerCase().includes('faturado') ? 'bg-green-50 text-green-600 border-green-100' : 
+                String(row.PED_ST_STATUS).toLowerCase().includes('cancel') ? 'bg-red-50 text-red-600 border-red-100' :
+                String(row.PED_ST_STATUS).toLowerCase().includes('aprov') ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                'bg-gray-50 text-gray-600 border-gray-100'
+              }`}>
+                {row.PED_ST_STATUS}
+              </span>
+              {row.REPRESENTANTE_NOME && (
+                <span className="text-[8px] text-gray-400 font-bold uppercase truncate max-w-[100px]">{row.REPRESENTANTE_NOME}</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {onTogglePayment && columns.some(c => c.key === 'CHECK_PAGAMENTO' && c.visible) && renderCellContent(row, { key: 'CHECK_PAGAMENTO', label: '', visible: true }, false)}
+              {isManual && columns.some(c => c.key === 'MANUAL_ACTIONS' && c.visible) && renderCellContent(row, { key: 'MANUAL_ACTIONS', label: '', visible: true }, false)}
+            </div>
+          </div>
+        </div>
+      );
+    });
+  };
+
   return (
     <div className="w-full h-full bg-white flex flex-col">
-      <div className="flex-1 overflow-auto custom-scrollbar">
-        <table className="w-full border-collapse">
-          <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
-            <tr>
-              {visibleColumns.map((col, idx) => (
-                <th 
-                  key={col.key}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, col.originalIdx)}
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, col.originalIdx)}
-                  className={`px-2 py-2 text-[9px] font-bold text-gray-500 uppercase tracking-widest cursor-move hover:bg-gray-100 transition-colors border-r border-gray-200 last:border-0 ${getAlignmentClass(col.key)}`}
-                >
-                  <div className={`flex items-center gap-1 ${getHeaderJustifyClass(col.key)}`}>
-                    <GripVertical size={10} className="text-gray-300 shrink-0" />
-                    <span onClick={() => onSort(col.key)} className="flex items-center gap-0.5 cursor-pointer truncate">
-                      {col.label}
-                      {sortConfig?.key === col.key && (sortConfig.direction === 'asc' ? <ArrowUp size={8} /> : <ArrowDown size={8} />)}
-                    </span>
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+      <div className="flex-1 overflow-auto custom-scrollbar p-2 sm:p-0">
+        {isMobile ? (
+          <div className="animate-in fade-in duration-500">
             {isLoading ? (
-               <tr><td colSpan={visibleColumns.length} className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">Processando...</td></tr>
+              <div className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">Processando...</div>
             ) : data.length === 0 ? (
-               <tr><td colSpan={visibleColumns.length} className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Nenhum Registro</td></tr>
+              <div className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Nenhum Registro</div>
             ) : (
-               isGroupedByOrder ? renderGroupedRows() : renderFlatRows()
+              renderMobileCards()
             )}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <table className="w-full border-collapse">
+            <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
+              <tr>
+                {visibleColumns.map((col, idx) => (
+                  <th 
+                    key={col.key}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, col.originalIdx)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, col.originalIdx)}
+                    className={`px-2 py-2 text-[9px] font-bold text-gray-500 uppercase tracking-widest cursor-move hover:bg-gray-100 transition-colors border-r border-gray-200 last:border-0 ${getAlignmentClass(col.key)}`}
+                  >
+                    <div className={`flex items-center gap-1 ${getHeaderJustifyClass(col.key)}`}>
+                      <GripVertical size={10} className="text-gray-300 shrink-0" />
+                      <span onClick={() => onSort(col.key)} className="flex items-center gap-0.5 cursor-pointer truncate">
+                        {col.label}
+                        {sortConfig?.key === col.key && (sortConfig.direction === 'asc' ? <ArrowUp size={8} /> : <ArrowDown size={8} />)}
+                      </span>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {isLoading ? (
+                 <tr><td colSpan={visibleColumns.length} className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">Processando...</td></tr>
+              ) : data.length === 0 ? (
+                 <tr><td colSpan={visibleColumns.length} className="p-8 text-center text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em]">Nenhum Registro</td></tr>
+              ) : (
+                 isGroupedByOrder ? renderGroupedRows() : renderFlatRows()
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

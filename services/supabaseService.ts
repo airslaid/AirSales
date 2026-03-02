@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Sale, AppUser, SalesGoal, CRMAppointment } from '../types';
+import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask } from '../types';
 
 export const SUPABASE_URL = 'https://mgahjjoegseffezndojg.supabase.co';
 export const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nYWhqam9lZ3NlZmZlem5kb2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MTgyNTksImV4cCI6MjA4NDA5NDI1OX0.MHtt084b7VNp1T7wXwYnCQCb-bSQdAIEAeuMd7RIDO0';
@@ -389,5 +389,43 @@ export const deleteCRMAppointment = async (id: string) => {
     return true;
   } catch (err) {
     return true; // Simulate success
+  }
+};
+
+// --- CRM Tasks Service ---
+
+export const fetchCRMTasks = async (): Promise<CRMTask[]> => {
+  try {
+    const { data, error } = await supabase.from('crm_tasks').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("CRM Tasks: Table might not exist", err.message);
+    return [];
+  }
+};
+
+export const upsertCRMTask = async (task: CRMTask) => {
+  const payload = { ...task };
+  if (!payload.id) payload.id = generateUUID();
+  if (!payload.created_at) payload.created_at = new Date().toISOString();
+  
+  try {
+    const { error } = await supabase.from('crm_tasks').upsert([payload]);
+    if (error) throw error;
+    return payload;
+  } catch (err: any) {
+    console.error("CRM Tasks: Error saving task", err.message);
+    throw err;
+  }
+};
+
+export const deleteCRMTask = async (id: string) => {
+  try {
+    const { error } = await supabase.from('crm_tasks').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    throw err;
   }
 };

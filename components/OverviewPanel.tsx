@@ -37,41 +37,46 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
   
   // --- Processamento de Dados ---
   
-  const summary = useMemo(() => {
-    // Separação por Tipo (Série)
-    const budgetItems = salesData.filter(s => s.SER_ST_CODIGO === 'OV');
-    const orderItems = salesData.filter(s => s.SER_ST_CODIGO === 'PD');
-    const devItems = salesData.filter(s => s.SER_ST_CODIGO === 'DV');
+    const summary = useMemo(() => {
+      // Separação por Tipo (Série)
+      const budgetItems = salesData.filter(s => s.SER_ST_CODIGO === 'OV');
+      const orderItems = salesData.filter(s => s.SER_ST_CODIGO === 'PD');
+      const devItems = salesData.filter(s => s.SER_ST_CODIGO === 'DV');
 
-    // Totais Monetários
-    const totalBudget = budgetItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
-    const totalOrder = orderItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
-    const totalDev = devItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
+      // Totais Monetários
+      const totalBudget = budgetItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
+      const totalOrder = orderItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
+      const totalDev = devItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
 
-    // Contagem de Status
-    const countStatus = (items: Sale[], statusPart: string) => 
-      items.filter(i => String(i.PED_ST_STATUS || i.SITUACAO || '').toUpperCase().includes(statusPart)).length;
+      // Contagem de Status
+      const countStatus = (items: Sale[], statusPart: string) => 
+        items.filter(i => String(i.PED_ST_STATUS || i.SITUACAO || '').toUpperCase().includes(statusPart)).length;
 
-    const ordersFaturado = countStatus(orderItems, 'FATURADO');
-    const ordersAberto = countStatus(orderItems, 'ABERTO') + countStatus(orderItems, 'APROV');
-    
-    // Comissões
-    const totalCommission = commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0);
-    const paidCommission = commissionData.filter(c => c.COMISSAO_PAGA).reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0);
+      const budgetsAberto = countStatus(budgetItems, 'ABERTO') + countStatus(budgetItems, 'APROV');
+      const ordersFaturado = countStatus(orderItems, 'FATURADO');
+      const ordersAberto = countStatus(orderItems, 'ABERTO') + countStatus(orderItems, 'APROV');
+      const devAberto = countStatus(devItems, 'ABERTO') + countStatus(devItems, 'APROV');
+      
+      // Comissões
+      const totalCommission = commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0);
+      const paidCommission = commissionData.filter(c => c.COMISSAO_PAGA).reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0);
 
-    return {
-      totalBudget,
-      totalOrder,
-      totalDev,
-      countBudgets: budgetItems.length,
-      countOrders: orderItems.length,
-      ordersFaturado,
-      ordersAberto,
-      totalCommission,
-      paidCommission,
-      pendingCommission: totalCommission - paidCommission
-    };
-  }, [salesData, commissionData]);
+      return {
+        totalBudget,
+        totalOrder,
+        totalDev,
+        countBudgets: budgetItems.length,
+        budgetsAberto,
+        countOrders: orderItems.length,
+        ordersFaturado,
+        ordersAberto,
+        countDev: devItems.length,
+        devAberto,
+        totalCommission,
+        paidCommission,
+        pendingCommission: totalCommission - paidCommission
+      };
+    }, [salesData, commissionData]);
 
   // Dados para Gráfico de Tendência (Últimos 6 meses baseados nos dados visíveis)
   const trendData = useMemo(() => {
@@ -120,20 +125,20 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
     <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
       
       {/* Barra de Filtros */}
-      <div className="bg-white border-b border-gray-200 p-2 shadow-sm shrink-0 flex flex-wrap items-center justify-between gap-3 z-10 animate-in slide-in-from-top-1">
-         <div className="flex items-center gap-3">
+      <div className="bg-white border-b border-gray-200 p-2 sm:p-3 shadow-sm shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 z-10 animate-in slide-in-from-top-1">
+         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
             <div className="flex items-center gap-2 text-gray-700">
                <Filter size={14} />
                <span className="text-[10px] font-bold uppercase tracking-widest">Painel de Inteligência</span>
             </div>
-            <div className="h-4 w-px bg-gray-200 mx-1"></div>
+            <div className="hidden sm:block h-4 w-px bg-gray-200 mx-1"></div>
             
             {/* Filtro de Representante */}
-            <div className="flex flex-col">
+            <div className="flex flex-col w-full sm:w-auto">
                <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter mb-0.5">Representante</label>
                <div className="relative">
                   <select 
-                     className="bg-gray-50 border border-gray-200 text-[10px] rounded-sm pl-2 pr-6 py-1 outline-none focus:border-gray-900 font-bold text-gray-700 w-56 appearance-none cursor-pointer hover:bg-gray-100 transition-colors"
+                     className="bg-gray-50 border border-gray-200 text-[10px] rounded-sm pl-2 pr-6 py-1.5 outline-none focus:border-gray-900 font-bold text-gray-700 w-full sm:w-56 appearance-none cursor-pointer hover:bg-gray-100 transition-colors"
                      value={currentRep}
                      onChange={(e) => onRepChange(e.target.value)}
                   >
@@ -148,22 +153,22 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
          </div>
 
          {/* Indicador de Data */}
-         <div className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-sm border border-gray-200 opacity-80">
-             <Calendar size={12} className="text-gray-500" />
-             <div className="flex items-center gap-2">
+         <div className="flex items-center gap-2 bg-gray-100 px-2 py-1.5 rounded-sm border border-gray-200 opacity-80 w-full sm:w-auto overflow-x-auto">
+             <Calendar size={12} className="text-gray-500 shrink-0" />
+             <div className="flex items-center gap-2 whitespace-nowrap">
                 <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wide">Período:</span>
                 <input 
                    type="date" 
                    value={dateRange.start}
                    onChange={(e) => onDateRangeChange({ ...dateRange, start: e.target.value })}
-                   className="bg-transparent text-[9px] font-bold text-gray-700 outline-none border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors w-20"
+                   className="bg-transparent text-[9px] font-bold text-gray-700 outline-none border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors w-24"
                 />
                 <span className="text-[9px] text-gray-400">ATÉ</span>
                 <input 
                    type="date" 
                    value={dateRange.end}
                    onChange={(e) => onDateRangeChange({ ...dateRange, end: e.target.value })}
-                   className="bg-transparent text-[9px] font-bold text-gray-700 outline-none border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors w-20"
+                   className="bg-transparent text-[9px] font-bold text-gray-700 outline-none border-b border-transparent hover:border-gray-300 focus:border-blue-500 transition-colors w-24"
                 />
              </div>
          </div>
@@ -172,35 +177,35 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
       <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-6 animate-in fade-in duration-500">
         
         {/* Header de Boas Vindas */}
-        <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-sm p-6 shadow-lg text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-10">
+        <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-sm p-4 sm:p-6 shadow-lg text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-10 hidden sm:block">
              <TrendingUp size={120} />
           </div>
           <div className="relative z-10">
-              <h1 className="text-2xl font-bold mb-1">Olá, {user?.name.split(' ')[0]}! 👋</h1>
-              <p className="text-sm text-gray-300 mb-6">Aqui está o resumo executivo da sua operação hoje.</p>
+              <h1 className="text-xl sm:text-2xl font-bold mb-1">Olá, {user?.name.split(' ')[0]}! 👋</h1>
+              <p className="text-xs sm:text-sm text-gray-300 mb-4 sm:mb-6">Aqui está o resumo executivo da sua operação hoje.</p>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white/10 backdrop-blur-sm p-3 rounded border border-white/10">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Meta do Período</p>
-                      <p className="text-lg font-bold text-white">{formatCurrency(metrics.goal)}</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
+                      <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Meta do Período</p>
+                      <p className="text-sm sm:text-lg font-bold text-white truncate">{formatCurrency(metrics.goal)}</p>
                   </div>
-                  <div className="bg-white/10 backdrop-blur-sm p-3 rounded border border-white/10">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Vendas Realizadas</p>
-                      <p className="text-lg font-bold text-emerald-400">{formatCurrency(summary.totalOrder)}</p>
+                  <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
+                      <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Vendas Realizadas</p>
+                      <p className="text-sm sm:text-lg font-bold text-emerald-400 truncate">{formatCurrency(metrics.realizedTotal || 0)}</p>
                   </div>
-                  <div className="bg-white/10 backdrop-blur-sm p-3 rounded border border-white/10">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Atingimento</p>
-                      <div className="flex items-center gap-2">
-                          <p className={`text-lg font-bold ${metrics.achievement >= 100 ? 'text-green-400' : metrics.achievement >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
+                  <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
+                      <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Atingimento</p>
+                      <div className="flex items-center gap-1 sm:gap-2">
+                          <p className={`text-sm sm:text-lg font-bold ${metrics.achievement >= 100 ? 'text-green-400' : metrics.achievement >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
                               {metrics.achievement.toFixed(1)}%
                           </p>
-                          {metrics.achievement >= 100 && <CheckCircle2 size={16} className="text-green-400"/>}
+                          {metrics.achievement >= 100 && <CheckCircle2 size={14} className="text-green-400 shrink-0"/>}
                       </div>
                   </div>
-                   <div className="bg-white/10 backdrop-blur-sm p-3 rounded border border-white/10">
-                      <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Pipeline (OV)</p>
-                      <p className="text-lg font-bold text-blue-300">{formatCurrency(summary.totalBudget)}</p>
+                   <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
+                      <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Pipeline (OV)</p>
+                      <p className="text-sm sm:text-lg font-bold text-blue-300 truncate">{formatCurrency(summary.totalBudget)}</p>
                   </div>
               </div>
           </div>
@@ -219,10 +224,13 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                 <div className="space-y-2">
                     <div className="flex justify-between items-end">
                         <span className="text-[10px] text-gray-500 font-medium">Em Aberto</span>
-                        <span className="text-sm font-bold text-gray-900">{summary.countBudgets}</span>
+                        <span className="text-sm font-bold text-gray-900">{summary.budgetsAberto}</span>
                     </div>
                     <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                        <div className="bg-blue-500 h-full rounded-full" style={{width: '60%'}}></div>
+                        <div 
+                          className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+                          style={{width: `${summary.countBudgets > 0 ? (summary.budgetsAberto / summary.countBudgets) * 100 : 0}%`}}
+                        ></div>
                     </div>
                     <p className="text-[10px] text-gray-400 text-right mt-1">Total: {formatCurrency(summary.totalBudget)}</p>
                 </div>
@@ -255,12 +263,17 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                     <div className="p-2 bg-purple-50 text-purple-600 rounded"><Hammer size={18}/></div>
                     <h3 className="text-xs font-bold uppercase text-gray-700">Desenvolvimento</h3>
                 </div>
-                <div className="flex flex-col justify-between h-20">
-                     <p className="text-[10px] text-gray-500 leading-relaxed">Projetos especiais e protótipos em andamento.</p>
-                     <div>
-                          <p className="text-xl font-bold text-gray-900">{formatCurrency(summary.totalDev)}</p>
-                          <p className="text-[9px] text-purple-600 font-bold uppercase mt-1">Valor em Projetos</p>
-                     </div>
+                <div className="space-y-2">
+                    <div className="flex justify-between items-end">
+                        <span className="text-[10px] text-gray-500 font-medium">Pendentes</span>
+                        <span className="text-sm font-bold text-gray-900">{summary.devAberto}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-purple-500 h-full rounded-full transition-all duration-500" 
+                          style={{width: `${summary.countDev > 0 ? (summary.devAberto / summary.countDev) * 100 : 0}%`}}
+                        ></div>
+                    </div>
                 </div>
             </div>
 
@@ -289,16 +302,16 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         </div>
 
         {/* Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-80">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-auto lg:h-80">
             
             {/* Gráfico de Tendência */}
-            <div className="lg:col-span-2 bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col">
-                <h3 className="text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2">
+            <div className="lg:col-span-2 bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col h-64 lg:h-full">
+                <h3 className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2">
                     <ArrowUpRight size={16} className="text-gray-400"/> Tendência de Vendas vs Orçamentos (6 Meses)
                 </h3>
                 <div className="flex-1 w-full min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
@@ -310,10 +323,10 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} />
-                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#9ca3af'}} tickFormatter={(val) => `R$ ${val/1000}k`} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#9ca3af'}} />
+                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#9ca3af'}} tickFormatter={(val) => `R$ ${val/1000}k`} />
                             <RechartsTooltip 
-                                contentStyle={{backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #e5e7eb', fontSize: '11px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                                contentStyle={{backgroundColor: '#fff', borderRadius: '4px', border: '1px solid #e5e7eb', fontSize: '10px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
                                 formatter={(value: number) => formatCurrency(value)}
                             />
                             <Area type="monotone" dataKey="Orcamentos" stroke="#3b82f6" fillOpacity={1} fill="url(#colorOrc)" strokeWidth={2} name="Orçamentos" />
@@ -324,8 +337,8 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
             </div>
 
             {/* Gráfico de Status */}
-            <div className="bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col">
-                <h3 className="text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2">
+            <div className="bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col h-64 lg:h-full">
+                <h3 className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2">
                     <PieChart size={16} className="text-gray-400"/> Distribuição de Pedidos
                 </h3>
                 <div className="flex-1 w-full min-h-0 relative">
@@ -335,8 +348,8 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                                 data={statusData}
                                 cx="50%"
                                 cy="50%"
-                                innerRadius={60}
-                                outerRadius={80}
+                                innerRadius={50}
+                                outerRadius={70}
                                 paddingAngle={5}
                                 dataKey="value"
                             >
@@ -344,22 +357,22 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                             </Pie>
-                            <RechartsTooltip contentStyle={{fontSize: '11px', borderRadius: '4px'}} />
+                            <RechartsTooltip contentStyle={{fontSize: '10px', borderRadius: '4px'}} />
                         </RePieChart>
                     </ResponsiveContainer>
                     {/* Centro do Donut */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center">
-                            <p className="text-2xl font-black text-gray-900">{summary.countOrders}</p>
-                            <p className="text-[9px] uppercase font-bold text-gray-400">Total</p>
+                            <p className="text-xl font-black text-gray-900">{summary.countOrders}</p>
+                            <p className="text-[8px] uppercase font-bold text-gray-400">Total</p>
                         </div>
                     </div>
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1">
                     {statusData.map((entry, index) => (
                         <div key={index} className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full" style={{backgroundColor: COLORS[index % COLORS.length]}}></div>
-                            <p className="text-[9px] font-bold text-gray-500 uppercase truncate" title={entry.name}>{entry.name}</p>
+                            <div className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: COLORS[index % COLORS.length]}}></div>
+                            <p className="text-[8px] font-bold text-gray-500 uppercase truncate" title={entry.name}>{entry.name}</p>
                         </div>
                     ))}
                 </div>

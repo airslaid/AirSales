@@ -9,6 +9,7 @@ interface AIInsightsModalProps {
   insights: string | null;
   onGenerate: () => void;
   contextName: string;
+  isLocalIA?: boolean;
 }
 
 export const AIInsightsModal: React.FC<AIInsightsModalProps> = ({
@@ -17,7 +18,8 @@ export const AIInsightsModal: React.FC<AIInsightsModalProps> = ({
   isLoading,
   insights,
   onGenerate,
-  contextName
+  contextName,
+  isLocalIA = false
 }) => {
   if (!isOpen) return null;
 
@@ -112,6 +114,13 @@ export const AIInsightsModal: React.FC<AIInsightsModalProps> = ({
             </div>
           )}
         </div>
+        {isLocalIA && (
+          <div className="p-4 bg-amber-50 border-t border-amber-200 text-center shrink-0">
+            <p className="text-[9px] text-amber-700 font-bold uppercase tracking-widest">
+              ⚠️ ATENÇÃO: Você está usando IA local. Isso pode consumir muitos recursos do seu computador. Feche outras aplicações se o desempenho cair.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

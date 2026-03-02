@@ -18,7 +18,7 @@ import autoTable from 'jspdf-autotable';
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
 import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale, deleteAllSales } from './services/supabaseService';
-import { generateSalesInsights } from './services/aiService';
+import { generateSalesInsights, isUsingLocalAI } from './services/aiService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
 import { AIInsightsModal } from './components/AIInsightsModal';
@@ -229,7 +229,7 @@ export default function App() {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>({ key: 'PED_DT_EMISSAO', direction: 'desc' });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [filtersExpanded, setFiltersExpanded] = useState(window.innerWidth > 768);
 
   const getSharedLayoutKey = () => `airsales_global_layout_v3_${currentUser?.email}`;
 
@@ -278,12 +278,22 @@ export default function App() {
       const tableName = activeModule?.table || 'PEDIDOS_DETALHADOS';
       const repCode = currentUser?.is_admin ? undefined : currentUser?.rep_in_codigo;
       
-      let filterToUse = activeModuleId;
-      if (activeModuleId === 'CRM') filterToUse = ''; 
-      if (activeModuleId === 'OVERVIEW') filterToUse = ''; // Traz tudo para o overview
-      if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD';
-      
-      const data = await fetchData('supabase', "", tableName, filterToUse);
+      let data: Sale[] = [];
+      if (activeModuleId === 'OVERVIEW') {
+        // Para o Overview, buscamos as 3 séries principais separadamente para garantir que o limite de 2000 
+        // não exclua dados importantes de uma série por excesso de outra (ex: muitos orçamentos escondendo pedidos faturados)
+        const [pd, ov, dv] = await Promise.all([
+          fetchData('supabase', "", tableName, 'PD'),
+          fetchData('supabase', "", tableName, 'OV'),
+          fetchData('supabase', "", tableName, 'DV')
+        ]);
+        data = [...pd, ...ov, ...dv];
+      } else {
+        let filterToUse = activeModuleId;
+        if (activeModuleId === 'CRM') filterToUse = ''; 
+        if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD';
+        data = await fetchData('supabase', "", tableName, filterToUse);
+      }
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
       setSalesData(filtered);
       if (activeModuleId !== 'PERFORMANCE' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'CRM' && activeModuleId !== 'OVERVIEW') { generateColumns(filtered); }
@@ -591,7 +601,17 @@ export default function App() {
   };
 
   const availableReps = useMemo(() => { if (currentUser && !currentUser?.is_admin && currentUser?.rep_in_codigo) return fullRepsList.filter(r => r.code === currentUser.rep_in_codigo); return fullRepsList; }, [fullRepsList, currentUser]);
-  const availableStatuses = useMemo(() => { const set = new Set<string>(); salesData.forEach(s => { const status = String(s.PED_ST_STATUS || s.SITUACAO || ''); if (status) set.add(status.toUpperCase()); }); return Array.from(set).sort(); }, [salesData]);
+  const availableStatuses = useMemo(() => { 
+    const set = new Set<string>(); 
+    salesData.forEach(s => { 
+      const status = String(s.PED_ST_STATUS || s.SITUACAO || '').toUpperCase(); 
+      if (status) {
+        if (activeModuleId === 'OV' && status === 'ENCERRADO') return;
+        set.add(status);
+      }
+    }); 
+    return Array.from(set).sort(); 
+  }, [salesData, activeModuleId]);
   const availableFiliais = useMemo(() => { const set = new Set<string>(); salesData.forEach(s => { const filial = String(s.FILIAL_NOME || ''); if (filial) set.add(filial.toUpperCase()); }); return Array.from(set).sort(); }, [salesData]);
   const filteredGoals = useMemo(() => { let goals = [...salesGoals]; if (newGoal.rep_in_codigo !== 0 && !editingGoalId) goals = goals.filter(g => g.rep_in_codigo === newGoal.rep_in_codigo); return goals.sort((a, b) => (a.ano !== b.ano ? a.ano - b.ano : a.mes - b.mes)); }, [salesGoals, newGoal.rep_in_codigo, editingGoalId]);
   const totalGoalsFiltered = useMemo(() => filteredGoals.reduce((acc, curr) => acc + curr.valor_meta, 0), [filteredGoals]);
@@ -603,6 +623,10 @@ export default function App() {
     // As outras views já têm seus filtros no fetch ou aqui
     if (activeModuleId === 'PD') {
         result = result.filter(item => Number(item.FIL_IN_CODIGO) !== 900);
+    }
+
+    if (activeModuleId === 'OV') {
+        result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() !== 'ENCERRADO');
     }
     
     if (activeModuleId === 'CRM') {
@@ -629,43 +653,125 @@ export default function App() {
 
   const commissionData = useMemo(() => {
     const monthlyMetrics = new Map<string, number>();
-    salesData.forEach(sale => { const dt = sale['PED_DT_EMISSAO']; if (!dt) return; const d = new Date(dt); const year = d.getFullYear(); const month = d.getMonth() + 1; const repCode = Number(sale['REP_IN_CODIGO']); const val = parseBrNumber(sale['ITP_RE_VALORMERCADORIA']); const globalKey = `${year}-${month}-GLOBAL`; monthlyMetrics.set(globalKey, (monthlyMetrics.get(globalKey) || 0) + val); if (repCode) { const repKey = `${year}-${month}-${repCode}`; monthlyMetrics.set(repKey, (monthlyMetrics.get(repKey) || 0) + val); } });
-    const getGoalContext = (emissionDateStr: string, repCode: number) => { if (!emissionDateStr) return { goal: 0, realized: 0, percent: 0 }; const d = new Date(emissionDateStr); const year = d.getFullYear(); const month = d.getMonth() + 1; if (activeCommissionRole === 'GERENTE') { const globalKey = `${year}-${month}-GLOBAL`; const realized = monthlyMetrics.get(globalKey) || 0; const goal = salesGoals.filter(g => g.ano === year && g.mes === month).reduce((acc, curr) => acc + curr.valor_meta, 0); return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; } else { const repKey = `${year}-${month}-${repCode}`; const realized = monthlyMetrics.get(repKey) || 0; const goalObj = salesGoals.find(g => g.ano === year && g.mes === month && g.rep_in_codigo === repCode); const goal = goalObj?.valor_meta || 0; return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; } };
-    const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
+    salesData.forEach(sale => { 
+      const dt = sale['PED_DT_EMISSAO']; 
+      if (!dt) return; 
+      const d = new Date(dt); 
+      const year = d.getFullYear(); 
+      const month = d.getMonth() + 1; 
+      const repCode = Number(sale['REP_IN_CODIGO']); 
+      const val = parseBrNumber(sale['ITP_RE_VALORMERCADORIA']); 
+      const globalKey = `${year}-${month}-GLOBAL`; 
+      monthlyMetrics.set(globalKey, (monthlyMetrics.get(globalKey) || 0) + val); 
+      if (repCode) { 
+        const repKey = `${year}-${month}-${repCode}`; 
+        monthlyMetrics.set(repKey, (monthlyMetrics.get(repKey) || 0) + val); 
+      } 
+    });
+
+    // DETERMINA O PAPEL PARA CÁLCULO: Se for Visão Geral, fixa em VENDEDOR (Representante)
+    const roleToUse = activeModuleId === 'OVERVIEW' ? 'VENDEDOR' : activeCommissionRole;
+
+    const getGoalContext = (emissionDateStr: string, repCode: number, role: string) => { 
+      if (!emissionDateStr) return { goal: 0, realized: 0, percent: 0 }; 
+      const d = new Date(emissionDateStr); 
+      const year = d.getFullYear(); 
+      const month = d.getMonth() + 1; 
+      if (role === 'GERENTE') { 
+        const globalKey = `${year}-${month}-GLOBAL`; 
+        const realized = monthlyMetrics.get(globalKey) || 0; 
+        const goal = salesGoals.filter(g => g.ano === year && g.mes === month).reduce((acc, curr) => acc + curr.valor_meta, 0); 
+        return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; 
+      } else { 
+        const repKey = `${year}-${month}-${repCode}`; 
+        const realized = monthlyMetrics.get(repKey) || 0; 
+        const goalObj = salesGoals.find(g => g.ano === year && g.mes === month && g.rep_in_codigo === repCode); 
+        const goal = goalObj?.valor_meta || 0; 
+        return { goal, realized, percent: goal > 0 ? realized / goal : 0 }; 
+      } 
+    };
+
+    const isPaymentModule = activeModuleId === 'PAGAMENTOS'; 
+    const isCommissionModule = activeModuleId === 'COMISSAO';
     
-    // Para Overview e outras telas que não sejam comissão, calculamos o básico sem filtros de viewMode restritivos
-    // Mas usamos processedData para respeitar filtros globais se necessário
-    let dataToUse = processedData;
+    let filteredByMode: Sale[] = [];
     
-    // Se for especificamente modulo de comissão, aplicamos filtro Faturado/Aberto
-    // ANTERIORMENTE: Forçava salesData bruto, ignorando filtros de data.
-    // AGORA: Usa processedData para respeitar o filtro de data (Faturamento ou Emissão) definido no useMemo do processedData.
     if (activeModuleId === 'OVERVIEW') {
-         // No Overview, queremos que os cards de comissão respeitem o filtro de data do Overview (que usa PED_DT_EMISSAO)
-         // Então processedData é adequado.
-         dataToUse = processedData;
+        // Na Visão Geral, a comissão deve ser filtrada pela DATA DE FATURAMENTO (NOT_DT_EMISSAO)
+        // usando o mesmo período que o usuário selecionou no filtro global.
+        // Importante: Filtramos apenas PD e DV para bater com a aba de comissões.
+        filteredByMode = salesData.filter(item => {
+            const isCommissionable = item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV';
+            if (!isCommissionable) return false;
+
+            const billingDate = item.NOT_DT_EMISSAO || '';
+            const isNotCanceled = !String(item.PED_ST_STATUS || '').includes('CANCEL');
+            const hasInvoice = !!item.NOT_DT_EMISSAO || String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO');
+            const inDateRange = (!filters.startDate || billingDate >= filters.startDate) && 
+                                (!filters.endDate || billingDate <= filters.endDate);
+            const repMatch = filters.representante ? String(item.REP_IN_CODIGO) === filters.representante : true;
+            
+            return isNotCanceled && hasInvoice && inDateRange && repMatch;
+        });
+    } else {
+        // Lógica normal para os módulos de comissão/pagamento (usa processedData que já tem filtro de data)
+        filteredByMode = processedData.filter(item => { 
+            const status = String(item.PED_ST_STATUS || '').toUpperCase(); 
+            const hasInvoice = !!item.NOT_DT_EMISSAO; 
+            if (isPaymentModule) { 
+                if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice; 
+                return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+            } 
+            if (commissionViewMode === 'FATURADO') { 
+                return status.includes('FATURADO') || hasInvoice; 
+            } 
+            return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+        });
+    }
+    
+    if ((isCommissionModule || isPaymentModule) && filterOnlyManual) { 
+      filteredByMode = filteredByMode.filter(item => Number(item.FIL_IN_CODIGO) === 900); 
     }
 
-    let filteredByMode = dataToUse.filter(item => { 
-        // No overview queremos calcular tudo, então não filtramos muito aqui,
-        // mas a lógica abaixo é específica da tela de comissão.
-        // Se for Overview, passamos tudo que não é cancelado.
-        if (activeModuleId === 'OVERVIEW') return !String(item.PED_ST_STATUS || '').includes('CANCEL');
+    return filteredByMode.map(item => { 
+      const valMercadoria = parseBrNumber(item['ITP_RE_VALORMERCADORIA']); 
+      const repCode = Number(item['REP_IN_CODIGO']); 
+      const emissionDate = item['PED_DT_EMISSAO']; 
+      let percentual = 0; 
+      let atingimentoMeta = 0; 
+      
+      if (String(item.PED_ST_STATUS).toUpperCase().includes('CANCEL')) { 
+        return { ...item, PERCENTUAL_COMISSAO: 0, VALOR_COMISSAO: 0, ATINGIMENTO_META_ORIGEM: 0 }; 
+      } 
 
-        const status = String(item.PED_ST_STATUS || '').toUpperCase(); 
-        const hasInvoice = !!item.NOT_DT_EMISSAO; 
-        if (isPaymentModule) { 
-            if (commissionViewMode === 'FATURADO') return status.includes('FATURADO') || hasInvoice; 
-            return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+      if (roleToUse === 'ASSISTENTE') { 
+        percentual = 0.0005; 
+      } else { 
+        const { percent } = getGoalContext(emissionDate, repCode, roleToUse); 
+        atingimentoMeta = percent; 
+        if (roleToUse === 'GERENTE') { 
+          percentual = percent <= 0.85 ? 0.0035 : 0.0050; 
+        } else if (roleToUse === 'SUPERVISOR' || roleToUse === 'POSVENDA') { 
+          percentual = percent <= 0.85 ? 0.0015 : 0.0025; 
+        } else if (roleToUse === 'VENDEDOR') { 
+          if (percent <= 0.65) percentual = 0.01; 
+          else if (percent <= 0.85) percentual = 0.015; 
+          else percentual = 0.02; 
         } 
-        if (commissionViewMode === 'FATURADO') { 
-            return status.includes('FATURADO') || hasInvoice; 
-        } 
-        return !status.includes('FATURADO') && !hasInvoice && !status.includes('CANCEL'); 
+      } 
+
+      const valorComissao = valMercadoria * percentual; 
+      const rolePaymentKey = `PAGO_${roleToUse}`; 
+      const isPaid = !!item[rolePaymentKey]; 
+      
+      return { 
+        ...item, 
+        PERCENTUAL_COMISSAO: percentual, 
+        VALOR_COMISSAO: valorComissao, 
+        ATINGIMENTO_META_ORIGEM: atingimentoMeta, 
+        COMISSAO_PAGA: isPaid 
+      }; 
     });
-    
-    if ((isCommissionModule || isPaymentModule) && filterOnlyManual) { filteredByMode = filteredByMode.filter(item => Number(item.FIL_IN_CODIGO) === 900); }
-    return filteredByMode.map(item => { const valMercadoria = parseBrNumber(item['ITP_RE_VALORMERCADORIA']); const repCode = Number(item['REP_IN_CODIGO']); const emissionDate = item['PED_DT_EMISSAO']; let percentual = 0; let atingimentoMeta = 0; if (String(item.PED_ST_STATUS).toUpperCase().includes('CANCEL')) { return { ...item, PERCENTUAL_COMISSAO: 0, VALOR_COMISSAO: 0, ATINGIMENTO_META_ORIGEM: 0 }; } if (activeCommissionRole === 'ASSISTENTE') { percentual = 0.0005; } else { const { percent } = getGoalContext(emissionDate, repCode); atingimentoMeta = percent; if (activeCommissionRole === 'GERENTE') { percentual = percent <= 0.85 ? 0.0035 : 0.0050; } else if (activeCommissionRole === 'SUPERVISOR' || activeCommissionRole === 'POSVENDA') { percentual = percent <= 0.85 ? 0.0015 : 0.0025; } else if (activeCommissionRole === 'VENDEDOR') { if (percent <= 0.65) percentual = 0.01; else if (percent <= 0.85) percentual = 0.015; else percentual = 0.02; } } const valorComissao = valMercadoria * percentual; const rolePaymentKey = `PAGO_${activeCommissionRole}`; const isPaid = !!item[rolePaymentKey]; return { ...item, PERCENTUAL_COMISSAO: percentual, VALOR_COMISSAO: valorComissao, ATINGIMENTO_META_ORIGEM: atingimentoMeta, COMISSAO_PAGA: isPaid }; });
   }, [processedData, activeCommissionRole, commissionViewMode, salesGoals, salesData, activeModuleId, filterOnlyManual]);
 
   const commissionColumns = useMemo<ColumnConfig[]>(() => {
@@ -688,12 +794,37 @@ export default function App() {
   }, [activeCommissionRole, activeModuleId]);
 
   const metrics = useMemo(() => {
-    let total = 0, faturado = 0, emAprovacao = 0, emAberto = 0;
+    let total = 0, faturado = 0, emAprovacao = 0, emAberto = 0, realizedTotal = 0;
     const sourceData = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
-    sourceData.forEach(d => { const v = parseBrNumber(d['ITP_RE_VALORMERCADORIA'] || 0); const s = String(d.PED_ST_STATUS || '').toLowerCase(); const hasInvoice = (d['NOT_DT_EMISSAO'] && d['NOT_DT_EMISSAO'] !== '') || (d['NF_NOT_IN_CODIGO'] && Number(d['NF_NOT_IN_CODIGO']) > 0); total += v; if (s.includes('faturado') || hasInvoice) { faturado += v; } if (s.includes('aprov')) emAprovacao += v; if (s.includes('aberto') && !hasInvoice && !s.includes('faturado')) { emAberto += v; } });
-    let currentGoalValue = 0; if (filters.startDate && filters.endDate) { const [startYear, startMonth] = filters.startDate.split('-').map(Number); const [endYear, endMonth] = filters.endDate.split('-').map(Number); const startAbs = startYear * 12 + startMonth; const endAbs = endYear * 12 + endMonth; const targetGoals = salesGoals.filter(g => { const goalAbs = g.ano * 12 + g.mes; const inRange = goalAbs >= startAbs && goalAbs <= endAbs; const repMatch = filters.representante ? String(g.rep_in_codigo) === filters.representante : true; return inRange && repMatch; }); currentGoalValue = targetGoals.reduce((acc, curr) => acc + curr.valor_meta, 0); }
-    const achievement = currentGoalValue > 0 ? (total / currentGoalValue) * 100 : 0; const uniqueOrders = new Set(sourceData.map(d => `${d.FIL_IN_CODIGO}-${d.SER_ST_CODIGO}-${d.PED_IN_CODIGO}`)).size;
-    return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement };
+    sourceData.forEach(d => { 
+      const v = parseBrNumber(d['ITP_RE_VALORMERCADORIA'] || 0); 
+      const s = String(d.PED_ST_STATUS || '').toLowerCase(); 
+      const hasInvoice = (d['NOT_DT_EMISSAO'] && d['NOT_DT_EMISSAO'] !== '') || (d['NF_NOT_IN_CODIGO'] && Number(d['NF_NOT_IN_CODIGO']) > 0); 
+      total += v; 
+      if (d.SER_ST_CODIGO === 'PD') {
+        realizedTotal += v;
+      }
+      if (s.includes('faturado') || hasInvoice) { faturado += v; } 
+      if (s.includes('aprov')) emAprovacao += v; 
+      if (s.includes('aberto') && !hasInvoice && !s.includes('faturado')) { emAberto += v; } 
+    });
+    let currentGoalValue = 0; 
+    if (filters.startDate && filters.endDate) { 
+      const [startYear, startMonth] = filters.startDate.split('-').map(Number); 
+      const [endYear, endMonth] = filters.endDate.split('-').map(Number); 
+      const startAbs = startYear * 12 + startMonth; 
+      const endAbs = endYear * 12 + endMonth; 
+      const targetGoals = salesGoals.filter(g => { 
+        const goalAbs = g.ano * 12 + g.mes; 
+        const inRange = goalAbs >= startAbs && goalAbs <= endAbs; 
+        const repMatch = filters.representante ? String(g.rep_in_codigo) === filters.representante : true; 
+        return inRange && repMatch; 
+      }); 
+      currentGoalValue = targetGoals.reduce((acc, curr) => acc + curr.valor_meta, 0); 
+    }
+    const achievement = currentGoalValue > 0 ? (realizedTotal / currentGoalValue) * 100 : 0; 
+    const uniqueOrders = new Set(sourceData.map(d => `${d.FIL_IN_CODIGO}-${d.SER_ST_CODIGO}-${d.PED_IN_CODIGO}`)).size;
+    return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement, realizedTotal };
   }, [processedData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
 
   const paymentMetrics = useMemo(() => {
@@ -703,7 +834,12 @@ export default function App() {
   }, [commissionData, activeModuleId]);
 
   const performanceData = useMemo(() => {
-      const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); const relevantSales = salesData.filter(s => { if (!s.PED_DT_EMISSAO) return false; const dt = new Date(s.PED_DT_EMISSAO); return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth; });
+      const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); 
+      const relevantSales = salesData.filter(s => { 
+          if (!s.PED_DT_EMISSAO) return false; 
+          const dt = new Date(s.PED_DT_EMISSAO); 
+          return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth && s.SER_ST_CODIGO === 'PD'; 
+      });
       const repMap = new Map(); relevantGoals.forEach(g => { const current = repMap.get(g.rep_in_codigo) || { name: g.rep_nome, goal: 0, realized: 0 }; current.goal += g.valor_meta; current.name = g.rep_nome; repMap.set(g.rep_in_codigo, current); });
       relevantSales.forEach(s => { const code = Number(s.REP_IN_CODIGO); if (!code) return; const val = parseBrNumber(s['ITP_RE_VALORMERCADORIA'] || 0); const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 }; current.realized += val; if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME; repMap.set(code, current); });
       let result = Array.from(repMap.entries()).map(([code, data]) => ({ code, name: data.name || `Rep ${code}`, goal: data.goal, realized: data.realized, percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0 }));
@@ -773,6 +909,7 @@ export default function App() {
         insights={aiInsights}
         onGenerate={handleGenerateAIInsights}
         contextName={MODULES.find(m => m.id === activeModuleId)?.label || activeModuleId}
+        isLocalIA={isUsingLocalAI()}
       />
       {notification && ( 
         <div className={`fixed top-4 right-4 z-[150] bg-white border-l-4 shadow-xl p-4 rounded-r flex items-center gap-3 transition-all duration-300 transform translate-x-0 opacity-100 max-w-sm ${notification.type === 'success' ? 'border-green-600' : notification.type === 'warning' ? 'border-amber-500' : 'border-red-600'}`}> 
@@ -1087,7 +1224,7 @@ export default function App() {
               </div>
             </div>
           ) : activeModuleId === 'CRM' ? (
-             <CRMView data={processedData} salesData={salesData} onRefresh={loadData} />
+             <CRMView data={processedData} salesData={salesData} onRefresh={loadData} user={currentUser} />
           ) : activeModuleId === 'METAS' ? ( 
             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               {/* Conteúdo de Metas (Inalterado) */}
@@ -1201,13 +1338,13 @@ export default function App() {
                   </div> 
                 )} 
               </div> 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0"> 
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0"> 
                 {activeModuleId === 'PAGAMENTOS' ? ( <> <StatCard title="Total a Pagar (Pendente)" value={currencyFormat(paymentMetrics.toPay)} icon={AlertCircle} color="text-red-500" /> <StatCard title="Total Pago (Baixado)" value={currencyFormat(paymentMetrics.paid)} icon={CheckCircle2} color="text-green-600" /> <StatCard title="Projeção (Carteira)" value={currencyFormat(paymentMetrics.projected)} icon={Wallet} color="text-blue-500" /> </> ) : activeModuleId === 'COMISSAO' ? ( <> <StatCard title={commissionViewMode === 'FATURADO' ? "Total Gerado" : "Previsão Gerada"} value={currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} /> <StatCard title="Total Faturado (Venda)" value={currencyFormat(metrics.faturado)} icon={TrendingUp} color="text-blue-600" /> </> ) : ( <StatCard title="Total Bruto (Itens)" value={currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" /> )} 
                 {activeModuleId !== 'OV' && activeModuleId !== 'DV' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( 
                   <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors relative overflow-hidden group flex flex-col justify-between"> 
                     <div className="flex items-center justify-between mb-1"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">Meta</p><Target size={14} className="text-blue-500" /></div> 
                     <div className="flex items-end justify-between"><h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums">{currencyFormat(metrics.goal)}</h3>{metrics.goal > 0 && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${metrics.achievement >= 100 ? 'bg-green-100 text-green-700' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{metrics.achievement.toFixed(1)}%</span>)}</div> 
-                    {metrics.goal > 0 && (<div className="w-full h-1 bg-gray-100 mt-2 rounded-full overflow-hidden"><div className={`h-full ${metrics.achievement >= 100 ? 'bg-green-500' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`} style={{ width: `${Math.min(metrics.achievement, 100)}%` }}></div></div>)} 
+                    {metrics.goal > 0 && (<div className="w-full h-1 bg-gray-100 mt-2 rounded-full overflow-hidden"><div className={`h-full ${metrics.achievement >= 100 ? 'bg-green-500' : metrics.achievement >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(metrics.achievement, 100)}%` }}></div></div>)} 
                   </div> 
                 )} 
                 {activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( <> <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturado)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} /> <StatCard title="Aberto" value={currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" /> </> )} 

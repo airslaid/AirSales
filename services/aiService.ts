@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { Sale } from '../types';
 
 // Função robusta para obter a API Key em diferentes ambientes (Vite, Process, etc)
@@ -33,7 +33,7 @@ const LOCAL_LLM_CONFIG = {
 };
 
 // Função para verificar se deve usar LLM Local
-const shouldByPassGemini = () => {
+export const isUsingLocalAI = () => {
   const saved = localStorage.getItem('AIR_SALES_LLM_CONFIG');
   if (saved) {
     try {
@@ -55,8 +55,6 @@ const getLocalConfig = () => {
 };
 
 // Inicializa o cliente Gemini
-// Se a chave não existir, passamos uma string vazia para não quebrar a inicialização, 
-// mas validamos antes de chamar os métodos.
 const ai = new GoogleGenAI({ apiKey: API_KEY || 'MISSING_KEY' });
 
 const parseValue = (val: any) => {
@@ -73,46 +71,48 @@ const formatCurrency = (val: number) => {
 const buildDataContext = (salesData: Sale[], metrics: any) => {
     if (salesData.length === 0) return "Não há dados disponíveis no filtro atual.";
 
-    const totalVendas = salesData.reduce((acc, curr) => acc + parseValue(curr.ITP_RE_VALORMERCADORIA), 0);
+    let totalVendas = 0;
+    const clientesMap = new Map<string, number>();
+    const produtosMap = new Map<string, number>();
+    const statusMap = new Map<string, number>();
+
+    // Single pass for all metrics
+    for (const s of salesData) {
+        const val = parseValue(s.ITP_RE_VALORMERCADORIA);
+        totalVendas += val;
+
+        // Clientes
+        const clienteNome = s.CLIENTE_NOME || 'DESCONHECIDO';
+        clientesMap.set(clienteNome, (clientesMap.get(clienteNome) || 0) + val);
+
+        // Produtos
+        const codigo = s.PRO_ST_ALTERNATIVO || s.PRO_IN_CODIGO || '?';
+        const desc = s.ITP_ST_DESCRICAO || 'ITEM';
+        const productLabel = `[Cód: ${codigo}] ${desc}`;
+        produtosMap.set(productLabel, (produtosMap.get(productLabel) || 0) + val);
+
+        // Status
+        const st = s.PED_ST_STATUS || 'OUTROS';
+        statusMap.set(st, (statusMap.get(st) || 0) + 1);
+    }
+
     const ticketMedio = totalVendas / salesData.length;
 
     // Top Clientes
-    const clientesMap = new Map<string, number>();
-    salesData.forEach(s => {
-      const nome = s.CLIENTE_NOME || 'DESCONHECIDO';
-      const val = parseValue(s.ITP_RE_VALORMERCADORIA);
-      clientesMap.set(nome, (clientesMap.get(nome) || 0) + val);
-    });
     const topClientes = Array.from(clientesMap.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 15) 
+      .slice(0, metrics.useLocal ? 5 : 10) // Reduzido para IA Local
       .map(([nome, val]) => `${nome} (${formatCurrency(val)})`)
       .join(', ');
 
-    // Top Produtos (AGORA COM CÓDIGO)
-    const produtosMap = new Map<string, number>();
-    salesData.forEach(s => {
-      const codigo = s.PRO_ST_ALTERNATIVO || s.PRO_IN_CODIGO || '?';
-      const desc = s.ITP_ST_DESCRICAO || 'ITEM';
-      // Cria uma chave composta para garantir que a IA veja o código
-      const label = `[Cód: ${codigo}] ${desc}`;
-      
-      const val = parseValue(s.ITP_RE_VALORMERCADORIA);
-      produtosMap.set(label, (produtosMap.get(label) || 0) + val);
-    });
-    
+    // Top Produtos
     const topProdutos = Array.from(produtosMap.entries())
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 15) // Aumentei para 15 para dar mais contexto
+      .slice(0, metrics.useLocal ? 5 : 10) // Reduzido para IA Local
       .map(([nome, val]) => `${nome} - Total: ${formatCurrency(val)}`)
-      .join('\n'); // Usando quebra de linha para ficar mais claro para a IA
+      .join('\n');
 
     // Status
-    const statusMap = new Map<string, number>();
-    salesData.forEach(s => {
-      const st = s.PED_ST_STATUS || 'OUTROS';
-      statusMap.set(st, (statusMap.get(st) || 0) + 1);
-    });
     const statusDist = Array.from(statusMap.entries())
       .map(([st, count]) => `${st}: ${count}`)
       .join(', ');
@@ -141,7 +141,7 @@ export const generateSalesInsights = async (
   context: string,
   metrics: any
 ): Promise<string> => {
-  const useLocal = shouldByPassGemini();
+  const useLocal = isUsingLocalAI();
   const localConfig = getLocalConfig();
 
   if (!useLocal && !API_KEY) {
@@ -149,7 +149,7 @@ export const generateSalesInsights = async (
   }
 
   try {
-    const dataContext = buildDataContext(salesData, metrics);
+    const dataContext = buildDataContext(salesData, { ...metrics, useLocal });
     
     const prompt = `
       Você é um Especialista Sênior em Inteligência de Vendas (Business Intelligence Analyst).
@@ -177,7 +177,7 @@ export const generateSalesInsights = async (
         body: JSON.stringify({
           model: localConfig.model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.4
+          temperature: 0.3 // Reduzido para ser mais determinístico e rápido
         })
       });
       const json = await response.json();
@@ -187,12 +187,16 @@ export const generateSalesInsights = async (
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: { temperature: 0.4 }
+      config: { 
+        temperature: 0.3,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } // Otimização de performance
+      }
     });
 
     return response.text || "Não foi possível gerar a análise no momento.";
 
   } catch (error: any) {
+    // ... (error handling remains the same)
     console.error("Erro na IA:", error);
     
     if (useLocal && (error.message?.includes('fetch') || error.name === 'TypeError' || error.message?.includes('NetworkError'))) {
@@ -218,7 +222,7 @@ export const chatWithSalesData = async (
   metrics: any,
   lastMessage: string
 ): Promise<string> => {
-  const useLocal = shouldByPassGemini();
+  const useLocal = isUsingLocalAI();
   const localConfig = getLocalConfig();
 
   if (!useLocal && !API_KEY) {
@@ -226,7 +230,7 @@ export const chatWithSalesData = async (
   }
 
   try {
-    const dataContext = buildDataContext(salesData, metrics);
+    const dataContext = buildDataContext(salesData, { ...metrics, useLocal });
 
     if (useLocal) {
       console.log("Chat Local - Enviando para:", localConfig.baseUrl);
