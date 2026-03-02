@@ -566,7 +566,24 @@ export default function App() {
     let tableData = processedData; let tableCols = salesColumns;
     if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') { tableData = commissionData; tableCols = commissionColumns; }
     const visibleCols = tableCols.filter(c => c.visible);
-    const dataToExport = tableData.map(row => { const newRow: Record<string, any> = {}; visibleCols.forEach(col => { if (col.key === 'CHECK_PAGAMENTO' || col.key === 'MANUAL_ACTIONS') return; newRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key]; }); return newRow; });
+    const dataToExport = tableData.map(row => { 
+      const newRow: Record<string, any> = {}; 
+      visibleCols.forEach(col => { 
+        if (col.key === 'CHECK_PAGAMENTO' || col.key === 'MANUAL_ACTIONS') return; 
+        
+        // Check if the column uses a numeric formatter
+        const isNumeric = col.format === currencyFormat || col.format === numberFormat || col.format === percentFormat;
+        
+        if (isNumeric) {
+          // Export raw number for Excel summation
+          newRow[col.label] = parseBrNumber(row[col.key]);
+        } else {
+          // Export formatted string for other types
+          newRow[col.label] = col.format ? col.format(row[col.key]) : row[col.key]; 
+        }
+      }); 
+      return newRow; 
+    });
     const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(dataToExport); const wscols = visibleCols.filter(c => c.key !== 'CHECK_PAGAMENTO' && c.key !== 'MANUAL_ACTIONS').map(() => ({ wch: 20 })); ws['!cols'] = wscols;
     XLSX.utils.book_append_sheet(wb, ws, `Relatório ${MODULES.find(m => m.id === activeModuleId)?.label}`); XLSX.writeFile(wb, `AirSales_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
@@ -756,9 +773,15 @@ export default function App() {
         } else if (roleToUse === 'SUPERVISOR' || roleToUse === 'POSVENDA') { 
           percentual = percent <= 0.85 ? 0.0015 : 0.0025; 
         } else if (roleToUse === 'VENDEDOR') { 
-          if (percent <= 0.65) percentual = 0.01; 
-          else if (percent <= 0.85) percentual = 0.015; 
-          else percentual = 0.02; 
+          // Regra específica para AIR SLAID: Fixo 1%
+          const repName = String(item.REPRESENTANTE_NOME || '').toUpperCase();
+          if (repName.includes('AIR SLAID') || repName.includes('AIRSLAID')) {
+             percentual = 0.01;
+          } else {
+             if (percent <= 0.65) percentual = 0.01; 
+             else if (percent <= 0.85) percentual = 0.015; 
+             else percentual = 0.02; 
+          }
         } 
       } 
 
