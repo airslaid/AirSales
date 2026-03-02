@@ -29,11 +29,18 @@ import {
 } from 'lucide-react';
 import { AIInsightsModal } from './AIInsightsModal';
 
+export interface CRMExternalAction {
+  type: 'OPEN_TASK' | 'OPEN_APPOINTMENT';
+  id: string;
+}
+
 interface CRMViewProps {
   data: Sale[];
   salesData: Sale[]; // Dados completos para histórico
   onRefresh?: () => Promise<void>;
   user: AppUser | null;
+  externalAction?: CRMExternalAction | null;
+  onExternalActionHandled?: () => void;
 }
 
 interface PipelineItem extends Sale {
@@ -91,7 +98,7 @@ const getDaysRemaining = (dueDate?: string) => {
   return diffDays;
 };
 
-export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onRefresh, user }) => {
+export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onRefresh, user, externalAction, onExternalActionHandled }) => {
   const [activeTab, setActiveTab] = useState<CRMTab>('COCKPIT');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState<ClientWalletItem | null>(null);
@@ -189,6 +196,50 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
     const users = await fetchAppUsers();
     setAllUsers(users);
   };
+
+  // Handle External Actions (Notifications)
+  useEffect(() => {
+    if (externalAction) {
+      if (externalAction.type === 'OPEN_TASK') {
+        setActiveTab('TAREFAS');
+        loadTasks().then(() => {
+             fetchCRMTasks().then(allTasks => {
+                 const task = allTasks.find(t => t.id === externalAction.id);
+                 if (task) {
+                     setEditingTask(task);
+                     setNewTask({
+                         title: task.title,
+                         description: task.description,
+                         client_id: task.client_id,
+                         client_name: task.client_name,
+                         rep_in_codigo: task.rep_in_codigo,
+                         priority: task.priority,
+                         status: task.status,
+                         due_date: task.due_date
+                     });
+                     setShowTaskModal(true);
+                 }
+             });
+        });
+      } else if (externalAction.type === 'OPEN_APPOINTMENT') {
+        setActiveTab('AGENDA');
+        loadAppointments().then(() => {
+            fetchCRMAppointments().then(allAppts => {
+                const appt = allAppts.find(a => a.id === externalAction.id);
+                if (appt) {
+                    setEditingEvent(appt);
+                    setNewEvent(appt);
+                    setShowEventModal(true);
+                }
+            });
+        });
+      }
+      
+      if (onExternalActionHandled) {
+          onExternalActionHandled();
+      }
+    }
+  }, [externalAction]);
 
   const handleSaveTask = async () => {
     if (!newTask.title || !newTask.rep_in_codigo) {

@@ -23,8 +23,9 @@ import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
 import { AIInsightsModal } from './components/AIInsightsModal';
 import { AIChatView } from './components/AIChatView';
-import { CRMView } from './components/CRMView';
+import { CRMView, CRMExternalAction } from './components/CRMView';
 import { OverviewPanel } from './components/OverviewPanel'; // Importação do novo componente
+import { NotificationsMenu } from './components/NotificationsMenu';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
 
@@ -142,6 +143,7 @@ export default function App() {
   
   const [showXmlModal, setShowXmlModal] = useState(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<Sale | null>(null);
+  const [crmExternalAction, setCrmExternalAction] = useState<CRMExternalAction | null>(null);
   
   // Local LLM States
   const [llmConfig, setLlmConfig] = useState(() => {
@@ -1063,6 +1065,13 @@ export default function App() {
             <h2 className="text-[10px] font-bold uppercase tracking-widest truncate">{MODULES.find(m => m.id === activeModuleId)?.label}</h2> 
           </div> 
           <div className="flex items-center gap-2">
+            <NotificationsMenu 
+                currentUser={currentUser} 
+                onNotificationClick={(type, id) => {
+                  setActiveModuleId('CRM');
+                  setCrmExternalAction({ type: type === 'TASK' ? 'OPEN_TASK' : 'OPEN_APPOINTMENT', id });
+                }} 
+             />
             {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && activeModuleId !== 'IA_CHAT' && activeModuleId !== 'CRM' && activeModuleId !== 'OVERVIEW' && (
               <>
                  <button onClick={handleGenerateAIInsights} className="px-3 py-1.5 bg-gradient-to-r from-amber-200 to-amber-400 text-amber-900 text-[9px] font-bold uppercase tracking-widest hover:brightness-105 flex items-center gap-2 transition-all active:scale-95 shadow-lg border border-amber-300">
@@ -1224,7 +1233,14 @@ export default function App() {
               </div>
             </div>
           ) : activeModuleId === 'CRM' ? (
-             <CRMView data={processedData} salesData={salesData} onRefresh={loadData} user={currentUser} />
+             <CRMView 
+                data={processedData} 
+                salesData={salesData} 
+                onRefresh={loadData} 
+                user={currentUser} 
+                externalAction={crmExternalAction}
+                onExternalActionHandled={() => setCrmExternalAction(null)}
+             />
           ) : activeModuleId === 'METAS' ? ( 
             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               {/* Conteúdo de Metas (Inalterado) */}
