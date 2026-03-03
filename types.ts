@@ -84,6 +84,81 @@ export interface CRMTask {
   priority: 'BAIXA' | 'MEDIA' | 'ALTA';
 }
 
+export interface VisitReport {
+  id: string;
+  type: string; // 'Filtro Prensa' default
+  solicitante: string;
+  data_visita: string;
+  created_at: string;
+  rep_in_codigo: number;
+  
+  // Dados do Cliente
+  cliente_nome: string;
+  cnpj?: string;
+  cidade?: string;
+  estado?: string;
+  transportadora?: string;
+  
+  // Contatos
+  contato_tecnico_nome?: string;
+  contato_tecnico_depto?: string;
+  contato_tecnico_email?: string;
+  contato_tecnico_fone?: string;
+  
+  contato_comprador_nome?: string;
+  contato_comprador_email?: string;
+  contato_comprador_fone?: string;
+  
+  contato_gerente_nome?: string;
+  contato_gerente_email?: string;
+  contato_gerente_fone?: string;
+  
+  contato_coordenador_nome?: string;
+  contato_coordenador_email?: string;
+  contato_coordenador_fone?: string;
+  
+  contato_engenheiro_nome?: string;
+  contato_engenheiro_email?: string;
+  contato_engenheiro_fone?: string;
+
+  // Dados do Equipamento
+  marca_fabricante?: string;
+  material_placas?: string;
+  temperatura?: string;
+  equipamento?: string;
+  dimensoes?: string;
+  ph_agua_lavagem?: string;
+  qtde_placas?: string;
+  ph?: string;
+  produto_filtrar?: string;
+  tempo_secagem?: string;
+  percent_solidos?: string;
+  tempo_filtracao?: string;
+  tipo_abertura?: string;
+  tipo_limpeza?: string;
+  tipo_bomba?: string;
+  qtde_setores?: string;
+  pressao_sopro?: string;
+  umidade_torta?: string;
+  pressao_filtracao?: string;
+  aux_filtracao?: string;
+
+  // Outros
+  motivo_substituicao?: string;
+  tecido_atual?: string;
+  cfm?: string;
+  fornecedor_atual?: string;
+  vida_util?: string;
+  data_ultima_compra?: string;
+  valor_pago?: string;
+  situacao_lonas?: string;
+  previsao_compra?: string;
+
+  observacoes?: string;
+  acoes?: string;
+  medidas_desenho?: Record<string, string>;
+}
+
 export interface ServicePrincipalConfig {
   tenantId: string;
   clientId: string;

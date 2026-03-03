@@ -8,7 +8,7 @@ import {
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
   Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
   FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, Handshake,
-  CheckSquare2, LayoutDashboard
+  CheckSquare2, LayoutDashboard, ClipboardList
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -25,6 +25,7 @@ import { AIInsightsModal } from './components/AIInsightsModal';
 import { AIChatView } from './components/AIChatView';
 import { CRMView, CRMExternalAction } from './components/CRMView';
 import { OverviewPanel } from './components/OverviewPanel'; // Importação do novo componente
+import { FormsView } from './components/FormsView';
 import { NotificationsMenu } from './components/NotificationsMenu';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
@@ -32,6 +33,7 @@ import { getServicePrincipalToken } from './services/authService';
 const MODULES = [
   { id: 'OVERVIEW', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: false },
   { id: 'CRM', label: 'CRM Operacional', icon: Handshake, adminOnly: false },
+  { id: 'FORMULARIOS', label: 'Formulários', icon: ClipboardList, adminOnly: false },
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
   { id: 'DV', label: 'Desenvolvimento', icon: Hammer, table: 'PEDIDOS_DETALHADOS' },
@@ -649,10 +651,8 @@ export default function App() {
     }
     
     if (activeModuleId === 'CRM') {
-       // Mantemos a lógica do CRM que usa pipeline via status, mas aqui filtramos apenas o que é "Budget/OV" 
-       // Se o CRM espera receber TUDO para montar o pipeline (inclusive PDs ganhos), removemos este filtro.
-       // Vou manter um filtro mais permissivo para o CRM:
-       // result = result; (Deixa passar tudo, o componente CRMView filtra)
+       // Filtra apenas Orçamentos (OV) para o CRM, ignorando Pedidos de Venda (PD)
+       result = result.filter(item => item.SER_ST_CODIGO === 'OV');
     }
 
     if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
@@ -660,10 +660,13 @@ export default function App() {
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
     const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') ? 'NOT_DT_EMISSAO' : 'PED_DT_EMISSAO';
     
-    if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
-    if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
+    // CRM tem seus próprios filtros internos de Data e Representante
+    if (activeModuleId !== 'CRM') {
+        if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
+        if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
+        if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
+    }
     
-    if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
     if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
     if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());
     if (sortConfig) { result.sort((a, b) => { let valA = a[sortConfig.key], valB = b[sortConfig.key]; if (sortConfig.key.includes('VALOR') || sortConfig.key.includes('VLMERCADORIA')) { valA = parseBrNumber(valA); valB = parseBrNumber(valB); } if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1; if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1; return 0; }); }
@@ -1264,6 +1267,8 @@ export default function App() {
                 externalAction={crmExternalAction}
                 onExternalActionHandled={() => setCrmExternalAction(null)}
              />
+          ) : activeModuleId === 'FORMULARIOS' ? (
+             <FormsView user={currentUser} />
           ) : activeModuleId === 'METAS' ? ( 
             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               {/* Conteúdo de Metas (Inalterado) */}

@@ -13,6 +13,8 @@ import {
 } from '../services/supabaseService';
 import { generateSalesInsights, isUsingLocalAI } from '../services/aiService';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, 
   PieChart as RePieChart, Pie, Cell, Legend, LabelList
@@ -383,7 +385,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
       // Lógica de Mapeamento de Status para Colunas
       if (statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO')) {
         cols.PERDIDO.items.push(order);
-      } else if (statusRaw.includes('FATURADO') || statusRaw.includes('GANHO') || statusRaw.includes('TOTAL') || statusRaw.includes('ENCERRADO')) {
+      } else if (statusRaw.includes('FATURADO') || statusRaw.includes('GANHO') || statusRaw.includes('TOTAL') || statusRaw.includes('ENCERRADO') || order.SER_ST_CODIGO === 'PD') {
         cols.GANHO.items.push(order);
       } else if (statusRaw.includes('NEGOCIACAO') || statusRaw.includes('NEGOCIAÇÃO')) {
         cols.NEGOCIACAO.items.push(order);
@@ -397,6 +399,135 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
 
     return cols;
   }, [data, pipelineFilters]);
+
+  const handleExportSummary = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(16);
+    doc.text('Resumo do Funil de Vendas', 14, 15);
+    
+    doc.setFontSize(10);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 22);
+    
+    // Filters Info
+    let filterText = 'Filtros: ';
+    if (pipelineFilters.rep) {
+        // @ts-ignore
+        const r = uniqueReps.find(u => u.id === pipelineFilters.rep);
+        filterText += `Rep: ${r?.name || 'Todos'} | `;
+    } else {
+        filterText += 'Rep: Todos | ';
+    }
+    
+    if (pipelineFilters.startDate && pipelineFilters.endDate) {
+        filterText += `Período: ${formatDate(pipelineFilters.startDate)} a ${formatDate(pipelineFilters.endDate)}`;
+    } else {
+        filterText += 'Período: Todo o histórico';
+    }
+    doc.text(filterText, 14, 28);
+
+    // Data Preparation
+    const summaryData = STAGES.map(stage => {
+        const items = pipelineColumns[stage.id].items;
+        const count = items.length;
+        const value = items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
+        return {
+            id: stage.id,
+            stage: stage.label,
+            count,
+            value
+        };
+    });
+
+    const totalCount = summaryData.reduce((acc, i) => acc + i.count, 0);
+    const totalValue = summaryData.reduce((acc, i) => acc + i.value, 0);
+
+    // Table Data
+    const tableBody = summaryData.map(d => [
+        d.stage,
+        d.count.toString(),
+        formatCurrency(d.value),
+        totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) + '%' : '0%'
+    ]);
+
+    // Add Total Row
+    tableBody.push([
+        'TOTAL GERAL',
+        totalCount.toString(),
+        formatCurrency(totalValue),
+        '100%'
+    ]);
+
+    // Generate Table
+    autoTable(doc, {
+        head: [['Etapa', 'Qtd', 'Valor (R$)', '% Valor']],
+        body: tableBody,
+        startY: 35,
+        theme: 'grid',
+        headStyles: { fillColor: [26, 33, 48] },
+        styles: { fontSize: 10 },
+    });
+
+    // Chart Section
+    // @ts-ignore
+    let startY = (doc as any).lastAutoTable.finalY + 20;
+    
+    doc.setFontSize(14);
+    doc.text('Gráfico de Quantidade por Etapa', 14, startY);
+    startY += 10;
+
+    const maxCount = Math.max(...summaryData.map(d => d.count));
+    const chartHeight = 60;
+    const barWidth = 25;
+    const startX = 20;
+    const gap = 15;
+
+    summaryData.forEach((data, index) => {
+        // Calculate bar height relative to max count
+        // If maxCount is 0, barHeight is 0
+        const barHeight = maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
+        
+        const x = startX + (index * (barWidth + gap));
+        const y = startY + chartHeight - barHeight; // Y starts from top, so subtract height
+
+        // Color Logic
+        let r=107, g=114, b=128; // Default Gray
+        if (data.id === 'PROCESSO_INTERNO') { r=107; g=114; b=128; }
+        if (data.id === 'ENVIO_PROPOSTA') { r=59; g=130; b=246; } // Blue
+        if (data.id === 'NEGOCIACAO') { r=245; g=158; b=11; } // Amber
+        if (data.id === 'GANHO') { r=34; g=197; b=94; } // Green
+        if (data.id === 'PERDIDO') { r=239; g=68; b=68; } // Red
+
+        doc.setFillColor(r, g, b);
+        
+        // Draw Bar
+        // x, y, w, h, style
+        if (barHeight > 0) {
+            doc.rect(x, y, barWidth, barHeight, 'F');
+        } else {
+            // Draw a tiny line for 0 just to show position
+            doc.setDrawColor(200, 200, 200);
+            doc.line(x, startY + chartHeight, x + barWidth, startY + chartHeight);
+        }
+
+        // Label (Count) on top of bar
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        if (barHeight > 0) {
+            doc.text(data.count.toString(), x + barWidth / 2, y - 2, { align: 'center' });
+        } else {
+            doc.text("0", x + barWidth / 2, startY + chartHeight - 2, { align: 'center' });
+        }
+
+        // Label (Stage Name) below bar
+        doc.setFontSize(8);
+        const splitTitle = doc.splitTextToSize(data.stage, barWidth + 5);
+        doc.text(splitTitle, x + barWidth / 2, startY + chartHeight + 5, { align: 'center' });
+    });
+
+    doc.save(`Resumo_Funil_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
 
   const handleExportPipeline = () => {
       const flatData: any[] = [];
@@ -435,6 +566,107 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
 
       XLSX.utils.book_append_sheet(wb, ws, "Funil de Vendas");
       XLSX.writeFile(wb, `Pipeline_Funil_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const handleExportSummaryPDF = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text('Resumo do Funil de Vendas', 14, 22);
+    doc.setFontSize(10);
+    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 30);
+    
+    const repName = pipelineFilters.rep 
+      ? uniqueReps.find(r => r.id === pipelineFilters.rep)?.name || pipelineFilters.rep 
+      : 'Todos';
+    doc.text(`Representante: ${repName}`, 14, 36);
+
+    // Prepare data
+    const summaryData = STAGES.map(stage => {
+      const col = pipelineColumns[stage.id];
+      const count = col?.items.length || 0;
+      const totalValue = col?.items.reduce((sum, item) => sum + (item.TOTAL_VALOR || 0), 0) || 0;
+      return {
+        id: stage.id,
+        stage: stage.label,
+        count,
+        totalValue
+      };
+    });
+
+    const totalCount = summaryData.reduce((sum, item) => sum + item.count, 0);
+    const totalValueAll = summaryData.reduce((sum, item) => sum + item.totalValue, 0);
+
+    // Table Data
+    const tableBody = summaryData.map(item => [
+      item.stage,
+      item.count.toString(),
+      formatCurrency(item.totalValue)
+    ]);
+
+    // Add Total Row
+    tableBody.push([
+      'TOTAL',
+      totalCount.toString(),
+      formatCurrency(totalValueAll)
+    ]);
+
+    autoTable(doc, {
+      head: [['Estágio', 'Qtd', 'Valor Total']],
+      body: tableBody,
+      startY: 45,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185] },
+      footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' }
+    });
+
+    // Chart
+    const finalY = (doc as any).lastAutoTable.finalY || 100;
+    const chartStartY = finalY + 20;
+    
+    doc.setFontSize(14);
+    doc.text('Quantidade por Status', 14, chartStartY);
+
+    const chartHeight = 80;
+    const chartWidth = 180;
+    const maxCount = Math.max(...summaryData.map(d => d.count));
+    
+    if (maxCount > 0) {
+        const barWidth = (chartWidth / summaryData.length) - 10;
+        
+        summaryData.forEach((item, index) => {
+            const barHeight = (item.count / maxCount) * chartHeight;
+            const x = 14 + (index * (barWidth + 10));
+            const y = chartStartY + 10 + chartHeight - barHeight;
+            
+            // Color mapping based on stage ID
+            let color: [number, number, number] = [100, 100, 100];
+            if (item.id === 'PROCESSO_INTERNO') color = [107, 114, 128]; // Gray
+            if (item.id === 'ENVIO_PROPOSTA') color = [59, 130, 246]; // Blue
+            if (item.id === 'NEGOCIACAO') color = [245, 158, 11]; // Amber
+            if (item.id === 'GANHO') color = [34, 197, 94]; // Green
+            if (item.id === 'PERDIDO') color = [239, 68, 68]; // Red
+
+            doc.setFillColor(...color); 
+            doc.rect(x, y, barWidth, barHeight, 'F');
+            
+            // Label (Count)
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(10);
+            doc.text(item.count.toString(), x + (barWidth/2), y - 2, { align: 'center' });
+            
+            // Label (Stage Name)
+            doc.setFontSize(8);
+            const splitTitle = doc.splitTextToSize(item.stage, barWidth);
+            doc.text(splitTitle, x + (barWidth/2), chartStartY + 10 + chartHeight + 5, { align: 'center' });
+        });
+    } else {
+        doc.setFontSize(10);
+        doc.text('Sem dados para exibir no gráfico.', 14, chartStartY + 20);
+    }
+
+    doc.save(`Resumo_Funil_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   const handleGenerateAIInsights = async () => {
@@ -937,6 +1169,15 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                 </button>
 
                 <button 
+                    onClick={handleExportSummaryPDF}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest hover:bg-blue-100 transition-colors"
+                    title="Exportar Resumo em PDF"
+                >
+                    <FileText size={12} />
+                    Resumo PDF
+                </button>
+
+                <button 
                     onClick={handleGenerateAIInsights}
                     className="flex items-center gap-1 px-3 py-1 rounded-sm border border-amber-200 bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-widest hover:bg-amber-100 transition-colors"
                     title="Análise de IA do Funil"
@@ -1256,6 +1497,15 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                 >
                     <FileSpreadsheet size={12} />
                     Exportar Funil
+                </button>
+
+                <button 
+                    onClick={handleExportSummaryPDF}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest hover:bg-blue-100 transition-colors"
+                    title="Exportar Resumo em PDF"
+                >
+                    <FileText size={12} />
+                    Resumo PDF
                 </button>
 
                 <button 
@@ -1790,11 +2040,21 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                                 if (taskFilter === 'CONCLUIDAS') return t.status === 'CONCLUIDA';
                                 return true;
                             }).map(task => (
-                                <div key={task.id} className="bg-white p-4 rounded border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${task.priority === 'ALTA' ? 'bg-red-500' : task.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
+                                <div key={task.id} className={`bg-white p-4 rounded border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group ${task.status === 'CONCLUIDA' ? 'bg-gray-50/80' : ''}`}>
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-300 ${task.status === 'CONCLUIDA' ? 'bg-green-500' : task.priority === 'ALTA' ? 'bg-red-500' : task.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
                                     <div className="flex justify-between items-start mb-2">
-                                        <h4 className={`text-sm font-bold ${task.status === 'CONCLUIDA' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{task.title}</h4>
-                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${task.status === 'CONCLUIDA' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        <div className="flex items-start gap-2 flex-1">
+                                            <button 
+                                                onClick={() => handleToggleTaskStatus(task)}
+                                                className={`mt-0.5 shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-300 ${task.status === 'CONCLUIDA' ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-rose-500'}`}
+                                            >
+                                                {task.status === 'CONCLUIDA' && <Check size={10} className="text-white animate-in zoom-in duration-200" />}
+                                            </button>
+                                            <h4 className={`text-sm font-bold transition-all duration-300 ${task.status === 'CONCLUIDA' ? 'text-gray-400 line-through decoration-2 decoration-green-500/30' : 'text-gray-900'}`}>
+                                                {task.title}
+                                            </h4>
+                                        </div>
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase transition-colors duration-300 ${task.status === 'CONCLUIDA' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
                                             {task.status}
                                         </span>
                                     </div>

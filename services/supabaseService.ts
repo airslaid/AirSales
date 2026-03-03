@@ -1,6 +1,44 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask } from '../types';
+import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport } from '../types';
+// --- Visit Reports Service ---
+
+export const fetchVisitReports = async (): Promise<VisitReport[]> => {
+  try {
+    const { data, error } = await supabase.from('visit_reports').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Visit Reports: Table might not exist", err.message);
+    return [];
+  }
+};
+
+export const upsertVisitReport = async (report: VisitReport) => {
+  const payload = { ...report };
+  if (!payload.id) payload.id = generateUUID();
+  if (!payload.created_at) payload.created_at = new Date().toISOString();
+  
+  try {
+    const { error } = await supabase.from('visit_reports').upsert([payload]);
+    if (error) throw error;
+    return payload;
+  } catch (err: any) {
+    console.error("Visit Reports: Error saving report", err.message);
+    throw err;
+  }
+};
+
+export const deleteVisitReport = async (id: string) => {
+  try {
+    const { error } = await supabase.from('visit_reports').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    throw err;
+  }
+};
+
 
 export const SUPABASE_URL = 'https://mgahjjoegseffezndojg.supabase.co';
 export const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1nYWhqam9lZ3NlZmZlem5kb2pnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MTgyNTksImV4cCI6MjA4NDA5NDI1OX0.MHtt084b7VNp1T7wXwYnCQCb-bSQdAIEAeuMd7RIDO0';

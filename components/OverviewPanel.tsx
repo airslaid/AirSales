@@ -38,10 +38,24 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
   // --- Processamento de Dados ---
   
     const summary = useMemo(() => {
+      // Aplicar Filtros Locais (Rep e Data) antes de calcular o resumo
+      let filteredData = salesData;
+
+      if (currentRep) {
+        filteredData = filteredData.filter(s => String(s.REP_IN_CODIGO) === currentRep);
+      }
+
+      if (dateRange.start) {
+        filteredData = filteredData.filter(s => (s.PED_DT_EMISSAO || '') >= dateRange.start);
+      }
+      if (dateRange.end) {
+        filteredData = filteredData.filter(s => (s.PED_DT_EMISSAO || '') <= dateRange.end);
+      }
+
       // Separação por Tipo (Série)
-      const budgetItems = salesData.filter(s => s.SER_ST_CODIGO === 'OV');
-      const orderItems = salesData.filter(s => s.SER_ST_CODIGO === 'PD');
-      const devItems = salesData.filter(s => s.SER_ST_CODIGO === 'DV');
+      const budgetItems = filteredData.filter(s => s.SER_ST_CODIGO === 'OV');
+      const orderItems = filteredData.filter(s => s.SER_ST_CODIGO === 'PD');
+      const devItems = filteredData.filter(s => s.SER_ST_CODIGO === 'DV');
 
       // Totais Monetários
       const totalBudget = budgetItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
@@ -52,12 +66,22 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
       const countStatus = (items: Sale[], statusPart: string) => 
         items.filter(i => String(i.PED_ST_STATUS || i.SITUACAO || '').toUpperCase().includes(statusPart)).length;
 
-      const budgetsAberto = countStatus(budgetItems, 'ABERTO') + countStatus(budgetItems, 'APROV');
+      // Para Orçamentos:
+      // Em Aberto = 'ABERTO' + 'APROV' + 'NEGOCIACAO' + 'PROCESSO' (Basicamente tudo que não é ENCERRADO ou CANCELADO)
+      // Mas vamos manter a lógica anterior e adicionar NEGOCIACAO se necessário
+      const budgetsAberto = countStatus(budgetItems, 'ABERTO') + countStatus(budgetItems, 'APROV') + countStatus(budgetItems, 'NEGOCIA') + countStatus(budgetItems, 'PROCESSO');
+      
+      // Encerrados = 'ENCERRADO' + 'GANHO' + 'FATURADO'
+      const budgetsEncerrado = countStatus(budgetItems, 'ENCERRADO') + countStatus(budgetItems, 'GANHO') + countStatus(budgetItems, 'FATURADO');
+      
+      const budgetsCancelado = countStatus(budgetItems, 'CANCELADO') + countStatus(budgetItems, 'PERDIDO');
+
       const ordersFaturado = countStatus(orderItems, 'FATURADO');
       const ordersAberto = countStatus(orderItems, 'ABERTO') + countStatus(orderItems, 'APROV');
       const devAberto = countStatus(devItems, 'ABERTO') + countStatus(devItems, 'APROV');
       
-      // Comissões
+      // Comissões (Filtro separado pois commissionData pode ter estrutura diferente, mas assumindo que já vem filtrado do App ou precisa filtrar aqui)
+      // O App.tsx já filtra commissionData? Sim, App.tsx passa commissionData já processado.
       const totalCommission = commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0);
       const paidCommission = commissionData.filter(c => c.COMISSAO_PAGA).reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0);
 
@@ -67,6 +91,8 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         totalDev,
         countBudgets: budgetItems.length,
         budgetsAberto,
+        budgetsEncerrado,
+        budgetsCancelado,
         countOrders: orderItems.length,
         ordersFaturado,
         ordersAberto,
@@ -76,7 +102,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         paidCommission,
         pendingCommission: totalCommission - paidCommission
       };
-    }, [salesData, commissionData]);
+    }, [salesData, commissionData, currentRep, dateRange]);
 
   // Dados para Gráfico de Tendência (Últimos 6 meses baseados nos dados visíveis)
   const trendData = useMemo(() => {
@@ -221,18 +247,20 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                     <div className="p-2 bg-blue-50 text-blue-600 rounded"><FileText size={18}/></div>
                     <h3 className="text-xs font-bold uppercase text-gray-700">Orçamentos</h3>
                 </div>
-                <div className="space-y-2">
-                    <div className="flex justify-between items-end">
-                        <span className="text-[10px] text-gray-500 font-medium">Em Aberto</span>
-                        <span className="text-sm font-bold text-gray-900">{summary.budgetsAberto}</span>
+                <div className="space-y-1">
+                    <div className="flex justify-between items-center py-1 border-b border-gray-50">
+                        <span className="text-[10px] text-gray-500">Em Aberto</span>
+                        <span className="text-xs font-bold text-blue-600">{summary.budgetsAberto}</span>
                     </div>
-                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                        <div 
-                          className="bg-blue-500 h-full rounded-full transition-all duration-500" 
-                          style={{width: `${summary.countBudgets > 0 ? (summary.budgetsAberto / summary.countBudgets) * 100 : 0}%`}}
-                        ></div>
+                    <div className="flex justify-between items-center py-1 border-b border-gray-50">
+                        <span className="text-[10px] text-gray-500">Encerrados</span>
+                        <span className="text-xs font-bold text-green-600">{summary.budgetsEncerrado}</span>
                     </div>
-                    <p className="text-[10px] text-gray-400 text-right mt-1">Total: {formatCurrency(summary.totalBudget)}</p>
+                    <div className="flex justify-between items-center py-1">
+                        <span className="text-[10px] text-gray-500">Cancelados</span>
+                        <span className="text-xs font-bold text-red-600">{summary.budgetsCancelado}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 text-right mt-2">Total: {formatCurrency(summary.totalBudget)}</p>
                 </div>
             </div>
 
