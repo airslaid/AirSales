@@ -878,11 +878,15 @@ export default function App() {
             const billingDate = item.NOT_DT_EMISSAO || '';
             const inDateRange = (!filters.startDate || billingDate >= filters.startDate) && 
                                 (!filters.endDate || billingDate <= filters.endDate);
+            
+            // Aplica filtros de contexto (Representante e Filial)
             const repMatch = filters.representante ? String(item.REP_IN_CODIGO) === filters.representante : true;
+            const filialMatch = filters.filial ? String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase() : true;
+            
             const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (item.NOT_DT_EMISSAO && item.NOT_DT_EMISSAO !== '');
             const isPD = item.SER_ST_CODIGO === 'PD';
 
-            if (inDateRange && repMatch && isBilled && isPD) {
+            if (inDateRange && repMatch && filialMatch && isBilled && isPD) {
                 faturadoReal += parseBrNumber(item['ITN_RE_VALORTOTAL'] || 0);
             }
         });
