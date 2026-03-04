@@ -119,6 +119,19 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
           ordersMap.set(pedNum, Math.max(ordersMap.get(pedNum) || 0, itpSeq));
       }
 
+      const rawMercadoria = findValue(s, 'ITN_RE_VALORMERCADORIA');
+      const rawTotal = findValue(s, 'ITN_RE_VALORTOTAL');
+      
+      console.log(`[Import Debug] PED: ${pedNum} SEQ: ${itpSeq}`, { 
+        rawMercadoria, 
+        typeMercadoria: typeof rawMercadoria,
+        numericMercadoria: toNumeric(rawMercadoria),
+        rawTotal, 
+        typeTotal: typeof rawTotal,
+        numericTotal: toNumeric(rawTotal),
+        allKeys: Object.keys(s) // Log all keys to see what's available
+      });
+
       return {
         fil_in_codigo: filId,
         filial_nome: String(findValue(s, 'FILIAL_NOME') || '').trim(),
@@ -138,6 +151,8 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
         itp_re_quantidade: toNumeric(findValue(s, 'ITP_RE_QUANTIDADE')),
         itp_re_valorunitario: toNumeric(findValue(s, 'ITP_RE_VALORUNITARIO')),
         itp_re_valormercadoria: toNumeric(findValue(s, 'ITP_RE_VALORMERCADORIA')),
+        itn_re_valormercadoria: toNumeric(findValue(s, 'ITN_RE_VALORMERCADORIA')),
+        itn_re_valortotal: toNumeric(findValue(s, 'ITN_RE_VALORTOTAL')),
         itp_st_pedidocliente: String(findValue(s, 'ITP_ST_PEDIDOCLIENTE') || '').trim(),
         itp_st_situacao: normalizeStatus(String(findValue(s, 'ITP_ST_SITUACAO') || '').trim()),
         it_st_status: normalizeStatus(String(findValue(s, 'IT_ST_STATUS') || '').trim()),
@@ -329,6 +344,8 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
       "ITP_RE_QUANTIDADE": row.itp_re_quantidade,
       "ITP_RE_VALORUNITARIO": row.itp_re_valorunitario,
       "ITP_RE_VALORMERCADORIA": row.itp_re_valormercadoria,
+      "ITN_RE_VALORMERCADORIA": row.itn_re_valormercadoria,
+      "ITN_RE_VALORTOTAL": row.itn_re_valortotal,
       "ITP_ST_PEDIDOCLIENTE": row.itp_st_pedidocliente,
       "IPE_DT_DATAENTREGA": row.ipe_dt_dataentrega,
       "IS_HOT": row.is_hot || false,

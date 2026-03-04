@@ -142,6 +142,7 @@ export default function App() {
   const [pbiToken, setPbiToken] = useState('');
   const [layoutSaved, setLayoutSaved] = useState(false);
   const [isGroupedByOrder, setIsGroupedByOrder] = useState(false);
+  const [commissionColVisibility, setCommissionColVisibility] = useState<Record<string, boolean>>({});
   
   const [showXmlModal, setShowXmlModal] = useState(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<Sale | null>(null);
@@ -483,7 +484,7 @@ export default function App() {
     const getFormatter = (key: string) => { if (key.includes('VALOR') || key.includes('VLMERCADORIA') || key.includes('PRECO')) return currencyFormat; if (key.includes('QUANTIDADE') || key.includes('QTD')) return numberFormat; if (key.includes('DT_EMISSAO') || key.includes('DATA')) return dateFormat; return (val: any) => String(val || '-'); };
     if (savedLayout) { try { const parsedLayout: ColumnConfig[] = JSON.parse(savedLayout); setSalesColumns(parsedLayout.map(col => ({ ...col, format: getFormatter(col.key) }))); return; } catch (e) {} }
     const defaultOrder = ["PED_IN_CODIGO", "FILIAL_NOME", "REPRESENTANTE_NOME", "PED_DT_EMISSAO", "CLIENTE_NOME", "PRO_ST_ALTERNATIVO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORMERCADORIA", "PED_ST_STATUS"];
-    const allPossibleKeys = ["SER_ST_CODIGO", "PED_IN_CODIGO", "CLI_IN_CODIGO", "CLIENTE_NOME", "FIL_IN_CODIGO", "FILIAL_NOME", "PED_DT_EMISSAO", "PED_CH_SITUACAO", "PED_ST_STATUS", "REP_IN_CODIGO", "REPRESENTANTE_NOME", "ITP_IN_SEQUENCIA", "ITP_ST_SITUACAO", "IT_ST_STATUS", "NF_NOT_IN_CODIGO", "NOT_DT_EMISSAO", "PRO_ST_ALTERNATIVO", "PRO_IN_CODIGO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORUNITARIO", "ITP_RE_VALORMERCADORIA", "ITP_ST_PEDIDOCLIENTE", "IPE_DT_DATAENTREGA"];
+    const allPossibleKeys = ["SER_ST_CODIGO", "PED_IN_CODIGO", "CLI_IN_CODIGO", "CLIENTE_NOME", "FIL_IN_CODIGO", "FILIAL_NOME", "PED_DT_EMISSAO", "PED_CH_SITUACAO", "PED_ST_STATUS", "REP_IN_CODIGO", "REPRESENTANTE_NOME", "ITP_IN_SEQUENCIA", "ITP_ST_SITUACAO", "IT_ST_STATUS", "NF_NOT_IN_CODIGO", "NOT_DT_EMISSAO", "PRO_ST_ALTERNATIVO", "PRO_IN_CODIGO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORUNITARIO", "ITP_RE_VALORMERCADORIA", "ITN_RE_VALORMERCADORIA", "ITN_RE_VALORTOTAL", "ITP_ST_PEDIDOCLIENTE", "IPE_DT_DATAENTREGA"];
     setSalesColumns(allPossibleKeys.map(key => ({ key, label: key.replace(/_/g, ' ').replace('ITP ST', '').replace('ITP RE', '').replace('PED RE', '').replace('PED ST', '').replace('IT ST', '').replace('IPE DT', '').replace('DT', 'DATA').trim(), visible: defaultOrder.includes(key), format: getFormatter(key) })));
   };
 
@@ -561,7 +562,7 @@ export default function App() {
   };
 
   const handleColumnReorder = (fromIndex: number, toIndex: number) => { const newCols = [...salesColumns]; const [moved] = newCols.splice(fromIndex, 1); newCols.splice(toIndex, 0, moved); setSalesColumns(newCols); };
-  const toggleColumnVisibility = (key: string) => { setSalesColumns(prev => prev.map(col => col.key === key ? { ...col, visible: !col.visible } : col)); };
+  
   const saveGlobalVision = () => { if (!currentUser) return; localStorage.setItem(getSharedLayoutKey(), JSON.stringify(salesColumns.map(({ key, label, visible }) => ({ key, label, visible })))); setLayoutSaved(true); setTimeout(() => setLayoutSaved(false), 2000); };
 
   const handleExportExcel = () => {
@@ -821,13 +822,31 @@ export default function App() {
       { key: 'ITP_ST_DESCRICAO', label: 'DESCRIÇÃO', visible: true },
       { key: 'REPRESENTANTE_NOME', label: 'REPRESENTANTE', visible: true }, 
       { key: 'ITP_RE_VALORMERCADORIA', label: 'VALOR VENDA', visible: true, format: currencyFormat }, 
+      { key: 'ITN_RE_VALORMERCADORIA', label: 'VALOR MERCADORIA (NOTA)', visible: true, format: currencyFormat },
+      { key: 'ITN_RE_VALORTOTAL', label: 'VALOR TOTAL (NOTA)', visible: true, format: currencyFormat },
       { key: 'PED_DT_EMISSAO', label: 'DT VENDA', visible: true, format: dateFormat }, 
     ];
     if (activeCommissionRole !== 'ASSISTENTE') { cols.push({ key: 'ATINGIMENTO_META_ORIGEM', label: '% META (MÊS VENDA)', visible: true, format: percentFormat }); }
     cols.push( { key: 'PERCENTUAL_COMISSAO', label: '% COMISSÃO', visible: true, format: percentFormat }, { key: 'VALOR_COMISSAO', label: 'R$ COMISSÃO', visible: true, format: currencyFormat }, );
     if (activeModuleId === 'PAGAMENTOS') { cols.unshift({ key: 'CHECK_PAGAMENTO', label: 'PAGO?', visible: true }); } else { cols.push({ key: 'PED_ST_STATUS', label: 'STATUS', visible: true }); }
-    return cols;
-  }, [activeCommissionRole, activeModuleId]);
+    
+    return cols.map(c => ({
+        ...c,
+        visible: commissionColVisibility[c.key] !== undefined ? commissionColVisibility[c.key] : c.visible
+    }));
+  }, [activeCommissionRole, activeModuleId, commissionColVisibility]);
+
+  const toggleColumnVisibility = (key: string) => { 
+    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') {
+         setCommissionColVisibility(prev => {
+             const col = commissionColumns.find(c => c.key === key);
+             const currentVis = col ? col.visible : true;
+             return { ...prev, [key]: !currentVis };
+         });
+    } else {
+         setSalesColumns(prev => prev.map(col => col.key === key ? { ...col, visible: !col.visible } : col)); 
+    }
+  };
 
   const metrics = useMemo(() => {
     let total = 0, faturado = 0, emAprovacao = 0, emAberto = 0, realizedTotal = 0;

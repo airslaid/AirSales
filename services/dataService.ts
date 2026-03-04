@@ -131,15 +131,21 @@ export const fetchRealPowerBIData = async (accessToken: string, tableName: strin
       if (rawRows.length > 0) {
           const sampleKeys = Object.keys(rawRows[0]);
           const hasDelivery = sampleKeys.some(k => k.includes('IPE_DT_DATAENTREGA'));
+          const hasMercadoria = sampleKeys.some(k => k.includes('ITN_RE_VALORMERCADORIA'));
+          const hasTotal = sampleKeys.some(k => k.includes('ITN_RE_VALORTOTAL'));
           
           console.group("🔎 [DIAGNOSTICO] COLUNAS RECEBIDAS DO POWER BI");
-          console.log("Colunas encontradas:", sampleKeys);
-          if (hasDelivery) {
-              console.log("%c✅ Coluna IPE_DT_DATAENTREGA ENCONTRADA!", "color:green;font-weight:bold");
-          } else {
-              console.log("%c⚠️ Coluna IPE_DT_DATAENTREGA NÃO ENCONTRADA!", "color:red;font-weight:bold");
-              console.log("Ação Necessária: Atualize o Dataset no Power BI Desktop e Publique novamente.");
-          }
+          console.log("Colunas encontradas (Amostra):", sampleKeys);
+          
+          if (hasDelivery) console.log("%c✅ Coluna IPE_DT_DATAENTREGA ENCONTRADA!", "color:green;font-weight:bold");
+          else console.log("%c⚠️ Coluna IPE_DT_DATAENTREGA NÃO ENCONTRADA!", "color:red;font-weight:bold");
+
+          if (hasMercadoria) console.log("%c✅ Coluna ITN_RE_VALORMERCADORIA ENCONTRADA!", "color:green;font-weight:bold");
+          else console.log("%c⚠️ Coluna ITN_RE_VALORMERCADORIA NÃO ENCONTRADA!", "color:red;font-weight:bold");
+
+          if (hasTotal) console.log("%c✅ Coluna ITN_RE_VALORTOTAL ENCONTRADA!", "color:green;font-weight:bold");
+          else console.log("%c⚠️ Coluna ITN_RE_VALORTOTAL NÃO ENCONTRADA!", "color:red;font-weight:bold");
+
           console.groupEnd();
       }
 
