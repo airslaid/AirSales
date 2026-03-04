@@ -43,6 +43,8 @@ interface CRMViewProps {
   user: AppUser | null;
   externalAction?: CRMExternalAction | null;
   onExternalActionHandled?: () => void;
+  globalFilters?: any;
+  onGlobalFilterChange?: (newFilters: any) => void;
 }
 
 interface PipelineItem extends Sale {
@@ -76,8 +78,8 @@ const STAGES = [
   { id: 'PROCESSO_INTERNO', label: 'Processo Interno', icon: Clock, color: 'border-gray-500', bg: 'bg-gray-50', text: 'text-gray-700' },
   { id: 'ENVIO_PROPOSTA', label: 'Envio da Proposta', icon: Send, color: 'border-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
   { id: 'NEGOCIACAO', label: 'Negociação', icon: Briefcase, color: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
-  { id: 'GANHO', label: 'Fechado / Ganho', icon: CheckCircle2, color: 'border-green-500', bg: 'bg-green-50', text: 'text-green-700' },
-  { id: 'PERDIDO', label: 'Perdido / Cancelado', icon: XCircle, color: 'border-red-500', bg: 'bg-red-50', text: 'text-red-700' }
+  { id: 'GANHO', label: 'Fechado', icon: CheckCircle2, color: 'border-green-500', bg: 'bg-green-50', text: 'text-green-700' },
+  { id: 'PERDIDO', label: 'Cancelado', icon: XCircle, color: 'border-red-500', bg: 'bg-red-50', text: 'text-red-700' }
 ];
 
 const formatCurrency = (val: number) => 
@@ -100,7 +102,16 @@ const getDaysRemaining = (dueDate?: string) => {
   return diffDays;
 };
 
-export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onRefresh, user, externalAction, onExternalActionHandled }) => {
+export const CRMView: React.FC<CRMViewProps> = ({ 
+  data = [], 
+  salesData = [], 
+  onRefresh, 
+  user, 
+  externalAction, 
+  onExternalActionHandled,
+  globalFilters,
+  onGlobalFilterChange
+}) => {
   const [activeTab, setActiveTab] = useState<CRMTab>('COCKPIT');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState<ClientWalletItem | null>(null);
@@ -129,11 +140,39 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
   
   // Pipeline Filters
   const [pipelineFilters, setPipelineFilters] = useState({
-      rep: '',
-      startDate: '',
-      endDate: '',
+      rep: globalFilters?.representante || '',
+      startDate: globalFilters?.startDate || '',
+      endDate: globalFilters?.endDate || '',
       onlyHot: false
   });
+
+  // Sync with global filters when they change externally
+  useEffect(() => {
+    if (globalFilters) {
+      setPipelineFilters(prev => ({
+        ...prev,
+        rep: globalFilters.representante || '',
+        startDate: globalFilters.startDate || '',
+        endDate: globalFilters.endDate || ''
+      }));
+    }
+  }, [globalFilters?.representante, globalFilters?.startDate, globalFilters?.endDate]);
+
+  // Helper to update filters and notify parent if needed
+  const updateFilters = (updates: Partial<typeof pipelineFilters>) => {
+    const newFilters = { ...pipelineFilters, ...updates };
+    setPipelineFilters(newFilters);
+    
+    // If we updated a global field, notify parent
+    if (onGlobalFilterChange && (updates.rep !== undefined || updates.startDate !== undefined || updates.endDate !== undefined)) {
+      onGlobalFilterChange({
+        ...globalFilters,
+        ...(updates.rep !== undefined && { representante: updates.rep }),
+        ...(updates.startDate !== undefined && { startDate: updates.startDate }),
+        ...(updates.endDate !== undefined && { endDate: updates.endDate })
+      });
+    }
+  };
 
   // Follow-up View Mode
   const [followUpViewMode, setFollowUpViewMode] = useState<'OPPORTUNITIES' | 'HISTORY'>('OPPORTUNITIES');
@@ -375,18 +414,18 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
       PROCESSO_INTERNO: { id: 'PROCESSO_INTERNO', title: 'Processo Interno', items: [], color: 'border-gray-500', bg: 'bg-gray-50', icon: Clock },
       ENVIO_PROPOSTA: { id: 'ENVIO_PROPOSTA', title: 'Envio da Proposta', items: [], color: 'border-blue-500', bg: 'bg-blue-50', icon: Send },
       NEGOCIACAO: { id: 'NEGOCIACAO', title: 'Negociação', items: [], color: 'border-amber-500', bg: 'bg-amber-50', icon: Briefcase },
-      GANHO: { id: 'GANHO', title: 'Fechado / Ganho', items: [], icon: CheckCircle2, color: 'border-green-500', bg: 'bg-green-50', text: 'text-green-700' },
-      PERDIDO: { id: 'PERDIDO', title: 'Perdido / Cancelado', items: [], icon: XCircle, color: 'border-red-500', bg: 'bg-red-50', text: 'text-red-700' },
+      GANHO: { id: 'GANHO', title: 'Fechado', items: [], icon: CheckCircle2, color: 'border-green-500', bg: 'bg-green-50', text: 'text-green-700' },
+      PERDIDO: { id: 'PERDIDO', title: 'Cancelado', items: [], icon: XCircle, color: 'border-red-500', bg: 'bg-red-50', text: 'text-red-700' },
     };
 
     uniqueOrders.forEach(order => {
-      const statusRaw = String(order.PED_ST_STATUS || order.SITUACAO || '').toUpperCase();
+      const statusRaw = String(order.PED_ST_STATUS || order.SITUACAO || '').trim().toUpperCase();
       
-      // Lógica de Mapeamento de Status para Colunas
-      if (statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO')) {
-        cols.PERDIDO.items.push(order);
-      } else if (statusRaw.includes('FATURADO') || statusRaw.includes('GANHO') || statusRaw.includes('TOTAL') || statusRaw.includes('ENCERRADO') || order.SER_ST_CODIGO === 'PD') {
+      // Lógica de Mapeamento de Status para Colunas (Strict)
+      if (statusRaw === 'ENCERRADO') {
         cols.GANHO.items.push(order);
+      } else if (statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO')) {
+        cols.PERDIDO.items.push(order);
       } else if (statusRaw.includes('NEGOCIACAO') || statusRaw.includes('NEGOCIAÇÃO')) {
         cols.NEGOCIACAO.items.push(order);
       } else if (statusRaw.includes('PROPOSTA') || statusRaw.includes('ENVIADO')) {
@@ -1121,7 +1160,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                     <select 
                         className="bg-gray-50 border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
                         value={pipelineFilters.rep}
-                        onChange={(e) => setPipelineFilters({...pipelineFilters, rep: e.target.value})}
+                        onChange={(e) => updateFilters({ rep: e.target.value })}
                     >
                         <option value="">Todos Representantes</option>
                         {uniqueReps.map(r => (
@@ -1135,20 +1174,20 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                             type="date" 
                             className="bg-transparent text-[10px] outline-none w-24"
                             value={pipelineFilters.startDate}
-                            onChange={(e) => setPipelineFilters({...pipelineFilters, startDate: e.target.value})}
+                            onChange={(e) => updateFilters({ startDate: e.target.value })}
                         />
                         <span className="text-gray-300 shrink-0">-</span>
                         <input 
                             type="date" 
                             className="bg-transparent text-[10px] outline-none w-24"
                             value={pipelineFilters.endDate}
-                            onChange={(e) => setPipelineFilters({...pipelineFilters, endDate: e.target.value})}
+                            onChange={(e) => updateFilters({ endDate: e.target.value })}
                         />
                     </div>
                 </div>
 
                 <button 
-                    onClick={() => setPipelineFilters({...pipelineFilters, onlyHot: !pipelineFilters.onlyHot})}
+                    onClick={() => updateFilters({ onlyHot: !pipelineFilters.onlyHot })}
                     className={`flex items-center gap-1 px-3 py-1 rounded-sm border text-[10px] font-bold uppercase tracking-widest transition-all ${
                         pipelineFilters.onlyHot 
                         ? 'bg-orange-50 border-orange-200 text-orange-600' 
@@ -1188,7 +1227,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
 
                 {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.onlyHot) && (
                     <button 
-                        onClick={() => setPipelineFilters({ rep: '', startDate: '', endDate: '', onlyHot: false })}
+                        onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', onlyHot: false })}
                         className="ml-auto text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
                         title="Limpar Filtros"
                     >
@@ -1452,7 +1491,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                     <select 
                         className="bg-gray-50 border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
                         value={pipelineFilters.rep}
-                        onChange={(e) => setPipelineFilters({...pipelineFilters, rep: e.target.value})}
+                        onChange={(e) => updateFilters({ rep: e.target.value })}
                     >
                         <option value="">Todos Representantes</option>
                         {uniqueReps.map(r => (
@@ -1466,20 +1505,20 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
                             type="date" 
                             className="bg-transparent text-[10px] outline-none w-24"
                             value={pipelineFilters.startDate}
-                            onChange={(e) => setPipelineFilters({...pipelineFilters, startDate: e.target.value})}
+                            onChange={(e) => updateFilters({ startDate: e.target.value })}
                         />
                         <span className="text-gray-300 shrink-0">-</span>
                         <input 
                             type="date" 
                             className="bg-transparent text-[10px] outline-none w-24"
                             value={pipelineFilters.endDate}
-                            onChange={(e) => setPipelineFilters({...pipelineFilters, endDate: e.target.value})}
+                            onChange={(e) => updateFilters({ endDate: e.target.value })}
                         />
                     </div>
                 </div>
 
                 <button 
-                    onClick={() => setPipelineFilters({...pipelineFilters, onlyHot: !pipelineFilters.onlyHot})}
+                    onClick={() => updateFilters({ onlyHot: !pipelineFilters.onlyHot })}
                     className={`flex items-center gap-1 px-3 py-1 rounded-sm border text-[10px] font-bold uppercase tracking-widest transition-all ${
                         pipelineFilters.onlyHot 
                         ? 'bg-orange-50 border-orange-200 text-orange-600' 
@@ -1520,7 +1559,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ data = [], salesData = [], onR
 
                 {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.onlyHot) && (
                     <button 
-                        onClick={() => setPipelineFilters({ rep: '', startDate: '', endDate: '', onlyHot: false })}
+                        onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', onlyHot: false })}
                         className="ml-auto text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
                         title="Limpar Filtros"
                     >

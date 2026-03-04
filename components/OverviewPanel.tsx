@@ -23,6 +23,7 @@ interface OverviewProps {
   onRepChange: (rep: string) => void;
   dateRange: { start: string, end: string };
   onDateRangeChange: (range: { start: string, end: string }) => void;
+  isLoading?: boolean;
 }
 
 const formatCurrency = (val: number) => 
@@ -32,19 +33,21 @@ const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'];
 
 export const OverviewPanel: React.FC<OverviewProps> = ({ 
   user, salesData, commissionData, goals, metrics,
-  availableReps, currentRep, onRepChange, dateRange, onDateRangeChange
+  availableReps, currentRep, onRepChange, dateRange, onDateRangeChange,
+  isLoading = false
 }) => {
   
   // --- Processamento de Dados ---
   
     const summary = useMemo(() => {
-      // Aplicar Filtros Locais (Rep e Data) antes de calcular o resumo
-      let filteredData = salesData;
-
+      // Filtro de Representante
+      let dataByRep = salesData;
       if (currentRep) {
-        filteredData = filteredData.filter(s => String(s.REP_IN_CODIGO) === currentRep);
+        dataByRep = dataByRep.filter(s => String(s.REP_IN_CODIGO) === currentRep);
       }
 
+      // Filtro de Data (Agora respeitado em todos os cards para maior precisão)
+      let filteredData = dataByRep;
       if (dateRange.start) {
         filteredData = filteredData.filter(s => (s.PED_DT_EMISSAO || '') >= dateRange.start);
       }
@@ -52,15 +55,27 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         filteredData = filteredData.filter(s => (s.PED_DT_EMISSAO || '') <= dateRange.end);
       }
 
-      // Separação por Tipo (Série)
+      // Separação por Tipo (Série) - USANDO filteredData (RESPEITANDO DATA)
       const budgetItems = filteredData.filter(s => s.SER_ST_CODIGO === 'OV');
       const orderItems = filteredData.filter(s => s.SER_ST_CODIGO === 'PD');
       const devItems = filteredData.filter(s => s.SER_ST_CODIGO === 'DV');
 
-      // Totais Monetários
+      // Totais Monetários (Baseados em Emissão)
       const totalBudget = budgetItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
       const totalOrder = orderItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
       const totalDev = devItems.reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
+
+      // Faturamento Real (Filtrado por Data de Faturamento/Nota - NOT_DT_EMISSAO)
+      let billedData = dataByRep;
+      if (dateRange.start) {
+        billedData = billedData.filter(s => (s.NOT_DT_EMISSAO || '') >= dateRange.start);
+      }
+      if (dateRange.end) {
+        billedData = billedData.filter(s => (s.NOT_DT_EMISSAO || '') <= dateRange.end);
+      }
+      const totalBilled = billedData
+        .filter(s => s.SER_ST_CODIGO === 'PD' && (String(s.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (s.NOT_DT_EMISSAO && s.NOT_DT_EMISSAO !== '')))
+        .reduce((acc, curr) => acc + (Number(curr.ITP_RE_VALORMERCADORIA) || 0), 0);
 
       // Contagem de Status
       const countStatus = (items: Sale[], statusPart: string) => 
@@ -71,8 +86,8 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
       // Mas vamos manter a lógica anterior e adicionar NEGOCIACAO se necessário
       const budgetsAberto = countStatus(budgetItems, 'ABERTO') + countStatus(budgetItems, 'APROV') + countStatus(budgetItems, 'NEGOCIA') + countStatus(budgetItems, 'PROCESSO');
       
-      // Encerrados = 'ENCERRADO' + 'GANHO' + 'FATURADO'
-      const budgetsEncerrado = countStatus(budgetItems, 'ENCERRADO') + countStatus(budgetItems, 'GANHO') + countStatus(budgetItems, 'FATURADO');
+      // Encerrados = APENAS 'ENCERRADO'
+      const budgetsEncerrado = budgetItems.filter(i => String(i.PED_ST_STATUS || i.SITUACAO || '').toUpperCase() === 'ENCERRADO').length;
       
       const budgetsCancelado = countStatus(budgetItems, 'CANCELADO') + countStatus(budgetItems, 'PERDIDO');
 
@@ -89,6 +104,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         totalBudget,
         totalOrder,
         totalDev,
+        totalBilled,
         countBudgets: budgetItems.length,
         budgetsAberto,
         budgetsEncerrado,
@@ -104,11 +120,23 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
       };
     }, [salesData, commissionData, currentRep, dateRange]);
 
-  // Dados para Gráfico de Tendência (Últimos 6 meses baseados nos dados visíveis)
+  // Dados para Gráfico de Tendência (Respeitando filtros de Rep e Data)
   const trendData = useMemo(() => {
     const monthsMap = new Map<string, { name: string, Vendas: number, Orcamentos: number }>();
     
-    salesData.forEach(sale => {
+    // Filtrar dados para o gráfico
+    let filteredForTrend = salesData;
+    if (currentRep) {
+      filteredForTrend = filteredForTrend.filter(s => String(s.REP_IN_CODIGO) === currentRep);
+    }
+    if (dateRange.start) {
+      filteredForTrend = filteredForTrend.filter(s => (s.PED_DT_EMISSAO || '') >= dateRange.start);
+    }
+    if (dateRange.end) {
+      filteredForTrend = filteredForTrend.filter(s => (s.PED_DT_EMISSAO || '') <= dateRange.end);
+    }
+
+    filteredForTrend.forEach(sale => {
        if (!sale.PED_DT_EMISSAO) return;
        const date = new Date(sale.PED_DT_EMISSAO);
        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -129,12 +157,24 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         .sort((a, b) => a[0].localeCompare(b[0])) // Ordena por chave YYYY-MM
         .slice(-6) // Pega os últimos 6
         .map(entry => entry[1]);
-  }, [salesData]);
+  }, [salesData, currentRep, dateRange]);
 
-  // Dados para Gráfico de Pizza (Status Geral)
+  // Dados para Gráfico de Pizza (Status Geral - Respeitando filtros)
   const statusData = useMemo(() => {
       const statusMap = new Map<string, number>();
-      salesData.filter(s => s.SER_ST_CODIGO === 'PD').forEach(s => {
+      
+      let filteredForStatus = salesData;
+      if (currentRep) {
+        filteredForStatus = filteredForStatus.filter(s => String(s.REP_IN_CODIGO) === currentRep);
+      }
+      if (dateRange.start) {
+        filteredForStatus = filteredForStatus.filter(s => (s.PED_DT_EMISSAO || '') >= dateRange.start);
+      }
+      if (dateRange.end) {
+        filteredForStatus = filteredForStatus.filter(s => (s.PED_DT_EMISSAO || '') <= dateRange.end);
+      }
+
+      filteredForStatus.filter(s => s.SER_ST_CODIGO === 'PD').forEach(s => {
           const st = String(s.PED_ST_STATUS || 'OUTROS').toUpperCase();
           let key = 'OUTROS';
           if (st.includes('FATURADO')) key = 'FATURADO';
@@ -145,7 +185,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
           statusMap.set(key, (statusMap.get(key) || 0) + 1);
       });
       return Array.from(statusMap.entries()).map(([name, value]) => ({ name, value }));
-  }, [salesData]);
+  }, [salesData, currentRep, dateRange]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
@@ -211,27 +251,31 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
               <h1 className="text-xl sm:text-2xl font-bold mb-1">Olá, {user?.name.split(' ')[0]}! 👋</h1>
               <p className="text-xs sm:text-sm text-gray-300 mb-4 sm:mb-6">Aqui está o resumo executivo da sua operação hoje.</p>
               
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
                   <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
                       <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Meta do Período</p>
-                      <p className="text-sm sm:text-lg font-bold text-white truncate">{formatCurrency(metrics.goal)}</p>
+                      <p className="text-sm sm:text-lg font-bold text-white truncate">{isLoading ? '...' : formatCurrency(metrics.goal)}</p>
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
                       <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Vendas Realizadas</p>
-                      <p className="text-sm sm:text-lg font-bold text-emerald-400 truncate">{formatCurrency(metrics.realizedTotal || 0)}</p>
+                      <p className="text-sm sm:text-lg font-bold text-emerald-400 truncate">{isLoading ? '...' : formatCurrency(metrics.realizedTotal || 0)}</p>
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
                       <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Atingimento</p>
                       <div className="flex items-center gap-1 sm:gap-2">
                           <p className={`text-sm sm:text-lg font-bold ${metrics.achievement >= 100 ? 'text-green-400' : metrics.achievement >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
-                              {metrics.achievement.toFixed(1)}%
+                              {isLoading ? '...' : `${metrics.achievement.toFixed(1)}%`}
                           </p>
-                          {metrics.achievement >= 100 && <CheckCircle2 size={14} className="text-green-400 shrink-0"/>}
+                          {!isLoading && metrics.achievement >= 100 && <CheckCircle2 size={14} className="text-green-400 shrink-0"/>}
                       </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
+                      <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Faturamento</p>
+                      <p className="text-sm sm:text-lg font-bold text-orange-400 truncate">{isLoading ? '...' : formatCurrency(summary.totalBilled)}</p>
                   </div>
                    <div className="bg-white/10 backdrop-blur-sm p-2 sm:p-3 rounded border border-white/10">
                       <p className="text-[8px] sm:text-[10px] uppercase font-bold text-gray-400 mb-1">Pipeline (OV)</p>
-                      <p className="text-sm sm:text-lg font-bold text-blue-300 truncate">{formatCurrency(summary.totalBudget)}</p>
+                      <p className="text-sm sm:text-lg font-bold text-blue-300 truncate">{isLoading ? '...' : formatCurrency(summary.totalBudget)}</p>
                   </div>
               </div>
           </div>
@@ -250,17 +294,17 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                 <div className="space-y-1">
                     <div className="flex justify-between items-center py-1 border-b border-gray-50">
                         <span className="text-[10px] text-gray-500">Em Aberto</span>
-                        <span className="text-xs font-bold text-blue-600">{summary.budgetsAberto}</span>
+                        <span className="text-xs font-bold text-blue-600">{isLoading ? '...' : summary.budgetsAberto}</span>
                     </div>
                     <div className="flex justify-between items-center py-1 border-b border-gray-50">
                         <span className="text-[10px] text-gray-500">Encerrados</span>
-                        <span className="text-xs font-bold text-green-600">{summary.budgetsEncerrado}</span>
+                        <span className="text-xs font-bold text-green-600">{isLoading ? '...' : summary.budgetsEncerrado}</span>
                     </div>
                     <div className="flex justify-between items-center py-1">
                         <span className="text-[10px] text-gray-500">Cancelados</span>
-                        <span className="text-xs font-bold text-red-600">{summary.budgetsCancelado}</span>
+                        <span className="text-xs font-bold text-red-600">{isLoading ? '...' : summary.budgetsCancelado}</span>
                     </div>
-                    <p className="text-[10px] text-gray-400 text-right mt-2">Total: {formatCurrency(summary.totalBudget)}</p>
+                    <p className="text-[10px] text-gray-400 text-right mt-2">Total: {isLoading ? '...' : formatCurrency(summary.totalBudget)}</p>
                 </div>
             </div>
 
@@ -274,13 +318,13 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                  <div className="space-y-1">
                     <div className="flex justify-between items-center py-1 border-b border-gray-50">
                         <span className="text-[10px] text-gray-500">Faturados</span>
-                        <span className="text-xs font-bold text-emerald-600">{summary.ordersFaturado}</span>
+                        <span className="text-xs font-bold text-emerald-600">{isLoading ? '...' : summary.ordersFaturado}</span>
                     </div>
                     <div className="flex justify-between items-center py-1">
                         <span className="text-[10px] text-gray-500">Em Carteira</span>
-                        <span className="text-xs font-bold text-amber-600">{summary.ordersAberto}</span>
+                        <span className="text-xs font-bold text-amber-600">{isLoading ? '...' : summary.ordersAberto}</span>
                     </div>
-                     <p className="text-[10px] text-gray-400 text-right mt-2">Total: {formatCurrency(summary.totalOrder)}</p>
+                     <p className="text-[10px] text-gray-400 text-right mt-2">Total: {isLoading ? '...' : formatCurrency(summary.totalOrder)}</p>
                 </div>
             </div>
 
@@ -294,12 +338,12 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                 <div className="space-y-2">
                     <div className="flex justify-between items-end">
                         <span className="text-[10px] text-gray-500 font-medium">Pendentes</span>
-                        <span className="text-sm font-bold text-gray-900">{summary.devAberto}</span>
+                        <span className="text-sm font-bold text-gray-900">{isLoading ? '...' : summary.devAberto}</span>
                     </div>
                     <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
                         <div 
                           className="bg-purple-500 h-full rounded-full transition-all duration-500" 
-                          style={{width: `${summary.countDev > 0 ? (summary.devAberto / summary.countDev) * 100 : 0}%`}}
+                          style={{width: `${!isLoading && summary.countDev > 0 ? (summary.devAberto / summary.countDev) * 100 : 0}%`}}
                         ></div>
                     </div>
                 </div>
@@ -315,15 +359,15 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                 <div className="space-y-2">
                      <div className="flex justify-between items-center">
                         <span className="text-[10px] text-gray-500">Gerado</span>
-                        <span className="text-xs font-bold text-gray-900">{formatCurrency(summary.totalCommission)}</span>
+                        <span className="text-xs font-bold text-gray-900">{isLoading ? '...' : formatCurrency(summary.totalCommission)}</span>
                      </div>
                      <div className="flex justify-between items-center">
                         <span className="text-[10px] text-gray-500">Pago</span>
-                        <span className="text-xs font-bold text-green-600">{formatCurrency(summary.paidCommission)}</span>
+                        <span className="text-xs font-bold text-green-600">{isLoading ? '...' : formatCurrency(summary.paidCommission)}</span>
                      </div>
                      <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
                         <span className="text-[10px] font-bold text-gray-500 uppercase">A Receber</span>
-                        <span className="text-sm font-bold text-amber-600">{formatCurrency(summary.pendingCommission)}</span>
+                        <span className="text-sm font-bold text-amber-600">{isLoading ? '...' : formatCurrency(summary.pendingCommission)}</span>
                      </div>
                 </div>
             </div>
@@ -391,7 +435,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
                     {/* Centro do Donut */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center">
-                            <p className="text-xl font-black text-gray-900">{summary.countOrders}</p>
+                            <p className="text-xl font-black text-gray-900">{isLoading ? '...' : summary.countOrders}</p>
                             <p className="text-[8px] uppercase font-bold text-gray-400">Total</p>
                         </div>
                     </div>

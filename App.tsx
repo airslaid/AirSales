@@ -295,7 +295,7 @@ export default function App() {
       } else {
         let filterToUse = activeModuleId;
         if (activeModuleId === 'CRM') filterToUse = ''; 
-        if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD';
+        if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD,DV';
         data = await fetchData('supabase', "", tableName, filterToUse);
       }
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
@@ -652,7 +652,8 @@ export default function App() {
     
     if (activeModuleId === 'CRM') {
        // Filtra apenas Orçamentos (OV) para o CRM, ignorando Pedidos de Venda (PD)
-       result = result.filter(item => item.SER_ST_CODIGO === 'OV');
+       // Usamos trim e toUpperCase para garantir compatibilidade com diferentes formatos de banco
+       result = result.filter(item => String(item.SER_ST_CODIGO || '').trim().toUpperCase() === 'OV');
     }
 
     if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
@@ -660,7 +661,11 @@ export default function App() {
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
     const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') ? 'NOT_DT_EMISSAO' : 'PED_DT_EMISSAO';
     
-    // CRM tem seus próprios filtros internos de Data e Representante
+    // Filtros globais de Data e Representante
+    // CRM tem seus próprios filtros internos que já estão sincronizados via props,
+    // mas para evitar conflitos de filtragem dupla que podem resultar em lista vazia,
+    // mantemos a isolação se necessário. No entanto, o problema anterior era a falta de sincronia.
+    // Vamos garantir que o filtro global NÃO se aplique ao CRM se ele já faz isso internamente com os mesmos campos.
     if (activeModuleId !== 'CRM') {
         if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
         if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
@@ -738,6 +743,9 @@ export default function App() {
     } else {
         // Lógica normal para os módulos de comissão/pagamento (usa processedData que já tem filtro de data)
         filteredByMode = processedData.filter(item => { 
+            const isCommissionable = item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV';
+            if (!isCommissionable) return false;
+
             const status = String(item.PED_ST_STATUS || '').toUpperCase(); 
             const hasInvoice = !!item.NOT_DT_EMISSAO; 
             if (isPaymentModule) { 
@@ -836,6 +844,27 @@ export default function App() {
       if (s.includes('aprov')) emAprovacao += v; 
       if (s.includes('aberto') && !hasInvoice && !s.includes('faturado')) { emAberto += v; } 
     });
+
+    // Faturamento Real (Filtrado por Data de Faturamento/Nota - NOT_DT_EMISSAO)
+    // Isso permite que o card de Faturamento mostre o que foi faturado no período, independente de quando foi vendido.
+    let faturadoReal = 0;
+    if (filters.startDate || filters.endDate) {
+        salesData.forEach(item => {
+            const billingDate = item.NOT_DT_EMISSAO || '';
+            const inDateRange = (!filters.startDate || billingDate >= filters.startDate) && 
+                                (!filters.endDate || billingDate <= filters.endDate);
+            const repMatch = filters.representante ? String(item.REP_IN_CODIGO) === filters.representante : true;
+            const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (item.NOT_DT_EMISSAO && item.NOT_DT_EMISSAO !== '');
+            const isPD = item.SER_ST_CODIGO === 'PD';
+
+            if (inDateRange && repMatch && isBilled && isPD) {
+                faturadoReal += parseBrNumber(item['ITP_RE_VALORMERCADORIA'] || 0);
+            }
+        });
+    } else {
+        faturadoReal = faturado;
+    }
+
     let currentGoalValue = 0; 
     if (filters.startDate && filters.endDate) { 
       const [startYear, startMonth] = filters.startDate.split('-').map(Number); 
@@ -852,8 +881,8 @@ export default function App() {
     }
     const achievement = currentGoalValue > 0 ? (realizedTotal / currentGoalValue) * 100 : 0; 
     const uniqueOrders = new Set(sourceData.map(d => `${d.FIL_IN_CODIGO}-${d.SER_ST_CODIGO}-${d.PED_IN_CODIGO}`)).size;
-    return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement, realizedTotal };
-  }, [processedData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
+    return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement, realizedTotal, faturadoReal };
+  }, [processedData, salesData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
 
   const paymentMetrics = useMemo(() => {
       if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 };
@@ -1118,8 +1147,8 @@ export default function App() {
           {activeModuleId === 'OVERVIEW' ? (
              <OverviewPanel 
                 user={currentUser} 
-                salesData={processedData} // Usa processedData para respeitar filtros globais se houver (mas sem filtro de status)
-                commissionData={commissionData} // Usa commissionData já calculada
+                salesData={salesData} // Passa os dados brutos para permitir filtros específicos no componente
+                commissionData={commissionData} 
                 goals={salesGoals}
                 metrics={metrics}
                 availableReps={availableReps}
@@ -1127,6 +1156,7 @@ export default function App() {
                 onRepChange={(val) => setFilters(prev => ({ ...prev, representante: val }))}
                 dateRange={{ start: filters.startDate || '', end: filters.endDate || '' }}
                 onDateRangeChange={(range) => setFilters(prev => ({ ...prev, startDate: range.start, endDate: range.end }))}
+                isLoading={loading}
              />
           ) : activeModuleId === 'IA_CHAT' ? (
              <AIChatView 
@@ -1266,6 +1296,8 @@ export default function App() {
                 user={currentUser} 
                 externalAction={crmExternalAction}
                 onExternalActionHandled={() => setCrmExternalAction(null)}
+                globalFilters={filters}
+                onGlobalFilterChange={setFilters}
              />
           ) : activeModuleId === 'FORMULARIOS' ? (
              <FormsView user={currentUser} />
@@ -1383,16 +1415,16 @@ export default function App() {
                 )} 
               </div> 
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0"> 
-                {activeModuleId === 'PAGAMENTOS' ? ( <> <StatCard title="Total a Pagar (Pendente)" value={currencyFormat(paymentMetrics.toPay)} icon={AlertCircle} color="text-red-500" /> <StatCard title="Total Pago (Baixado)" value={currencyFormat(paymentMetrics.paid)} icon={CheckCircle2} color="text-green-600" /> <StatCard title="Projeção (Carteira)" value={currencyFormat(paymentMetrics.projected)} icon={Wallet} color="text-blue-500" /> </> ) : activeModuleId === 'COMISSAO' ? ( <> <StatCard title={commissionViewMode === 'FATURADO' ? "Total Gerado" : "Previsão Gerada"} value={currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} /> <StatCard title="Total Faturado (Venda)" value={currencyFormat(metrics.faturado)} icon={TrendingUp} color="text-blue-600" /> </> ) : ( <StatCard title="Total Bruto (Itens)" value={currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" /> )} 
+                {activeModuleId === 'PAGAMENTOS' ? ( <> <StatCard title="Total a Pagar (Pendente)" value={loading ? '...' : currencyFormat(paymentMetrics.toPay)} icon={AlertCircle} color="text-red-500" /> <StatCard title="Total Pago (Baixado)" value={loading ? '...' : currencyFormat(paymentMetrics.paid)} icon={CheckCircle2} color="text-green-600" /> <StatCard title="Projeção (Carteira)" value={loading ? '...' : currencyFormat(paymentMetrics.projected)} icon={Wallet} color="text-blue-500" /> </> ) : activeModuleId === 'COMISSAO' ? ( <> <StatCard title={commissionViewMode === 'FATURADO' ? "Total Gerado" : "Previsão Gerada"} value={loading ? '...' : currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} /> <StatCard title="Total Faturado (Venda)" value={loading ? '...' : currencyFormat(metrics.faturado)} icon={TrendingUp} color="text-blue-600" /> </> ) : ( <StatCard title="Total Bruto (Itens)" value={loading ? '...' : currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" /> )} 
                 {activeModuleId !== 'OV' && activeModuleId !== 'DV' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( 
                   <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors relative overflow-hidden group flex flex-col justify-between"> 
                     <div className="flex items-center justify-between mb-1"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">Meta</p><Target size={14} className="text-blue-500" /></div> 
-                    <div className="flex items-end justify-between"><h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums">{currencyFormat(metrics.goal)}</h3>{metrics.goal > 0 && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${metrics.achievement >= 100 ? 'bg-green-100 text-green-700' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{metrics.achievement.toFixed(1)}%</span>)}</div> 
+                    <div className="flex items-end justify-between"><h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums">{loading ? '...' : currencyFormat(metrics.goal)}</h3>{metrics.goal > 0 && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${metrics.achievement >= 100 ? 'bg-green-100 text-green-700' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{metrics.achievement.toFixed(1)}%</span>)}</div> 
                     {metrics.goal > 0 && (<div className="w-full h-1 bg-gray-100 mt-2 rounded-full overflow-hidden"><div className={`h-full ${metrics.achievement >= 100 ? 'bg-green-500' : metrics.achievement >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(metrics.achievement, 100)}%` }}></div></div>)} 
                   </div> 
                 )} 
-                {activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( <> <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturado)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} /> <StatCard title="Aberto" value={currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" /> </> )} 
-                {activeModuleId !== 'PAGAMENTOS' && ( <StatCard title="Pedidos Únicos" value={metrics.count.toString()} icon={Package} color="text-gray-400" /> )} 
+                {activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( <> <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={loading ? '...' : currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturadoReal)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} /> <StatCard title="Aberto" value={loading ? '...' : currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" /> </> )} 
+                {activeModuleId !== 'PAGAMENTOS' && ( <StatCard title="Pedidos Únicos" value={loading ? '...' : metrics.count.toString()} icon={Package} color="text-gray-400" /> )} 
               </div> 
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 relative"> 
                 <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between shrink-0"> 

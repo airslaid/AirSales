@@ -294,7 +294,12 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
     
     // Se filterCode for vazio, não filtra por série (traz OV e PD)
     if (filterCode && filterCode.trim() !== '') {
-        query = query.eq('ser_st_codigo', filterCode.toUpperCase().trim());
+        const codes = filterCode.split(',').map(c => c.toUpperCase().trim());
+        if (codes.length > 1) {
+            query = query.in('ser_st_codigo', codes);
+        } else {
+            query = query.eq('ser_st_codigo', codes[0]);
+        }
     }
 
     if (repCode) query = query.eq('rep_in_codigo', repCode);
