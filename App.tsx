@@ -8,7 +8,7 @@ import {
   Edit2, Globe, DatabaseZap, Shield, User, AlertCircle, PieChart, Calculator, CheckSquare, Square,
   Package, Tag, Layers, ListTree, Percent, Briefcase, Wallet, Banknote, HeartHandshake, Check,
   FileUp, UploadCloud, Database as DatabaseIcon, AlertTriangle, Sparkles, MessageSquare, Handshake,
-  CheckSquare2, LayoutDashboard, ClipboardList
+  CheckSquare2, LayoutDashboard, ClipboardList, Truck
 } from 'lucide-react';
 
 import * as XLSX from 'xlsx';
@@ -34,6 +34,7 @@ const MODULES = [
   { id: 'OVERVIEW', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: false },
   { id: 'CRM', label: 'CRM Operacional', icon: Handshake, adminOnly: false },
   { id: 'FORMULARIOS', label: 'Formulários', icon: ClipboardList, adminOnly: false },
+  { id: 'ENTREGA', label: 'Indicador de Entrega', icon: Truck, adminOnly: false },
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
   { id: 'DV', label: 'Desenvolvimento', icon: Hammer, table: 'PEDIDOS_DETALHADOS' },
@@ -297,6 +298,7 @@ export default function App() {
         let filterToUse = activeModuleId;
         if (activeModuleId === 'CRM') filterToUse = ''; 
         if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD,DV';
+        if (activeModuleId === 'ENTREGA') filterToUse = 'PD';
         data = await fetchData('supabase', "", tableName, filterToUse);
       }
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
@@ -660,7 +662,14 @@ export default function App() {
     if (filters.globalSearch) { const s = filters.globalSearch.toLowerCase(); result = result.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(s))); }
     if (filters.cliente) { const c = filters.cliente.toLowerCase(); result = result.filter(item => String(item.CLIENTE_NOME || '').toLowerCase().includes(c)); }
     const isPaymentModule = activeModuleId === 'PAGAMENTOS'; const isCommissionModule = activeModuleId === 'COMISSAO';
-    const dateFilterField = ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') ? 'NOT_DT_EMISSAO' : 'PED_DT_EMISSAO';
+    const isDeliveryModule = activeModuleId === 'ENTREGA';
+    
+    let dateFilterField = 'PED_DT_EMISSAO';
+    if ((isPaymentModule || isCommissionModule) && commissionViewMode === 'FATURADO') {
+        dateFilterField = 'NOT_DT_EMISSAO';
+    } else if (isDeliveryModule) {
+        dateFilterField = 'IPE_DT_DATAENTREGA';
+    }
     
     // Filtros globais de Data e Representante
     // CRM tem seus próprios filtros internos que já estão sincronizados via props,
@@ -910,7 +919,67 @@ export default function App() {
     }
     const achievement = currentGoalValue > 0 ? (realizedTotal / currentGoalValue) * 100 : 0; 
     const uniqueOrders = new Set(sourceData.map(d => `${d.FIL_IN_CODIGO}-${d.SER_ST_CODIGO}-${d.PED_IN_CODIGO}`)).size;
-    return { total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement, realizedTotal, faturadoReal };
+
+    // Métricas de Entrega
+    let deliveredOnTime = 0;
+    let deliveredLate = 0;
+    let delayed = 0;
+    let deliveryTotal = 0;
+
+    if (activeModuleId === 'ENTREGA') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const orderGroups = new Map<string, Sale[]>();
+        
+        sourceData.forEach(item => {
+            if (item.SER_ST_CODIGO !== 'PD') return;
+            const key = `${item.FIL_IN_CODIGO}-${item.PED_IN_CODIGO}`;
+            if (!orderGroups.has(key)) orderGroups.set(key, []);
+            orderGroups.get(key)!.push(item);
+        });
+
+        orderGroups.forEach(items => {
+            let isDelayed = false;
+            let isLate = false;
+            let hasDeliveryDate = false;
+
+            for (const item of items) {
+                const deliveryDateStr = item.IPE_DT_DATAENTREGA;
+                if (!deliveryDateStr) continue;
+                
+                hasDeliveryDate = true;
+                const deliveryDate = new Date(deliveryDateStr);
+                deliveryDate.setHours(0, 0, 0, 0);
+
+                const billingDateStr = item.NOT_DT_EMISSAO;
+                const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (billingDateStr && billingDateStr !== '');
+                const isCancelled = String(item.PED_ST_STATUS || '').toUpperCase().includes('CANCEL');
+
+                if (isBilled) {
+                    if (billingDateStr) {
+                        const billingDate = new Date(billingDateStr);
+                        billingDate.setHours(0, 0, 0, 0);
+                        if (billingDate > deliveryDate) isLate = true;
+                    }
+                } else {
+                    if (!isCancelled && today > deliveryDate) isDelayed = true;
+                }
+            }
+
+            if (hasDeliveryDate) {
+                deliveryTotal++;
+                if (isDelayed) delayed++;
+                else if (isLate) deliveredLate++;
+                else deliveredOnTime++;
+            }
+        });
+    }
+
+    return { 
+        total, faturado, emAprovacao, emAberto, count: uniqueOrders, goal: currentGoalValue, achievement, realizedTotal, faturadoReal,
+        deliveredOnTime, deliveredLate, delayed, deliveryTotal
+    };
   }, [processedData, salesData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
 
   const paymentMetrics = useMemo(() => {
@@ -1436,7 +1505,13 @@ export default function App() {
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Status</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.status} onChange={e => setFilters({...filters, status: e.target.value})}><option value="">Todos</option>{availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}</select></div> 
                     <div className="flex-1 space-y-0.5"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter">Filial</label><select className="w-full px-1.5 py-1 bg-gray-50 border border-gray-200 text-[10px] focus:border-gray-900 outline-none" value={filters.filial} onChange={e => setFilters({...filters, filial: e.target.value})}><option value="">Todas</option>{availableFiliais.map(f => <option key={f} value={f}>{f}</option>)}</select></div> 
                     <div className="flex-1 min-w-[180px] space-y-0.5"> 
-                      <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter"> {((activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') && commissionViewMode === 'FATURADO') ? 'Data Faturamento (Nota)' : 'Período de Emissão (Pedido)'} </label> 
+                      <label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter"> 
+                        {((activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') && commissionViewMode === 'FATURADO') 
+                            ? 'Data Faturamento (Nota)' 
+                            : activeModuleId === 'ENTREGA' 
+                                ? 'Data de Entrega' 
+                                : 'Período de Emissão (Pedido)'} 
+                      </label> 
                       <div className="flex items-center gap-1"><input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} title="Data Inicial" /><span className="text-gray-300 text-[9px]">-</span><input type="date" className="flex-1 px-1.5 py-1 bg-gray-50 border border-gray-200 text-[9px] outline-none focus:border-gray-900" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} title="Data Final" /></div> 
                     </div> 
                     <div className="w-20"><button onClick={clearFilters} className="w-full px-3 py-1 bg-gray-100 text-gray-500 text-[9px] font-bold uppercase tracking-widest hover:bg-gray-200 transition-all text-center border border-gray-200">Resetar</button></div> 
@@ -1444,16 +1519,43 @@ export default function App() {
                 )} 
               </div> 
               <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 shrink-0"> 
-                {activeModuleId === 'PAGAMENTOS' ? ( <> <StatCard title="Total a Pagar (Pendente)" value={loading ? '...' : currencyFormat(paymentMetrics.toPay)} icon={AlertCircle} color="text-red-500" /> <StatCard title="Total Pago (Baixado)" value={loading ? '...' : currencyFormat(paymentMetrics.paid)} icon={CheckCircle2} color="text-green-600" /> <StatCard title="Projeção (Carteira)" value={loading ? '...' : currencyFormat(paymentMetrics.projected)} icon={Wallet} color="text-blue-500" /> </> ) : activeModuleId === 'COMISSAO' ? ( <> <StatCard title={commissionViewMode === 'FATURADO' ? "Total Gerado" : "Previsão Gerada"} value={loading ? '...' : currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} /> <StatCard title="Total Faturado (Venda)" value={loading ? '...' : currencyFormat(metrics.faturado)} icon={TrendingUp} color="text-blue-600" /> </> ) : ( <StatCard title="Total Bruto (Itens)" value={loading ? '...' : currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" /> )} 
-                {activeModuleId !== 'OV' && activeModuleId !== 'DV' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( 
+                {activeModuleId === 'ENTREGA' ? (
+                  <>
+                    <StatCard 
+                        title="Entregues no Prazo" 
+                        value={loading ? '...' : `${metrics.deliveredOnTime} (${metrics.deliveryTotal > 0 ? ((metrics.deliveredOnTime / metrics.deliveryTotal) * 100).toFixed(1) : 0}%)`} 
+                        icon={CheckCircle2} 
+                        color="text-green-600" 
+                    />
+                    <StatCard 
+                        title="Entregues Fora do Prazo" 
+                        value={loading ? '...' : `${metrics.deliveredLate} (${metrics.deliveryTotal > 0 ? ((metrics.deliveredLate / metrics.deliveryTotal) * 100).toFixed(1) : 0}%)`} 
+                        icon={AlertTriangle} 
+                        color="text-amber-500" 
+                    />
+                    <StatCard 
+                        title="Atrasados (Não Faturados)" 
+                        value={loading ? '...' : `${metrics.delayed} (${metrics.deliveryTotal > 0 ? ((metrics.delayed / metrics.deliveryTotal) * 100).toFixed(1) : 0}%)`} 
+                        icon={AlertCircle} 
+                        color="text-red-600" 
+                    />
+                    <StatCard 
+                        title="Total de Pedidos" 
+                        value={loading ? '...' : metrics.deliveryTotal.toString()} 
+                        icon={Package} 
+                        color="text-gray-900" 
+                    />
+                  </>
+                ) : activeModuleId === 'PAGAMENTOS' ? ( <> <StatCard title="Total a Pagar (Pendente)" value={loading ? '...' : currencyFormat(paymentMetrics.toPay)} icon={AlertCircle} color="text-red-500" /> <StatCard title="Total Pago (Baixado)" value={loading ? '...' : currencyFormat(paymentMetrics.paid)} icon={CheckCircle2} color="text-green-600" /> <StatCard title="Projeção (Carteira)" value={loading ? '...' : currencyFormat(paymentMetrics.projected)} icon={Wallet} color="text-blue-500" /> </> ) : activeModuleId === 'COMISSAO' ? ( <> <StatCard title={commissionViewMode === 'FATURADO' ? "Total Gerado" : "Previsão Gerada"} value={loading ? '...' : currencyFormat(commissionData.reduce((acc, curr) => acc + (curr.VALOR_COMISSAO || 0), 0))} icon={commissionViewMode === 'FATURADO' ? Banknote : Wallet} color={commissionViewMode === 'FATURADO' ? "text-green-600" : "text-amber-500"} /> <StatCard title="Total Faturado (Venda)" value={loading ? '...' : currencyFormat(metrics.faturado)} icon={TrendingUp} color="text-blue-600" /> </> ) : ( <StatCard title="Total Bruto (Itens)" value={loading ? '...' : currencyFormat(metrics.total)} icon={DollarSign} color="text-gray-900" /> )} 
+                {activeModuleId !== 'OV' && activeModuleId !== 'DV' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'ENTREGA' && ( 
                   <div className="bg-white p-3 border border-gray-200 shadow-sm hover:border-gray-900 transition-colors relative overflow-hidden group flex flex-col justify-between"> 
                     <div className="flex items-center justify-between mb-1"><p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">Meta</p><Target size={14} className="text-blue-500" /></div> 
                     <div className="flex items-end justify-between"><h3 className="text-lg font-bold text-gray-900 tracking-tighter tabular-nums">{loading ? '...' : currencyFormat(metrics.goal)}</h3>{metrics.goal > 0 && (<span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-sm ${metrics.achievement >= 100 ? 'bg-green-100 text-green-700' : metrics.achievement >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{metrics.achievement.toFixed(1)}%</span>)}</div> 
                     {metrics.goal > 0 && (<div className="w-full h-1 bg-gray-100 mt-2 rounded-full overflow-hidden"><div className={`h-full ${metrics.achievement >= 100 ? 'bg-green-500' : metrics.achievement >= 70 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(metrics.achievement, 100)}%` }}></div></div>)} 
                   </div> 
                 )} 
-                {activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && ( <> <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={loading ? '...' : currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturadoReal)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} /> <StatCard title="Aberto" value={loading ? '...' : currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" /> </> )} 
-                {activeModuleId !== 'PAGAMENTOS' && ( <StatCard title="Pedidos Únicos" value={loading ? '...' : metrics.count.toString()} icon={Package} color="text-gray-400" /> )} 
+                {activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'ENTREGA' && ( <> <StatCard title={activeModuleId === 'OV' ? "Em Aprovação" : "Faturado"} value={loading ? '...' : currencyFormat(activeModuleId === 'OV' ? metrics.emAprovacao : metrics.faturadoReal)} icon={activeModuleId === 'OV' ? ShieldCheck : TrendingUp} color={activeModuleId === 'OV' ? "text-amber-600" : "text-green-600"} /> <StatCard title="Aberto" value={loading ? '...' : currencyFormat(activeModuleId === 'OV' ? metrics.emAberto : (metrics.total - metrics.faturado))} icon={Receipt} color="text-blue-600" /> </> )} 
+                {activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'ENTREGA' && ( <StatCard title="Pedidos Únicos" value={loading ? '...' : metrics.count.toString()} icon={Package} color="text-gray-400" /> )} 
               </div> 
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 relative"> 
                 <div className="p-2 border-b bg-gray-50 flex flex-wrap gap-2 items-center justify-between shrink-0"> 
