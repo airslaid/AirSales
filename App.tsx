@@ -765,7 +765,12 @@ export default function App() {
     }
 
     return filteredByMode.map(item => { 
-      const valMercadoria = parseBrNumber(item['ITP_RE_VALORMERCADORIA']); 
+      // Alteração solicitada: Base de cálculo deve ser o Valor Total da Nota (ITN_RE_VALORTOTAL)
+      // Caso não tenha nota (ex: pedido em aberto), mantemos o valor da mercadoria do pedido.
+      const valNotaTotal = parseBrNumber(item['ITN_RE_VALORTOTAL']);
+      const valPedidoMerc = parseBrNumber(item['ITP_RE_VALORMERCADORIA']);
+      const baseCalculo = valNotaTotal > 0 ? valNotaTotal : valPedidoMerc;
+
       const repCode = Number(item['REP_IN_CODIGO']); 
       const emissionDate = item['PED_DT_EMISSAO']; 
       let percentual = 0; 
@@ -797,7 +802,7 @@ export default function App() {
         } 
       } 
 
-      const valorComissao = valMercadoria * percentual; 
+      const valorComissao = baseCalculo * percentual; 
       const rolePaymentKey = `PAGO_${roleToUse}`; 
       const isPaid = !!item[rolePaymentKey]; 
       
@@ -853,13 +858,14 @@ export default function App() {
     const sourceData = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
     sourceData.forEach(d => { 
       const v = parseBrNumber(d['ITP_RE_VALORMERCADORIA'] || 0); 
+      const vInvoice = parseBrNumber(d['ITN_RE_VALORTOTAL'] || 0);
       const s = String(d.PED_ST_STATUS || '').toLowerCase(); 
       const hasInvoice = (d['NOT_DT_EMISSAO'] && d['NOT_DT_EMISSAO'] !== '') || (d['NF_NOT_IN_CODIGO'] && Number(d['NF_NOT_IN_CODIGO']) > 0); 
       total += v; 
       if (d.SER_ST_CODIGO === 'PD') {
         realizedTotal += v;
       }
-      if (s.includes('faturado') || hasInvoice) { faturado += v; } 
+      if (s.includes('faturado') || hasInvoice) { faturado += vInvoice; } 
       if (s.includes('aprov')) emAprovacao += v; 
       if (s.includes('aberto') && !hasInvoice && !s.includes('faturado')) { emAberto += v; } 
     });
@@ -877,7 +883,7 @@ export default function App() {
             const isPD = item.SER_ST_CODIGO === 'PD';
 
             if (inDateRange && repMatch && isBilled && isPD) {
-                faturadoReal += parseBrNumber(item['ITP_RE_VALORMERCADORIA'] || 0);
+                faturadoReal += parseBrNumber(item['ITN_RE_VALORTOTAL'] || 0);
             }
         });
     } else {

@@ -83,23 +83,31 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
   try {
     // FIX CRÍTICO: Ordenação Determinística
     // Ordenamos os dados recebidos antes de gerar sequenciais.
-    // Isso garante que o mesmo item sempre receba o mesmo ITP_IN_SEQUENCIA,
-    // permitindo que o UPSERT atualize o registro existente (mudança de status)
-    // ao invés de criar uma duplicata.
     const sortedSales = [...sales].sort((a, b) => {
         // 1. Agrupa por Pedido
         const pedA = Math.floor(toNumeric(findValue(a, 'PED_IN_CODIGO')));
         const pedB = Math.floor(toNumeric(findValue(b, 'PED_IN_CODIGO')));
         if (pedA !== pedB) return pedA - pedB;
 
-        // 2. Se mesmo pedido, ordena por Produto/Descrição para estabilizar a sequência
+        // 2. Ordena por Sequência do Item
+        const seqA = Math.floor(toNumeric(findValue(a, 'ITP_IN_SEQUENCIA')));
+        const seqB = Math.floor(toNumeric(findValue(b, 'ITP_IN_SEQUENCIA')));
+        if (seqA !== seqB) return seqA - seqB;
+
+        // 3. Ordena por Nota Fiscal (garante que a primeira nota fique com a sequencia original)
+        const nfA = Math.floor(toNumeric(findValue(a, 'NF_NOT_IN_CODIGO')));
+        const nfB = Math.floor(toNumeric(findValue(b, 'NF_NOT_IN_CODIGO')));
+        if (nfA !== nfB) return nfA - nfB;
+
+        // 4. Desempate por Produto
         const prodA = String(findValue(a, 'PRO_ST_ALTERNATIVO') || findValue(a, 'ITP_ST_DESCRICAO') || '');
         const prodB = String(findValue(b, 'PRO_ST_ALTERNATIVO') || findValue(b, 'ITP_ST_DESCRICAO') || '');
         return prodA.localeCompare(prodB);
     });
 
     const ordersMap = new Map<number, number>(); 
-    
+    const usedSequencesMap = new Map<number, Set<number>>(); // Rastreia sequências usadas por pedido
+
     const allRows = sortedSales.map(s => {
       let rawSer = findValue(s, 'SER_ST_CODIGO') || s['SER_ST_CODIGO'];
       let serCod = String(rawSer || '').trim();
@@ -109,15 +117,40 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
       
       if (!pedNum || pedNum === 0) return null;
 
-      // Lógica de Geração de Sequência Estável
+      // Inicializa o Set de sequências para o pedido se não existir
+      if (!usedSequencesMap.has(pedNum)) {
+          usedSequencesMap.set(pedNum, new Set());
+      }
+      const usedSeqs = usedSequencesMap.get(pedNum)!;
+
+      // Lógica de Geração de Sequência Estável e Tratamento de Colisão (Múltiplas Notas)
       if (itpSeq === 0) {
           const currentCount = ordersMap.get(pedNum) || 0;
           itpSeq = currentCount + 1;
+          
+          // Garante que não colida com nada existente (improvável se veio 0, mas seguro)
+          while (usedSeqs.has(itpSeq)) {
+              itpSeq++;
+          }
+          
           ordersMap.set(pedNum, itpSeq);
       } else {
-          // Se já vier com sequência, respeitamos, mas atualizamos o mapa para evitar colisão se misturar
-          ordersMap.set(pedNum, Math.max(ordersMap.get(pedNum) || 0, itpSeq));
+          // Se já tem sequência, verifica colisão (ex: mesmo item faturado em 2 notas)
+          if (usedSeqs.has(itpSeq)) {
+              // Colisão detectada! Adiciona offset para diferenciar
+              // Ex: Item 1 (Nota A) -> 1
+              //     Item 1 (Nota B) -> 1001
+              let newSeq = itpSeq + 1000;
+              while (usedSeqs.has(newSeq)) {
+                  newSeq += 1000;
+              }
+              console.log(`[Import] Colisão de sequência detectada no Pedido ${pedNum}. Alterando Seq ${itpSeq} para ${newSeq}`);
+              itpSeq = newSeq;
+          }
       }
+
+      // Registra a sequência como usada
+      usedSeqs.add(itpSeq);
 
       const rawMercadoria = findValue(s, 'ITN_RE_VALORMERCADORIA');
       const rawTotal = findValue(s, 'ITN_RE_VALORTOTAL');

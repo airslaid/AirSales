@@ -100,7 +100,12 @@ export const SalesTable: React.FC<SalesTableProps> = ({
     const groups = new Map<string, { summary: Sale, items: Sale[] }>();
 
     data.forEach(item => {
-      const groupKey = `${item.FIL_IN_CODIGO}-${item.SER_ST_CODIGO}-${item.PED_IN_CODIGO}`;
+      // Agrupa por Pedido E Nota Fiscal (se houver) para separar faturamentos parciais
+      let groupKey = `${item.FIL_IN_CODIGO}-${item.SER_ST_CODIGO}-${item.PED_IN_CODIGO}`;
+      if (item.NF_NOT_IN_CODIGO) {
+          groupKey += `-${item.NF_NOT_IN_CODIGO}`;
+      }
+
       if (!groups.has(groupKey)) {
         groups.set(groupKey, { 
           summary: { ...item }, 
@@ -117,9 +122,16 @@ export const SalesTable: React.FC<SalesTableProps> = ({
        const totalQtd = g.items.reduce((acc, curr) => acc + (Number(curr.ITP_RE_QUANTIDADE) || 0), 0);
        const totalComissao = g.items.reduce((acc, curr) => acc + (Number(curr.VALOR_COMISSAO) || 0), 0);
        
+       // Soma também os valores da nota fiscal para exibição correta nas colunas novas
+       const totalNotaMerc = g.items.reduce((acc, curr) => acc + (Number(curr.ITN_RE_VALORMERCADORIA) || 0), 0);
+       const totalNotaTotal = g.items.reduce((acc, curr) => acc + (Number(curr.ITN_RE_VALORTOTAL) || 0), 0);
+       
        g.summary.ITP_RE_VALORMERCADORIA = totalVal;
        g.summary.ITP_RE_QUANTIDADE = totalQtd;
        g.summary.VALOR_COMISSAO = totalComissao;
+       g.summary.ITN_RE_VALORMERCADORIA = totalNotaMerc;
+       g.summary.ITN_RE_VALORTOTAL = totalNotaTotal;
+
        g.summary.ITP_ST_DESCRICAO = `${g.items.length} Itens`;
        g.summary.PRO_ST_ALTERNATIVO = '-';
        g.summary.ITP_RE_VALORUNITARIO = 0;
