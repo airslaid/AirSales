@@ -363,6 +363,35 @@ export const SalesTable: React.FC<SalesTableProps> = ({
         );
     }
 
+    if (col.key === 'DIAS_ATRASO') {
+        const days = Number(row[col.key]);
+        if (!days) return <span className="text-gray-300">-</span>;
+        return (
+            <div className="flex justify-center">
+                <span className="text-red-600 font-bold text-xs bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                    {days} dias
+                </span>
+            </div>
+        );
+    }
+
+    if (col.key === 'STATUS_ENTREGA') {
+      const status = String(row[col.key]);
+      let colorClass = 'bg-gray-50 text-gray-600 border-gray-100';
+      
+      if (status === 'ENTREGUE NO PRAZO') colorClass = 'bg-green-50 text-green-600 border-green-100';
+      else if (status === 'ENTREGUE FORA DO PRAZO') colorClass = 'bg-amber-50 text-amber-600 border-amber-100';
+      else if (status === 'ATRASADO') colorClass = 'bg-red-50 text-red-600 border-red-100';
+      
+      return (
+        <div className="flex justify-center">
+          <span className={`px-1.5 py-0.5 border text-[8px] font-bold uppercase tracking-widest w-[150px] block text-center ${colorClass}`}>
+            {status}
+          </span>
+        </div>
+      );
+    }
+
     if (col.key.includes('STATUS')) {
       return (
         <div className="flex justify-center">

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { DeliveryChart } from './components/DeliveryChart';
 import { 
   RefreshCw, Search, Database, Menu, Table as TableIcon, FileText, ShoppingBag, Hammer, 
   Filter, Hexagon, DollarSign, ChevronDown, TrendingUp, Receipt, Users, UserPlus, Trash2, 
@@ -208,6 +209,7 @@ export default function App() {
     }
   };
 
+  const [showDeliveryChart, setShowDeliveryChart] = useState(false);
   const [pendingXmls, setPendingXmls] = useState<PendingXmlItem[]>([]);
   const [perfYear, setPerfYear] = useState(new Date().getFullYear());
   const [perfMonth, setPerfMonth] = useState(new Date().getMonth() + 1);
@@ -237,7 +239,7 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [filtersExpanded, setFiltersExpanded] = useState(window.innerWidth > 768);
 
-  const getSharedLayoutKey = () => `airsales_global_layout_v3_${currentUser?.email}`;
+  const getSharedLayoutKey = () => `airsales_global_layout_v4_${currentUser?.email}`;
 
   useEffect(() => {
     loadAppUsers();
@@ -501,8 +503,8 @@ export default function App() {
     const savedLayout = localStorage.getItem(getSharedLayoutKey());
     const getFormatter = (key: string) => { if (key.includes('VALOR') || key.includes('VLMERCADORIA') || key.includes('PRECO')) return currencyFormat; if (key.includes('QUANTIDADE') || key.includes('QTD')) return numberFormat; if (key.includes('DT_EMISSAO') || key.includes('DATA')) return dateFormat; return (val: any) => String(val || '-'); };
     if (savedLayout) { try { const parsedLayout: ColumnConfig[] = JSON.parse(savedLayout); setSalesColumns(parsedLayout.map(col => ({ ...col, format: getFormatter(col.key) }))); return; } catch (e) {} }
-    const defaultOrder = ["PED_IN_CODIGO", "FILIAL_NOME", "REPRESENTANTE_NOME", "PED_DT_EMISSAO", "CLIENTE_NOME", "PRO_ST_ALTERNATIVO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORMERCADORIA", "PED_ST_STATUS", "MOTIVO_ATRASO"];
-    const allPossibleKeys = ["SER_ST_CODIGO", "PED_IN_CODIGO", "CLI_IN_CODIGO", "CLIENTE_NOME", "FIL_IN_CODIGO", "FILIAL_NOME", "PED_DT_EMISSAO", "PED_CH_SITUACAO", "PED_ST_STATUS", "REP_IN_CODIGO", "REPRESENTANTE_NOME", "ITP_IN_SEQUENCIA", "ITP_ST_SITUACAO", "IT_ST_STATUS", "NF_NOT_IN_CODIGO", "NOT_DT_EMISSAO", "PRO_ST_ALTERNATIVO", "PRO_IN_CODIGO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORUNITARIO", "ITP_RE_VALORMERCADORIA", "ITN_RE_VALORMERCADORIA", "ITN_RE_VALORTOTAL", "ITP_ST_PEDIDOCLIENTE", "IPE_DT_DATAENTREGA", "MOTIVO_ATRASO"];
+    const defaultOrder = ["PED_IN_CODIGO", "FILIAL_NOME", "REPRESENTANTE_NOME", "PED_DT_EMISSAO", "CLIENTE_NOME", "PRO_ST_ALTERNATIVO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORMERCADORIA", "PED_ST_STATUS", "STATUS_ENTREGA", "DIAS_ATRASO", "MOTIVO_ATRASO"];
+    const allPossibleKeys = ["SER_ST_CODIGO", "PED_IN_CODIGO", "CLI_IN_CODIGO", "CLIENTE_NOME", "FIL_IN_CODIGO", "FILIAL_NOME", "PED_DT_EMISSAO", "PED_CH_SITUACAO", "PED_ST_STATUS", "REP_IN_CODIGO", "REPRESENTANTE_NOME", "ITP_IN_SEQUENCIA", "ITP_ST_SITUACAO", "IT_ST_STATUS", "NF_NOT_IN_CODIGO", "NOT_DT_EMISSAO", "PRO_ST_ALTERNATIVO", "PRO_IN_CODIGO", "ITP_ST_DESCRICAO", "ITP_RE_QUANTIDADE", "ITP_RE_VALORUNITARIO", "ITP_RE_VALORMERCADORIA", "ITN_RE_VALORMERCADORIA", "ITN_RE_VALORTOTAL", "ITP_ST_PEDIDOCLIENTE", "IPE_DT_DATAENTREGA", "STATUS_ENTREGA", "DIAS_ATRASO", "MOTIVO_ATRASO"];
     setSalesColumns(allPossibleKeys.map(key => ({ key, label: key.replace(/_/g, ' ').replace('ITP ST', '').replace('ITP RE', '').replace('PED RE', '').replace('PED ST', '').replace('IT ST', '').replace('IPE DT', '').replace('DT', 'DATA').trim(), visible: defaultOrder.includes(key), format: getFormatter(key) })));
   };
 
@@ -657,7 +659,37 @@ export default function App() {
   const totalGoalsFiltered = useMemo(() => filteredGoals.reduce((acc, curr) => acc + curr.valor_meta, 0), [filteredGoals]);
 
   const processedData = useMemo(() => {
-    let result = [...salesData];
+    let result = salesData.map(item => {
+        let statusEntrega = 'PENDENTE';
+        let diasAtraso = 0;
+        const dtEntrega = item.IPE_DT_DATAENTREGA; // YYYY-MM-DD
+        const dtFaturamento = item.NOT_DT_EMISSAO; // YYYY-MM-DD
+        
+        if (dtFaturamento) {
+            if (dtEntrega && dtFaturamento > dtEntrega) {
+                statusEntrega = 'ENTREGUE FORA DO PRAZO';
+                const d1 = new Date(dtFaturamento);
+                const d2 = new Date(dtEntrega);
+                const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            } else {
+                statusEntrega = 'ENTREGUE NO PRAZO';
+            }
+        } else if (dtEntrega) {
+            const today = new Date();
+            const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            
+            if (dtEntrega < todayStr) {
+                statusEntrega = 'ATRASADO';
+                const d1 = new Date(todayStr);
+                const d2 = new Date(dtEntrega);
+                const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+        }
+        
+        return { ...item, STATUS_ENTREGA: statusEntrega, DIAS_ATRASO: diasAtraso > 0 ? diasAtraso : '' };
+    });
     
     // Overview e CRM precisam ver tudo para classificar corretamente
     // As outras views já têm seus filtros no fetch ou aqui
@@ -1589,6 +1621,15 @@ export default function App() {
                   <div className="flex items-center gap-2 ml-auto"> 
                     {(activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') && ( <button onClick={() => setFilterOnlyManual(!filterOnlyManual)} className={`px-3 py-1.5 border text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${filterOnlyManual ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`} title="Exibir apenas notas importadas manualmente" > <DatabaseIcon size={12}/> {filterOnlyManual ? 'Manual Ativado' : 'Apenas Manuais'} </button> )} 
                     {activeModuleId === 'COMISSAO' && ( <div className="relative"> <input type="file" id="xml-upload" multiple accept=".xml" className="hidden" onChange={handleXmlUpload} /> <label htmlFor="xml-upload" className="px-2 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm cursor-pointer"> <UploadCloud size={12}/> Importar XML </label> </div> )} 
+                    {activeModuleId === 'ENTREGA' && (
+                      <button 
+                        onClick={() => setShowDeliveryChart(!showDeliveryChart)} 
+                        className={`px-3 py-1.5 border text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${showDeliveryChart ? 'bg-indigo-600 border-indigo-700 text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        {showDeliveryChart ? <TableIcon size={12}/> : <PieChart size={12}/>}
+                        {showDeliveryChart ? 'Exibir Grid' : 'Exibir Gráfico'}
+                      </button>
+                    )}
                     <button onClick={handleExportExcel} className="px-2 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm" title="Exportar para Excel" > <FileSpreadsheet size={12}/> Excel </button> 
                     <button onClick={handleExportPDF} className="px-2 py-1.5 bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 transition-all shadow-sm" title="Exportar para PDF" > <FileType size={12}/> PDF </button> 
                     <button onClick={() => setIsGroupedByOrder(!isGroupedByOrder)} className={`px-3 py-1.5 border text-[9px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${isGroupedByOrder ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`} > <ListTree size={12}/> {isGroupedByOrder ? 'Agrupado por Pedido' : 'Lista Plana'} </button> 
@@ -1599,7 +1640,11 @@ export default function App() {
                   </div> 
                 </div> 
                 <div className="flex-1 overflow-hidden relative"> 
-                  <SalesTable data={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} columns={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns} sortConfig={sortConfig} onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} onColumnReorder={handleColumnReorder} isLoading={loading || syncing} isGroupedByOrder={isGroupedByOrder} onTogglePayment={handleTogglePayment} onEditManual={handleEditManual} onDeleteManual={handleDeleteManual} onUpdateDelayReason={handleUpdateDelayReason} /> 
+                  {activeModuleId === 'ENTREGA' && showDeliveryChart ? (
+                    <DeliveryChart metrics={metrics} />
+                  ) : (
+                    <SalesTable data={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} columns={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns} sortConfig={sortConfig} onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} onColumnReorder={handleColumnReorder} isLoading={loading || syncing} isGroupedByOrder={isGroupedByOrder} onTogglePayment={handleTogglePayment} onEditManual={handleEditManual} onDeleteManual={handleDeleteManual} onUpdateDelayReason={handleUpdateDelayReason} /> 
+                  )}
                 </div> 
               </div> 
             </div> 
