@@ -386,9 +386,28 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
       "PAGO_VENDEDOR": row.pago_vendedor || false,
       "PAGO_SUPERVISOR": row.pago_supervisor || false,
       "PAGO_POSVENDA": row.pago_posvenda || false,
-      "PAGO_GERENTE": row.pago_gerente || false
+      "PAGO_GERENTE": row.pago_gerente || false,
+      "MOTIVO_ATRASO": row.motivo_atraso || ''
     }));
   } catch (err) { return []; }
+};
+
+export const updateSaleDelayReason = async (keys: { fil: number, ser: string, ped: number }, reason: string) => {
+    try {
+        const { error } = await supabase
+            .from('sales')
+            .update({ motivo_atraso: reason })
+            .match({
+                fil_in_codigo: keys.fil,
+                ser_st_codigo: keys.ser,
+                ped_in_codigo: keys.ped
+            });
+
+        if (error) throw error;
+        return true;
+    } catch (e: any) {
+        throw new Error(`Erro ao atualizar motivo de atraso: ${e.message}`);
+    }
 };
 
 export const updateSaleCommissionStatus = async (keys: any, isPaid: boolean, columnName: string) => {

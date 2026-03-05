@@ -14,6 +14,7 @@ interface SalesTableProps {
   onTogglePayment?: (row: Sale) => Promise<void>;
   onEditManual?: (row: Sale) => void;
   onDeleteManual?: (row: Sale) => void;
+  onUpdateDelayReason?: (row: Sale, reason: string) => void;
 }
 
 export const SalesTable: React.FC<SalesTableProps> = ({ 
@@ -26,18 +27,28 @@ export const SalesTable: React.FC<SalesTableProps> = ({
   isGroupedByOrder = false,
   onTogglePayment,
   onEditManual,
-  onDeleteManual
+  onDeleteManual,
+  onUpdateDelayReason
 }) => {
   const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [processingPayment, setProcessingPayment] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [editingDelayReason, setEditingDelayReason] = useState<string | null>(null);
+  const [tempReason, setTempReason] = useState("");
 
   React.useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const handleSaveReason = (row: Sale) => {
+      if (onUpdateDelayReason) {
+          onUpdateDelayReason(row, tempReason);
+      }
+      setEditingDelayReason(null);
+  };
 
   const handleDragStart = (e: React.DragEvent<HTMLTableCellElement>, index: number) => {
     setDraggedColIndex(index);
@@ -307,6 +318,49 @@ export const SalesTable: React.FC<SalesTableProps> = ({
             </span>
          </div>
        );
+    }
+
+    if (col.key === 'MOTIVO_ATRASO') {
+        const uniqueId = `${row.FIL_IN_CODIGO}-${row.SER_ST_CODIGO}-${row.PED_IN_CODIGO}`;
+        const isEditing = editingDelayReason === uniqueId;
+
+        if (isEditing) {
+            return (
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                    <input 
+                        type="text" 
+                        className="border rounded px-1 py-0.5 text-[10px] w-full min-w-[100px] shadow-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                        value={tempReason}
+                        onChange={e => setTempReason(e.target.value)}
+                        autoFocus
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') handleSaveReason(row);
+                            if (e.key === 'Escape') setEditingDelayReason(null);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    />
+                    <button onClick={() => handleSaveReason(row)} className="text-green-600 hover:text-green-800 p-0.5 bg-green-50 rounded border border-green-200"><Check size={10}/></button>
+                    <button onClick={() => setEditingDelayReason(null)} className="text-red-600 hover:text-red-800 p-0.5 bg-red-50 rounded border border-red-200"><XIcon size={10}/></button>
+                </div>
+            );
+        }
+
+        return (
+            <div className="group flex items-center justify-between gap-2 min-w-[100px] min-h-[20px]" onClick={e => e.stopPropagation()}>
+                <span className="truncate max-w-[150px] text-gray-600" title={row[col.key]}>{row[col.key] || <span className="text-gray-300 italic">Sem motivo</span>}</span>
+                {onUpdateDelayReason && (
+                    <button 
+                        onClick={() => {
+                            setEditingDelayReason(uniqueId);
+                            setTempReason(row[col.key] || '');
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-600 transition-opacity p-1 hover:bg-blue-50 rounded"
+                    >
+                        <Edit2 size={10} />
+                    </button>
+                )}
+            </div>
+        );
     }
 
     if (col.key.includes('STATUS')) {

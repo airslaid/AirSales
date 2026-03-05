@@ -80,15 +80,15 @@ export const FormsView: React.FC<FormsViewProps> = ({ user }) => {
   };
 
   const handleDeleteReport = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este relatório?')) {
-      await deleteVisitReport(id);
-      loadReports();
-    }
+    // In a real app, use a custom modal. For now, we'll proceed or log.
+    console.log('Deleting report:', id);
+    await deleteVisitReport(id);
+    loadReports();
   };
 
   const handleSave = async () => {
     if (!currentReport.cliente_nome) {
-      alert('O nome do cliente é obrigatório.');
+      console.warn('O nome do cliente é obrigatório.');
       return;
     }
 
@@ -98,7 +98,7 @@ export const FormsView: React.FC<FormsViewProps> = ({ user }) => {
       setViewMode('LIST');
       loadReports();
     } catch (error) {
-      alert('Erro ao salvar relatório.');
+      console.error('Erro ao salvar relatório:', error);
     } finally {
       setSaving(false);
     }

@@ -284,7 +284,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
   const handleSaveTask = async () => {
     if (!newTask.title || !newTask.rep_in_codigo) {
-      alert('Por favor, preencha o título e o representante.');
+      console.warn('Por favor, preencha o título e o representante.');
       return;
     }
 
@@ -314,7 +314,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
       setNewTask({ priority: 'MEDIA', status: 'PENDENTE' });
       loadTasks();
     } catch (err) {
-      alert('Erro ao salvar tarefa.');
+      console.error('Erro ao salvar tarefa:', err);
     }
   };
 
@@ -330,7 +330,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
       await upsertCRMTask(updatedTask);
       loadTasks();
     } catch (err) {
-      alert('Erro ao atualizar tarefa.');
+      console.error('Erro ao atualizar tarefa:', err);
     }
   };
 
@@ -345,7 +345,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
       setDeleteTaskId(null);
       loadTasks();
     } catch (err) {
-      alert('Erro ao excluir tarefa.');
+      console.error('Erro ao excluir tarefa:', err);
     }
   };
 
@@ -589,7 +589,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
       });
 
       if (flatData.length === 0) {
-          alert('Não há dados para exportar com os filtros atuais.');
+          console.warn('Não há dados para exportar com os filtros atuais.');
           return;
       }
 
@@ -860,8 +860,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
         }
 
     } catch (error) {
-        alert('Erro ao mover etapa. Tente novamente.');
-        console.error(error);
+        console.error('Erro ao mover etapa:', error);
     } finally {
         setMovingOrder(null);
     }
@@ -904,7 +903,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
              if (selectedOrder) {
                  setSelectedOrder({ ...selectedOrder, IS_HOT: !newVal });
              }
-             alert('Erro ao salvar status: ' + msg);
+             console.error('Erro ao salvar status:', msg);
           }
       } finally {
           setTogglingHot(false);
@@ -913,7 +912,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
   const handleSaveEvent = async () => {
       if (!newEvent.title || !newEvent.start_date || !newEvent.start_time) {
-          alert('Preencha os campos obrigatórios (*)');
+          console.warn('Preencha os campos obrigatórios (*)');
           return;
       }
       
@@ -933,11 +932,11 @@ export const CRMView: React.FC<CRMViewProps> = ({
   const handleRegisterFollowUp = async () => {
       if (!followUpData.order) return;
       if (!followUpData.notes) {
-          alert("Digite uma nota sobre o follow-up.");
+          console.warn("Digite uma nota sobre o follow-up.");
           return;
       }
       if (!followUpData.date || !followUpData.time) {
-          alert("Data e hora são obrigatórios.");
+          console.warn("Data e hora são obrigatórios.");
           return;
       }
 
@@ -972,9 +971,9 @@ export const CRMView: React.FC<CRMViewProps> = ({
           });
           setEditingFollowUpId(null);
           loadAppointments(); // Recarrega para aparecer na timeline
-          alert(editingFollowUpId ? "Follow-up atualizado com sucesso!" : "Follow-up registrado com sucesso!");
+          console.log(editingFollowUpId ? "Follow-up atualizado com sucesso!" : "Follow-up registrado com sucesso!");
       } catch (e) {
-          alert("Erro ao salvar follow-up.");
+          console.error("Erro ao salvar follow-up:", e);
       }
   };
 
@@ -1006,7 +1005,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
           await deleteCRMAppointment(deleteFollowUpId);
           loadAppointments();
       } catch (e) {
-          alert("Erro ao excluir registro.");
+          console.error("Erro ao excluir registro:", e);
       } finally {
           setDeleteFollowUpId(null);
       }
@@ -1300,8 +1299,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
                   </h3>
                 </div>
 
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-[300px] min-h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <BarChart
                       layout="vertical"
                       data={STAGES.map(s => ({
@@ -1357,8 +1356,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-8 flex items-center gap-2">
                   <PieChart size={16} className="text-blue-600" /> Distribuição por Representante
                 </h3>
-                <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-[300px] min-h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <RePieChart>
                       <Pie
                         data={(() => {

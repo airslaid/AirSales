@@ -374,15 +374,15 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         </div>
 
         {/* Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-auto lg:h-80">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-auto lg:h-[400px]">
             
             {/* Gráfico de Tendência */}
-            <div className="lg:col-span-2 bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col h-64 lg:h-full">
-                <h3 className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2">
+            <div className="lg:col-span-2 bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col min-h-[300px] lg:h-full">
+                <h3 className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2 shrink-0">
                     <ArrowUpRight size={16} className="text-gray-400"/> Tendência de Vendas vs Orçamentos (6 Meses)
                 </h3>
-                <div className="flex-1 w-full min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
+                <div className="flex-1 w-full min-h-0 relative">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         <AreaChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
@@ -409,12 +409,12 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
             </div>
 
             {/* Gráfico de Status */}
-            <div className="bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col h-64 lg:h-full">
-                <h3 className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2">
+            <div className="bg-white p-4 rounded-sm border border-gray-200 shadow-sm flex flex-col min-h-[300px] lg:h-full">
+                <h3 className="text-[10px] sm:text-xs font-bold uppercase text-gray-700 mb-4 flex items-center gap-2 shrink-0">
                     <PieChart size={16} className="text-gray-400"/> Distribuição de Pedidos
                 </h3>
                 <div className="flex-1 w-full min-h-0 relative">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                         <RePieChart>
                             <Pie
                                 data={statusData}
