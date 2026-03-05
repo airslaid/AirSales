@@ -717,6 +717,8 @@ export default function App() {
         dateFilterField = 'NOT_DT_EMISSAO';
     } else if (isDeliveryModule) {
         dateFilterField = 'IPE_DT_DATAENTREGA';
+        // Filter out cancelled orders for Delivery module
+        result = result.filter(item => !String(item.PED_ST_STATUS || '').toUpperCase().includes('CANCEL'));
     }
     
     // Filtros globais de Data e Representante
@@ -990,7 +992,9 @@ export default function App() {
         orderGroups.forEach(items => {
             let isDelayed = false;
             let isLate = false;
+            let isPending = false;
             let hasDeliveryDate = false;
+            let isDelivered = false;
 
             for (const item of items) {
                 const deliveryDateStr = item.IPE_DT_DATAENTREGA;
@@ -1005,21 +1009,30 @@ export default function App() {
                 const isCancelled = String(item.PED_ST_STATUS || '').toUpperCase().includes('CANCEL');
 
                 if (isBilled) {
+                    isDelivered = true;
                     if (billingDateStr) {
                         const billingDate = new Date(billingDateStr);
                         billingDate.setHours(0, 0, 0, 0);
                         if (billingDate > deliveryDate) isLate = true;
                     }
                 } else {
-                    if (!isCancelled && today > deliveryDate) isDelayed = true;
+                    if (!isCancelled) {
+                        if (today > deliveryDate) isDelayed = true;
+                        else isPending = true;
+                    }
                 }
             }
 
             if (hasDeliveryDate) {
-                deliveryTotal++;
-                if (isDelayed) delayed++;
-                else if (isLate) deliveredLate++;
-                else deliveredOnTime++;
+                if (isDelivered) {
+                    deliveryTotal++;
+                    if (isLate) deliveredLate++;
+                    else deliveredOnTime++;
+                } else if (isDelayed) {
+                    deliveryTotal++;
+                    delayed++;
+                }
+                // If isPending (and not delivered/delayed), we do NOT increment deliveryTotal or deliveredOnTime
             }
         });
     }
@@ -1029,6 +1042,105 @@ export default function App() {
         deliveredOnTime, deliveredLate, delayed, deliveryTotal
     };
   }, [processedData, salesData, commissionData, salesGoals, filters.startDate, filters.endDate, filters.representante, activeModuleId]);
+
+  const deliveryTrendData = useMemo(() => {
+    if (activeModuleId !== 'ENTREGA') return [];
+
+    const currentYear = new Date().getFullYear();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const monthData = Array.from({ length: 12 }, (_, i) => ({
+        month: new Date(currentYear, i, 1).toLocaleString('pt-BR', { month: 'short' }),
+        total: 0,
+        onTime: 0,
+        late: 0,
+        delayed: 0
+    }));
+
+    const orderGroups = new Map<string, Sale[]>();
+    
+    // Use salesData directly to ignore date filters, but apply other context filters if needed (Rep/Filial)
+    // The user said "even if filtered in the grid... show current year". 
+    // Usually this implies ignoring the date filter but respecting Rep/Filial filters if they are global context.
+    // Let's respect Rep/Filial filters to show relevant trend for the user's view.
+    
+    salesData.forEach(item => {
+        if (item.SER_ST_CODIGO !== 'PD') return;
+        
+        // Filter out cancelled orders
+        if (String(item.PED_ST_STATUS || '').toUpperCase().includes('CANCEL')) return;
+        
+        // Apply Rep/Filial filters
+        const repMatch = filters.representante ? String(item.REP_IN_CODIGO) === filters.representante : true;
+        const filialMatch = filters.filial ? String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase() : true;
+        
+        if (!repMatch || !filialMatch) return;
+
+        const key = `${item.FIL_IN_CODIGO}-${item.PED_IN_CODIGO}`;
+        if (!orderGroups.has(key)) orderGroups.set(key, []);
+        orderGroups.get(key)!.push(item);
+    });
+
+    orderGroups.forEach(items => {
+        let isDelayed = false;
+        let isLate = false;
+        let isPending = false;
+        let hasDeliveryDate = false;
+        let isDelivered = false;
+        let deliveryMonthIndex = -1;
+
+        for (const item of items) {
+            const deliveryDateStr = item.IPE_DT_DATAENTREGA;
+            if (!deliveryDateStr) continue;
+            
+            const deliveryDate = new Date(deliveryDateStr);
+            if (deliveryDate.getFullYear() !== currentYear) continue;
+
+            hasDeliveryDate = true;
+            deliveryMonthIndex = deliveryDate.getMonth();
+            deliveryDate.setHours(0, 0, 0, 0);
+
+            const billingDateStr = item.NOT_DT_EMISSAO;
+            const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (billingDateStr && billingDateStr !== '');
+            const isCancelled = String(item.PED_ST_STATUS || '').toUpperCase().includes('CANCEL');
+
+            if (isBilled) {
+                isDelivered = true;
+                if (billingDateStr) {
+                    const billingDate = new Date(billingDateStr);
+                    billingDate.setHours(0, 0, 0, 0);
+                    if (billingDate > deliveryDate) isLate = true;
+                }
+            } else {
+                if (!isCancelled) {
+                    if (today > deliveryDate) isDelayed = true;
+                    else isPending = true;
+                }
+            }
+        }
+
+        if (hasDeliveryDate && deliveryMonthIndex >= 0) {
+            if (isDelivered) {
+                monthData[deliveryMonthIndex].total++;
+                if (isLate) monthData[deliveryMonthIndex].late++;
+                else monthData[deliveryMonthIndex].onTime++;
+            } else if (isDelayed) {
+                monthData[deliveryMonthIndex].total++;
+                monthData[deliveryMonthIndex].delayed++;
+            }
+            // If Pending, do not count in total or any category
+        }
+    });
+
+    return monthData.map(d => ({
+        month: d.month,
+        onTime: d.total > 0 ? (d.onTime / d.total) * 100 : 0,
+        late: d.total > 0 ? (d.late / d.total) * 100 : 0,
+        delayed: d.total > 0 ? (d.delayed / d.total) * 100 : 0
+    }));
+
+  }, [salesData, activeModuleId, filters.representante, filters.filial]);
 
   const paymentMetrics = useMemo(() => {
       if (activeModuleId !== 'PAGAMENTOS') return { toPay: 0, paid: 0, projected: 0 };
@@ -1641,7 +1753,7 @@ export default function App() {
                 </div> 
                 <div className="flex-1 overflow-hidden relative"> 
                   {activeModuleId === 'ENTREGA' && showDeliveryChart ? (
-                    <DeliveryChart metrics={metrics} />
+                    <DeliveryChart trendData={deliveryTrendData} />
                   ) : (
                     <SalesTable data={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} columns={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns} sortConfig={sortConfig} onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} onColumnReorder={handleColumnReorder} isLoading={loading || syncing} isGroupedByOrder={isGroupedByOrder} onTogglePayment={handleTogglePayment} onEditManual={handleEditManual} onDeleteManual={handleDeleteManual} onUpdateDelayReason={handleUpdateDelayReason} /> 
                   )}
