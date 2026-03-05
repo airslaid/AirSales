@@ -1599,7 +1599,7 @@ export default function App() {
                   </div> 
                 </div> 
                 <div className="flex-1 overflow-hidden relative"> 
-                  <SalesTable data={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} columns={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns} sortConfig={sortConfig} onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} onColumnReorder={handleColumnReorder} isLoading={loading || syncing} isGroupedByOrder={isGroupedByOrder} onTogglePayment={handleTogglePayment} onEditManual={handleEditManual} onDeleteManual={handleDeleteManual} /> 
+                  <SalesTable data={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionData : processedData} columns={activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS' ? commissionColumns : salesColumns} sortConfig={sortConfig} onSort={s => setSortConfig(p => p?.key === s ? {key:s, direction:p.direction==='asc'?'desc':'asc'} : {key:s, direction:'asc'})} onColumnReorder={handleColumnReorder} isLoading={loading || syncing} isGroupedByOrder={isGroupedByOrder} onTogglePayment={handleTogglePayment} onEditManual={handleEditManual} onDeleteManual={handleDeleteManual} onUpdateDelayReason={handleUpdateDelayReason} /> 
                 </div> 
               </div> 
             </div> 
