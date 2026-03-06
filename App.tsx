@@ -312,6 +312,9 @@ export default function App() {
           if (String(item.PED_IN_CODIGO) === '218') {
               return { ...item, NF_NOT_IN_CODIGO: 19229, NOT_DT_EMISSAO: '2026-02-13' };
           }
+          if (String(item.PED_IN_CODIGO) === '209') {
+              return { ...item, NF_NOT_IN_CODIGO: 19233, NOT_DT_EMISSAO: '2026-02-16' };
+          }
           return item;
       });
 
