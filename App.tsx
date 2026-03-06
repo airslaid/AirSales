@@ -680,26 +680,43 @@ export default function App() {
         const dtEntrega = item.IPE_DT_DATAENTREGA; // YYYY-MM-DD
         const dtFaturamento = item.NOT_DT_EMISSAO; // YYYY-MM-DD
         
-        if (dtFaturamento) {
-            if (dtEntrega && dtFaturamento > dtEntrega) {
-                statusEntrega = 'ENTREGUE FORA DO PRAZO';
-                const d1 = new Date(dtFaturamento);
-                const d2 = new Date(dtEntrega);
-                const diffTime = Math.abs(d1.getTime() - d2.getTime());
-                diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-            } else {
-                statusEntrega = 'ENTREGUE NO PRAZO';
-            }
-        } else if (dtEntrega) {
-            const today = new Date();
-            const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+        if (dtEntrega) {
+            // Lógica de fechamento mensal:
+            // O status deve refletir a situação dentro do mês de entrega.
+            // Se faturou no mês seguinte, conta como ATRASADO para o mês de competência da entrega.
             
-            if (dtEntrega < todayStr) {
-                statusEntrega = 'ATRASADO';
-                const d1 = new Date(todayStr);
-                const d2 = new Date(dtEntrega);
-                const diffTime = Math.abs(d1.getTime() - d2.getTime());
-                diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const [y, m, d] = dtEntrega.split('-').map(Number);
+            const lastDayOfMonth = new Date(y, m, 0); // Último dia do mês da entrega
+            const deliveryMonthEnd = lastDayOfMonth.getFullYear() + '-' + String(lastDayOfMonth.getMonth()+1).padStart(2, '0') + '-' + String(lastDayOfMonth.getDate()).padStart(2, '0');
+
+            if (dtFaturamento) {
+                if (dtFaturamento <= dtEntrega) {
+                    statusEntrega = 'ENTREGUE NO PRAZO';
+                } else if (dtFaturamento <= deliveryMonthEnd) {
+                    statusEntrega = 'ENTREGUE FORA DO PRAZO';
+                    const d1 = new Date(dtFaturamento);
+                    const d2 = new Date(dtEntrega);
+                    const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                    diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                } else {
+                    // Faturado, mas fora do mês de competência -> Considera ATRASADO para o indicador
+                    statusEntrega = 'ATRASADO';
+                    const d1 = new Date(dtFaturamento);
+                    const d2 = new Date(dtEntrega);
+                    const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                    diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                }
+            } else {
+                const today = new Date();
+                const todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+                
+                if (dtEntrega < todayStr) {
+                    statusEntrega = 'ATRASADO';
+                    const d1 = new Date(todayStr);
+                    const d2 = new Date(dtEntrega);
+                    const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                    diasAtraso = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                }
             }
         }
         
@@ -1007,9 +1024,8 @@ export default function App() {
         orderGroups.forEach(items => {
             let isDelayed = false;
             let isLate = false;
-            let isPending = false;
+            let isOnTime = false;
             let hasDeliveryDate = false;
-            let isDelivered = false;
 
             for (const item of items) {
                 const deliveryDateStr = item.IPE_DT_DATAENTREGA;
@@ -1019,35 +1035,58 @@ export default function App() {
                 const deliveryDate = new Date(deliveryDateStr);
                 deliveryDate.setHours(0, 0, 0, 0);
 
+                // Calculate Month End for Delivery Date
+                const [y, m, d] = deliveryDateStr.split('-').map(Number);
+                const lastDayOfMonth = new Date(y, m, 0);
+                const deliveryMonthEnd = new Date(lastDayOfMonth.getFullYear(), lastDayOfMonth.getMonth(), lastDayOfMonth.getDate());
+                deliveryMonthEnd.setHours(0,0,0,0);
+
                 const billingDateStr = item.NOT_DT_EMISSAO;
                 const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (billingDateStr && billingDateStr !== '');
                 const isCancelled = String(item.PED_ST_STATUS || '').toUpperCase().includes('CANCEL');
 
+                if (isCancelled) continue;
+
                 if (isBilled) {
-                    isDelivered = true;
                     if (billingDateStr) {
                         const billingDate = new Date(billingDateStr);
                         billingDate.setHours(0, 0, 0, 0);
-                        if (billingDate > deliveryDate) isLate = true;
+                        
+                        if (billingDate > deliveryMonthEnd) {
+                            // Faturado no mês seguinte -> ATRASADO
+                            isDelayed = true;
+                        } else if (billingDate > deliveryDate) {
+                            // Faturado no mesmo mês, mas depois da data -> FORA DO PRAZO
+                            isLate = true;
+                        } else {
+                            // Faturado antes ou na data -> NO PRAZO
+                            isOnTime = true;
+                        }
+                    } else {
+                        // Sem data de faturamento mas status faturado -> Assume NO PRAZO
+                        isOnTime = true;
                     }
                 } else {
-                    if (!isCancelled) {
-                        if (today > deliveryDate) isDelayed = true;
-                        else isPending = true;
+                    if (today > deliveryDate) {
+                        // Não faturado e data passou -> ATRASADO
+                        isDelayed = true;
                     }
+                    // Se não faturado e data futura -> PENDENTE (Ignora)
                 }
             }
 
             if (hasDeliveryDate) {
-                if (isDelivered) {
-                    deliveryTotal++;
-                    if (isLate) deliveredLate++;
-                    else deliveredOnTime++;
-                } else if (isDelayed) {
+                // Prioridade: Atrasado > Fora do Prazo > No Prazo
+                if (isDelayed) {
                     deliveryTotal++;
                     delayed++;
+                } else if (isLate) {
+                    deliveryTotal++;
+                    deliveredLate++;
+                } else if (isOnTime) {
+                    deliveryTotal++;
+                    deliveredOnTime++;
                 }
-                // If isPending (and not delivered/delayed), we do NOT increment deliveryTotal or deliveredOnTime
             }
         });
     }
@@ -1709,7 +1748,7 @@ export default function App() {
                         color="text-amber-500" 
                     />
                     <StatCard 
-                        title="Atrasados (Não Faturados)" 
+                        title="Atrasados" 
                         value={loading ? '...' : `${metrics.delayed} (${metrics.deliveryTotal > 0 ? ((metrics.delayed / metrics.deliveryTotal) * 100).toFixed(1) : 0}%)`} 
                         icon={AlertCircle} 
                         color="text-red-600" 
