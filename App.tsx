@@ -303,6 +303,18 @@ export default function App() {
         if (activeModuleId === 'ENTREGA') filterToUse = 'PD';
         data = await fetchData('supabase', "", tableName, filterToUse);
       }
+
+      // MANUAL PATCH FOR MISSING INVOICE DATA
+      data = data.map(item => {
+          if (String(item.PED_IN_CODIGO) === '216') {
+              return { ...item, NF_NOT_IN_CODIGO: 19265, NOT_DT_EMISSAO: '2026-02-23' };
+          }
+          if (String(item.PED_IN_CODIGO) === '218') {
+              return { ...item, NF_NOT_IN_CODIGO: 19229, NOT_DT_EMISSAO: '2026-02-13' };
+          }
+          return item;
+      });
+
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;
       setSalesData(filtered);
       if (activeModuleId !== 'PERFORMANCE' && activeModuleId !== 'COMISSAO' && activeModuleId !== 'PAGAMENTOS' && activeModuleId !== 'CRM' && activeModuleId !== 'OVERVIEW') { generateColumns(filtered); }
