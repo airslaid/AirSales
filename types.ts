@@ -109,6 +109,16 @@ export interface Ocorrencia {
   created_at?: string;
 }
 
+export interface OcorrenciaAcao {
+  id: string;
+  ocorrencia_id: string;
+  description: string;
+  responsible: string;
+  deadline: string | null;
+  completed_at: string | null;
+  created_at?: string;
+}
+
 export interface VisitReport {
   id: string;
   type: string; // 'Filtro Prensa' default

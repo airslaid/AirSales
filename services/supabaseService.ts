@@ -1,7 +1,60 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia } from '../types';
+import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia, OcorrenciaAcao } from '../types';
 // --- Ocorrencias Service ---
+
+export const fetchOcorrenciaAcoes = async (ocorrencia_id: string): Promise<OcorrenciaAcao[]> => {
+  try {
+    const { data, error } = await supabase.from('ocorrencia_acoes').select('*').eq('ocorrencia_id', ocorrencia_id).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("OcorrenciaAcoes: Table might not exist, falling back to localStorage", err.message);
+    const localData = localStorage.getItem('AIR_SALES_OCORRENCIA_ACOES');
+    const allAcoes: OcorrenciaAcao[] = localData ? JSON.parse(localData) : [];
+    return allAcoes.filter(a => a.ocorrencia_id === ocorrencia_id);
+  }
+};
+
+export const upsertOcorrenciaAcao = async (acao: OcorrenciaAcao) => {
+  const payload = { ...acao };
+  if (!payload.id) payload.id = generateUUID();
+  if (!payload.created_at) payload.created_at = new Date().toISOString();
+  
+  try {
+    const { error } = await supabase.from('ocorrencia_acoes').upsert([payload]);
+    if (error) throw error;
+    return payload;
+  } catch (err: any) {
+    console.warn("OcorrenciaAcoes: Error saving to Supabase, falling back to localStorage", err.message);
+    const localData = localStorage.getItem('AIR_SALES_OCORRENCIA_ACOES');
+    const acoes: OcorrenciaAcao[] = localData ? JSON.parse(localData) : [];
+    const index = acoes.findIndex(a => a.id === payload.id);
+    if (index >= 0) {
+      acoes[index] = payload;
+    } else {
+      acoes.push(payload);
+    }
+    localStorage.setItem('AIR_SALES_OCORRENCIA_ACOES', JSON.stringify(acoes));
+    return payload;
+  }
+};
+
+export const deleteOcorrenciaAcao = async (id: string) => {
+  try {
+    const { error } = await supabase.from('ocorrencia_acoes').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.warn("OcorrenciaAcoes: Error deleting from Supabase, falling back to localStorage", err.message);
+    const localData = localStorage.getItem('AIR_SALES_OCORRENCIA_ACOES');
+    if (localData) {
+      const acoes: OcorrenciaAcao[] = JSON.parse(localData);
+      localStorage.setItem('AIR_SALES_OCORRENCIA_ACOES', JSON.stringify(acoes.filter(a => a.id !== id)));
+    }
+    return true;
+  }
+};
 
 export const fetchOcorrencias = async (): Promise<Ocorrencia[]> => {
   try {

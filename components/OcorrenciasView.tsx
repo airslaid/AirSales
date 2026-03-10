@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Ocorrencia, AppUser } from '../types';
 import { fetchOcorrencias, upsertOcorrencia, deleteOcorrencia, fetchAppUsers } from '../services/supabaseService';
 import { 
   AlertTriangle, Plus, Search, Edit2, Trash2, X, Save, CheckCircle2, 
-  Clock, FileText, Building2, User, Check, Calendar
+  Clock, FileText, Building2, User, Check, Calendar, ListTodo, Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { OcorrenciaAcoesModal } from './OcorrenciaAcoesModal';
 
 interface OcorrenciasViewProps {
   user: AppUser | null;
@@ -21,8 +22,18 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    responsible: '',
+    type: '',
+    process: '',
+    dateStart: '',
+    dateEnd: ''
+  });
   
   const [showModal, setShowModal] = useState(false);
+  const [showAcoesModal, setShowAcoesModal] = useState(false);
+  const [selectedOcorrenciaId, setSelectedOcorrenciaId] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<Ocorrencia | null>(null);
   const [formData, setFormData] = useState<Partial<Ocorrencia>>({});
   const [itemToDelete, setItemToDelete] = useState<Ocorrencia | null>(null);
@@ -129,13 +140,35 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
 
     // Search term filter
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const matchesSearch = (
       o.ro_number?.toLowerCase().includes(searchLower) ||
       o.description?.toLowerCase().includes(searchLower) ||
       o.origin?.toLowerCase().includes(searchLower) ||
       o.requester?.toLowerCase().includes(searchLower)
     );
+
+    if (!matchesSearch) return false;
+
+    // Advanced Filters
+    if (filters.responsible && o.responsible !== filters.responsible) return false;
+    if (filters.type && o.type !== filters.type) return false;
+    if (filters.process && o.process !== filters.process) return false;
+    
+    if (filters.dateStart && o.registration_date && o.registration_date < filters.dateStart) return false;
+    if (filters.dateEnd && o.registration_date && o.registration_date > filters.dateEnd) return false;
+
+    return true;
   });
+
+  const uniqueResponsibles = useMemo(() => {
+    const resps = new Set(ocorrencias.map(o => o.responsible).filter(Boolean));
+    return Array.from(resps).sort();
+  }, [ocorrencias]);
+
+  const uniqueTypes = useMemo(() => {
+    const types = new Set(ocorrencias.map(o => o.type).filter(Boolean));
+    return Array.from(types).sort();
+  }, [ocorrencias]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50 animate-in fade-in duration-300">
@@ -161,6 +194,14 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
             />
           </div>
           <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`p-2 border rounded-sm transition-colors flex items-center gap-2 ${showFilters ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+            title="Filtros Avançados"
+          >
+            <Filter size={14} />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Filtros</span>
+          </button>
+          <button 
             onClick={() => handleOpenModal()}
             className="px-4 py-2 bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-rose-700 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
           >
@@ -168,6 +209,77 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
           </button>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="px-4 py-3 bg-white border-b border-gray-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 animate-in slide-in-from-top-2 duration-200">
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Responsável</label>
+            <select 
+              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-sm text-[10px] outline-none focus:border-rose-500"
+              value={filters.responsible}
+              onChange={e => setFilters({...filters, responsible: e.target.value})}
+            >
+              <option value="">Todos</option>
+              {uniqueResponsibles.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Tipo / Origem</label>
+            <select 
+              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-sm text-[10px] outline-none focus:border-rose-500"
+              value={filters.type}
+              onChange={e => setFilters({...filters, type: e.target.value})}
+            >
+              <option value="">Todos</option>
+              {uniqueTypes.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Processo</label>
+            <select 
+              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-sm text-[10px] outline-none focus:border-rose-500"
+              value={filters.process}
+              onChange={e => setFilters({...filters, process: e.target.value})}
+            >
+              <option value="">Todos</option>
+              {PROCESSOS.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Data Registro (De)</label>
+            <input 
+              type="date" 
+              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-sm text-[10px] outline-none focus:border-rose-500"
+              value={filters.dateStart}
+              onChange={e => setFilters({...filters, dateStart: e.target.value})}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Data Registro (Até)</label>
+            <div className="flex gap-2">
+              <input 
+                type="date" 
+                className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-sm text-[10px] outline-none focus:border-rose-500"
+                value={filters.dateEnd}
+                onChange={e => setFilters({...filters, dateEnd: e.target.value})}
+              />
+              <button 
+                onClick={() => setFilters({ responsible: '', type: '', process: '', dateStart: '', dateEnd: '' })}
+                className="p-1.5 text-gray-400 hover:text-rose-600 transition-colors"
+                title="Limpar Filtros"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-4 custom-scrollbar">
         {loading ? (
@@ -530,22 +642,49 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
               </div>
             </div>
             
-            <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
-              <button 
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-white border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleSave}
-                className="px-6 py-2 bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-rose-700 transition-colors flex items-center gap-2 shadow-sm"
-              >
-                <Save size={14} /> Salvar Ocorrência
-              </button>
+            <div className="p-4 border-t bg-gray-50 flex justify-between items-center shrink-0">
+              <div>
+                {formData.id && (
+                  <button 
+                    onClick={() => {
+                      setSelectedOcorrenciaId(formData.id!);
+                      setShowAcoesModal(true);
+                    }}
+                    className="px-4 py-2 bg-gray-800 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-gray-900 transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <ListTodo size={14} /> Ações
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 bg-white border border-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSave}
+                  className="px-6 py-2 bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-sm hover:bg-rose-700 transition-colors flex items-center gap-2 shadow-sm"
+                >
+                  <Save size={14} /> Salvar Ocorrência
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Ações */}
+      {showAcoesModal && selectedOcorrenciaId && (
+        <OcorrenciaAcoesModal 
+          ocorrenciaId={selectedOcorrenciaId}
+          users={users}
+          onClose={() => {
+            setShowAcoesModal(false);
+            setSelectedOcorrenciaId(null);
+          }}
+        />
       )}
 
       {/* Modal de Confirmação de Exclusão */}
