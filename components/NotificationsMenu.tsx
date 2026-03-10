@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCircle2, Calendar, Clock, AlertCircle } from 'lucide-react';
-import { AppUser, CRMTask, CRMAppointment } from '../types';
-import { fetchCRMTasks, fetchCRMAppointments } from '../services/supabaseService';
+import { Bell, CheckCircle2, Calendar, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
+import { AppUser, CRMTask, CRMAppointment, Ocorrencia } from '../types';
+import { fetchCRMTasks, fetchCRMAppointments, fetchOcorrencias } from '../services/supabaseService';
 
 interface NotificationsMenuProps {
   currentUser: AppUser | null;
-  onNotificationClick?: (type: 'TASK' | 'APPOINTMENT', id: string) => void;
+  onNotificationClick?: (type: 'TASK' | 'APPOINTMENT' | 'OCORRENCIA', id: string) => void;
 }
 
 export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUser, onNotificationClick }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [tasks, setTasks] = useState<CRMTask[]>([]);
   const [appointments, setAppointments] = useState<CRMAppointment[]>([]);
+  const [ocorrenciaNotifs, setOcorrenciaNotifs] = useState<{id: string, ocorrenciaId: string, title: string, subtitle: string, type: 'AVISO' | 'PRAZO', date?: string}[]>([]);
   const [loading, setLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -19,9 +20,10 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
     if (!currentUser) return;
     setLoading(true);
     try {
-      const [allTasks, allAppointments] = await Promise.all([
+      const [allTasks, allAppointments, allOcorrencias] = await Promise.all([
         fetchCRMTasks(),
-        fetchCRMAppointments()
+        fetchCRMAppointments(),
+        fetchOcorrencias()
       ]);
 
       // Filter Tasks: Pending and assigned to current user
@@ -37,8 +39,69 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
         Number(a.rep_in_codigo) === Number(currentUser.rep_in_codigo)
       );
 
+      // Filter Ocorrencias
+      const myOcorrencias = allOcorrencias.filter(o => o.responsible === currentUser.name);
+      const newOcorrenciaNotifs: typeof ocorrenciaNotifs = [];
+
+      const isDeadlineApproaching = (deadlineStr: string | null | undefined, completedStr: string | null | undefined) => {
+        if (!deadlineStr || completedStr) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const deadline = new Date(deadlineStr);
+        deadline.setHours(0, 0, 0, 0);
+        const diffTime = deadline.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 2;
+      };
+
+      myOcorrencias.forEach(o => {
+        if (o.opening_notice) {
+          newOcorrenciaNotifs.push({
+            id: `${o.id}-aviso`,
+            ocorrenciaId: o.id,
+            title: `Aviso de Abertura: RO ${o.ro_number}`,
+            subtitle: o.description,
+            type: 'AVISO'
+          });
+        }
+
+        if (isDeadlineApproaching(o.immediate_action_deadline, o.immediate_action_completed)) {
+          newOcorrenciaNotifs.push({
+            id: `${o.id}-imediata`,
+            ocorrenciaId: o.id,
+            title: `Ação Imediata: RO ${o.ro_number}`,
+            subtitle: 'Prazo vencendo ou vencido',
+            type: 'PRAZO',
+            date: o.immediate_action_deadline || undefined
+          });
+        }
+
+        if (isDeadlineApproaching(o.cause_analysis_deadline, o.cause_analysis_completed)) {
+          newOcorrenciaNotifs.push({
+            id: `${o.id}-causa`,
+            ocorrenciaId: o.id,
+            title: `Análise de Causa: RO ${o.ro_number}`,
+            subtitle: 'Prazo vencendo ou vencido',
+            type: 'PRAZO',
+            date: o.cause_analysis_deadline || undefined
+          });
+        }
+
+        if (isDeadlineApproaching(o.corrective_action_deadline, o.corrective_action_completed)) {
+          newOcorrenciaNotifs.push({
+            id: `${o.id}-corretiva`,
+            ocorrenciaId: o.id,
+            title: `Ação Corretiva: RO ${o.ro_number}`,
+            subtitle: 'Prazo vencendo ou vencido',
+            type: 'PRAZO',
+            date: o.corrective_action_deadline || undefined
+          });
+        }
+      });
+
       setTasks(myTasks);
       setAppointments(myAppointments);
+      setOcorrenciaNotifs(newOcorrenciaNotifs);
     } catch (error) {
       console.error("Error loading notifications:", error);
     } finally {
@@ -65,7 +128,7 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const totalCount = tasks.length + appointments.length;
+  const totalCount = tasks.length + appointments.length + ocorrenciaNotifs.length;
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -101,7 +164,7 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
           </div>
 
           <div className="max-h-96 overflow-y-auto">
-            {loading && tasks.length === 0 && appointments.length === 0 ? (
+            {loading && tasks.length === 0 && appointments.length === 0 && ocorrenciaNotifs.length === 0 ? (
               <div className="p-4 text-center text-gray-500 text-sm">Carregando...</div>
             ) : totalCount === 0 ? (
               <div className="p-8 text-center text-gray-400 flex flex-col items-center gap-2">
@@ -110,6 +173,40 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
+                {/* Ocorrencias Section */}
+                {ocorrenciaNotifs.length > 0 && (
+                  <div className="py-2">
+                    <div className="px-4 py-1 text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                      <AlertTriangle size={12} /> Ocorrências ({ocorrenciaNotifs.length})
+                    </div>
+                    {ocorrenciaNotifs.map(notif => (
+                      <div 
+                        key={notif.id} 
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onClick={() => {
+                          onNotificationClick?.('OCORRENCIA', notif.ocorrenciaId);
+                          setIsOpen(false);
+                        }}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                            notif.type === 'AVISO' ? 'bg-purple-100 text-purple-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            {notif.type}
+                          </span>
+                          {notif.date && (
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                              <Clock size={10} /> {formatDate(notif.date)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-medium text-gray-800 line-clamp-1">{notif.title}</p>
+                        <p className="text-xs text-gray-500 truncate">{notif.subtitle}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Tasks Section */}
                 {tasks.length > 0 && (
                   <div className="py-2">

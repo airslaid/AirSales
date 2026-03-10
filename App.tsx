@@ -16,6 +16,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+import { Toaster, toast } from 'sonner';
+
 import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
 import { fetchData } from './services/dataService';
 import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale, deleteAllSales, updateSaleDelayReason } from './services/supabaseService';
@@ -27,6 +29,7 @@ import { AIChatView } from './components/AIChatView';
 import { CRMView, CRMExternalAction } from './components/CRMView';
 import { OverviewPanel } from './components/OverviewPanel'; // Importação do novo componente
 import { FormsView } from './components/FormsView';
+import { OcorrenciasView } from './components/OcorrenciasView';
 import { NotificationsMenu } from './components/NotificationsMenu';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
@@ -35,6 +38,7 @@ const MODULES = [
   { id: 'OVERVIEW', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: false },
   { id: 'CRM', label: 'CRM Operacional', icon: Handshake, adminOnly: false },
   { id: 'FORMULARIOS', label: 'Formulários', icon: ClipboardList, adminOnly: false },
+  { id: 'OCORRENCIAS', label: 'Controle Ocorrências', icon: AlertTriangle, adminOnly: false },
   { id: 'ENTREGA', label: 'Indicador de Entrega', icon: Truck, adminOnly: false },
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
@@ -228,7 +232,7 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState<string | null>(null);
   
-  const [newUser, setNewUser] = useState<AppUser>({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] });
+  const [newUser, setNewUser] = useState<AppUser>({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [], processo: null });
   const [newGoal, setNewGoal] = useState<SalesGoal>({ rep_in_codigo: 0, rep_nome: '', ano: new Date().getFullYear(), mes: new Date().getMonth() + 1, valor_meta: 0 });
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
   
@@ -270,6 +274,11 @@ export default function App() {
   }, [currentUser, activeModuleId]);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'warning') => {
+    if (type === 'success') toast.success(message);
+    else if (type === 'error') toast.error(message);
+    else toast.warning(message);
+    
+    // Legacy support for state-based notifications (if any component still relies on it)
     setNotification({ message, type });
     setTimeout(() => { setNotification(prev => prev?.message === message ? null : prev); }, 5000);
   };
@@ -559,7 +568,7 @@ export default function App() {
   };
 
   const handleCancelEditUser = () => {
-    setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] });
+    setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [], processo: null });
   };
 
   const handleToggleModule = (moduleId: string) => {
@@ -575,7 +584,7 @@ export default function App() {
     if (!newUser.name || !newUser.email || !newUser.password) return showNotification("Dados incompletos.", "error");
     try { 
       await upsertAppUser(newUser); 
-      setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [] }); 
+      setNewUser({ name: '', email: '', password: '', rep_in_codigo: null, is_admin: false, allowed_modules: [], processo: null }); 
       loadAppUsers(); 
       showNotification(newUser.id ? "Acesso atualizado." : "Acesso criado.", "success"); 
     } 
@@ -1435,8 +1444,12 @@ export default function App() {
             <NotificationsMenu 
                 currentUser={currentUser} 
                 onNotificationClick={(type, id) => {
-                  setActiveModuleId('CRM');
-                  setCrmExternalAction({ type: type === 'TASK' ? 'OPEN_TASK' : 'OPEN_APPOINTMENT', id });
+                  if (type === 'OCORRENCIA') {
+                    setActiveModuleId('OCORRENCIAS');
+                  } else {
+                    setActiveModuleId('CRM');
+                    setCrmExternalAction({ type: type === 'TASK' ? 'OPEN_TASK' : 'OPEN_APPOINTMENT', id });
+                  }
                 }} 
              />
             {activeModuleId !== 'METAS' && activeModuleId !== 'USERS' && activeModuleId !== 'IA_CHAT' && activeModuleId !== 'CRM' && activeModuleId !== 'OVERVIEW' && (
@@ -1613,6 +1626,8 @@ export default function App() {
              />
           ) : activeModuleId === 'FORMULARIOS' ? (
              <FormsView user={currentUser} />
+          ) : activeModuleId === 'OCORRENCIAS' ? (
+             <OcorrenciasView user={currentUser} />
           ) : activeModuleId === 'METAS' ? ( 
             <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
               {/* Conteúdo de Metas (Inalterado) */}
@@ -1678,6 +1693,19 @@ export default function App() {
                     </div>
 
                     {!newUser.is_admin && (<div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200 pt-2"><label className="text-[9px] font-black uppercase text-gray-400">Vincular Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" value={newUser.rep_in_codigo || ''} onChange={e => setNewUser(p => ({...p, rep_in_codigo: e.target.value ? Number(e.target.value) : null}))}><option value="">Selecionar Representante</option>{fullRepsList.map(r => <option key={r.code} value={r.code}>{r.name} ({r.code})</option>)}</select></div>)}
+                    <div className="space-y-0.5 animate-in slide-in-from-top-2 duration-200 pt-2">
+                        <label className="text-[9px] font-black uppercase text-gray-400">Processo (Ocorrências)</label>
+                        <select 
+                            className="w-full px-2 py-1.5 bg-gray-50 border text-[10px] outline-none focus:border-gray-900" 
+                            value={newUser.processo || ''} 
+                            onChange={e => setNewUser(p => ({...p, processo: e.target.value || null}))}
+                        >
+                            <option value="">Nenhum</option>
+                            {['COMERCIAL', 'COMPRAS', 'FINANCEIRO', 'TI', 'RH', 'CONFECÇÃO', 'TECELAGEM', 'QUALIDADE', 'MARKETING', 'PCP', 'ENGENHARIA'].map(p => (
+                                <option key={p} value={p}>{p}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
                 
                 <div className="space-y-1.5 pt-1">
@@ -1696,7 +1724,9 @@ export default function App() {
                     <p className="text-[8px] text-gray-400 mt-1 text-center">Use para resetar o banco antes de uma carga limpa.</p>
                 </div>
               </div> 
-              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-center">Ações</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className={`hover:bg-gray-50 transition-colors ${newUser.id === u.id ? 'bg-amber-50' : ''}`}><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}</td><td className="px-4 py-2 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => handleEditUser(u)} className={`p-1.5 transition-colors ${newUser.id === u.id ? 'text-amber-600' : 'text-gray-300 hover:text-blue-600'}`} title="Editar Usuário"><Edit2 size={14}/></button><button onClick={async () => { console.log('Removing user access:', u.name); await deleteAppUser(u.id!); loadAppUsers(); }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Excluir Usuário"><Trash2 size={14}/></button></div></td></tr>))}</tbody></table></div></div> 
+              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-center">Ações</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className={`hover:bg-gray-50 transition-colors ${newUser.id === u.id ? 'bg-amber-50' : ''}`}><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}
+{u.processo && <span className="block mt-1 px-2 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 text-[8px] font-black uppercase tracking-widest rounded-full w-fit mx-auto">{u.processo}</span>}
+</td><td className="px-4 py-2 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => handleEditUser(u)} className={`p-1.5 transition-colors ${newUser.id === u.id ? 'text-amber-600' : 'text-gray-300 hover:text-blue-600'}`} title="Editar Usuário"><Edit2 size={14}/></button><button onClick={async () => { console.log('Removing user access:', u.name); await deleteAppUser(u.id!); loadAppUsers(); }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Excluir Usuário"><Trash2 size={14}/></button></div></td></tr>))}</tbody></table></div></div> 
             </div> 
           ) : ( 
             <div className="flex flex-col h-full gap-2 overflow-hidden"> 
@@ -1817,6 +1847,7 @@ export default function App() {
           )} 
         </main> 
       </div> 
+      <Toaster position="top-right" richColors closeButton />
     </div> 
   );
 }

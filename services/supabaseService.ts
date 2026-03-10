@@ -1,6 +1,61 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport } from '../types';
+import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia } from '../types';
+// --- Ocorrencias Service ---
+
+export const fetchOcorrencias = async (): Promise<Ocorrencia[]> => {
+  try {
+    const { data, error } = await supabase.from('ocorrencias').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Ocorrencias: Table might not exist, falling back to localStorage", err.message);
+    const localData = localStorage.getItem('AIR_SALES_OCORRENCIAS');
+    return localData ? JSON.parse(localData) : [];
+  }
+};
+
+export const upsertOcorrencia = async (ocorrencia: Ocorrencia) => {
+  const payload = { ...ocorrencia };
+  if (!payload.id) payload.id = generateUUID();
+  if (!payload.created_at) payload.created_at = new Date().toISOString();
+  
+  try {
+    const { error } = await supabase.from('ocorrencias').upsert([payload]);
+    if (error) throw error;
+    return payload;
+  } catch (err: any) {
+    console.warn("Ocorrencias: Error saving to Supabase, falling back to localStorage", err.message);
+    const localData = localStorage.getItem('AIR_SALES_OCORRENCIAS');
+    const ocorrencias: Ocorrencia[] = localData ? JSON.parse(localData) : [];
+    const index = ocorrencias.findIndex(o => o.id === payload.id);
+    if (index >= 0) {
+      ocorrencias[index] = payload;
+    } else {
+      ocorrencias.push(payload);
+    }
+    localStorage.setItem('AIR_SALES_OCORRENCIAS', JSON.stringify(ocorrencias));
+    return payload;
+  }
+};
+
+export const deleteOcorrencia = async (id: string) => {
+  try {
+    const { error } = await supabase.from('ocorrencias').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.warn("Ocorrencias: Error deleting from Supabase, falling back to localStorage", err.message);
+    const localData = localStorage.getItem('AIR_SALES_OCORRENCIAS');
+    if (localData) {
+      const ocorrencias: Ocorrencia[] = JSON.parse(localData);
+      const filtered = ocorrencias.filter(o => o.id !== id);
+      localStorage.setItem('AIR_SALES_OCORRENCIAS', JSON.stringify(filtered));
+    }
+    return true;
+  }
+};
+
 // --- Visit Reports Service ---
 
 export const fetchVisitReports = async (): Promise<VisitReport[]> => {

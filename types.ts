@@ -34,6 +34,7 @@ export interface AppUser {
   rep_in_codigo: number | null;
   is_admin: boolean;
   allowed_modules?: string[]; // Lista de IDs dos módulos permitidos
+  processo?: string | null; // Processo ao qual o usuário pertence
 }
 
 export interface SalesGoal {
@@ -82,6 +83,30 @@ export interface CRMTask {
   completed_at?: string;
   due_date?: string;
   priority: 'BAIXA' | 'MEDIA' | 'ALTA';
+}
+
+export interface Ocorrencia {
+  id: string;
+  ro_number: string;
+  requester: string;
+  type: string;
+  origin: string;
+  description: string;
+  receipt_date: string;
+  registration_date: string;
+  company: string;
+  process: string;
+  sub_process: string;
+  responsible: string;
+  proceeds: boolean;
+  opening_notice: boolean;
+  immediate_action_deadline: string | null;
+  immediate_action_completed: string | null;
+  cause_analysis_deadline: string | null;
+  cause_analysis_completed: string | null;
+  corrective_action_deadline: string | null;
+  corrective_action_completed: string | null;
+  created_at?: string;
 }
 
 export interface VisitReport {

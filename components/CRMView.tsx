@@ -12,6 +12,7 @@ import {
   fetchAppUsers
 } from '../services/supabaseService';
 import { generateSalesInsights, isUsingLocalAI } from '../services/aiService';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -27,9 +28,10 @@ import {
   ArrowLeft, Send, Briefcase, FileText, Flame, Plus,
   Flag, Check, List, User, MessageCircle, Smartphone, History,
   LayoutList, Edit2, Trash2, AlertTriangle, LayoutGrid, FileSpreadsheet,
-  Filter, X, PieChart, Sparkles
+  Filter, X, PieChart, Sparkles, Bot, Target
 } from 'lucide-react';
 import { AIInsightsModal } from './AIInsightsModal';
+import { CustomerTimeline } from './CustomerTimeline';
 
 export interface CRMExternalAction {
   type: 'OPEN_TASK' | 'OPEN_APPOINTMENT';
@@ -177,6 +179,9 @@ export const CRMView: React.FC<CRMViewProps> = ({
   // Follow-up View Mode
   const [followUpViewMode, setFollowUpViewMode] = useState<'OPPORTUNITIES' | 'HISTORY'>('OPPORTUNITIES');
 
+  // Customer Timeline State
+  const [selectedClientForTimeline, setSelectedClientForTimeline] = useState<ClientWalletItem | null>(null);
+
   // Modal Pedido State
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [modalTab, setModalTab] = useState<'ITENS' | 'HISTORICO'>('ITENS');
@@ -217,6 +222,60 @@ export const CRMView: React.FC<CRMViewProps> = ({
         loadUsers();
     }
   }, [activeTab, selectedOrder]);
+
+  // Auto Rules State
+  const [showAutoActionsModal, setShowAutoActionsModal] = useState(false);
+  const [autoActions, setAutoActions] = useState<any[]>([]);
+
+  const checkAutoRules = () => {
+    const proposalItems = pipelineColumns['ENVIO_PROPOSTA'].items;
+    const today = new Date();
+    const actions: any[] = [];
+
+    proposalItems.forEach(item => {
+        const emissionDate = new Date(item.PED_DT_EMISSAO);
+        const diffTime = Math.abs(today.getTime() - emissionDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 5) {
+            actions.push({
+                type: 'TASK',
+                order: item,
+                title: 'Cobrar retorno de Proposta',
+                description: `Orçamento #${item.PED_IN_CODIGO} está em "Envio de Proposta" há ${diffDays} dias.`,
+                due_date: today.toISOString().split('T')[0]
+            });
+        }
+    });
+
+    setAutoActions(actions);
+    setShowAutoActionsModal(true);
+  };
+
+  const executeAutoActions = async () => {
+      for (const action of autoActions) {
+          if (action.type === 'TASK') {
+              const task: CRMTask = {
+                  id: '',
+                  title: action.title,
+                  description: action.description,
+                  client_name: action.order.CLIENTE_NOME,
+                  rep_in_codigo: Number(action.order.REP_IN_CODIGO),
+                  rep_nome: action.order.REPRESENTANTE_NOME,
+                  created_by_id: user?.id || 'system',
+                  created_by_name: user?.name || 'Sistema',
+                  created_at: new Date().toISOString(),
+                  status: 'PENDENTE',
+                  priority: 'ALTA',
+                  due_date: action.due_date
+              };
+              await upsertCRMTask(task);
+          }
+      }
+      setShowAutoActionsModal(false);
+      if (onRefresh) await onRefresh();
+      alert(`${autoActions.length} tarefas criadas com sucesso!`);
+  };
 
   const loadAppointments = async () => {
       const evts = await fetchCRMAppointments();
@@ -797,6 +856,38 @@ export const CRMView: React.FC<CRMViewProps> = ({
       ).sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
   }, [selectedOrder, appointments]);
 
+  const onDragEnd = (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) {
+      return;
+    }
+
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    const startStageId = source.droppableId;
+    const finishStageId = destination.droppableId;
+
+    if (startStageId === finishStageId) {
+      return;
+    }
+
+    // Find the order being moved
+    const startColumn = pipelineColumns[startStageId];
+    // draggableId is constructed as `${item.PED_IN_CODIGO}`
+    const orderId = Number(draggableId);
+    const order = startColumn.items.find(i => i.PED_IN_CODIGO === orderId);
+
+    if (order) {
+        handleMoveStage(order, finishStageId);
+    }
+  };
+
   // Função para mover card entre etapas
   const handleMoveStage = async (order: any, newStageId: string) => {
     if (!order) return;
@@ -1087,6 +1178,18 @@ export const CRMView: React.FC<CRMViewProps> = ({
     ).slice(0, 10);
   }, [clientSearchTerm, clientsWallet]);
 
+  // Metricas para o Cockpit
+  const aiMetrics = useMemo(() => {
+    const faturado = pipelineColumns.GANHO.items.reduce((acc, i) => acc + (Number(i.TOTAL_VALOR) || 0), 0);
+    const emAberto = [
+      ...pipelineColumns.PROCESSO_INTERNO.items, 
+      ...pipelineColumns.ENVIO_PROPOSTA.items, 
+      ...pipelineColumns.NEGOCIACAO.items
+    ].reduce((acc, i) => acc + (Number(i.TOTAL_VALOR) || 0), 0);
+    const goal = 100000; // Meta de exemplo, pode ser ajustada
+    return { faturado, emAberto, goal };
+  }, [pipelineColumns]);
+
   return (
     <div className="h-full flex flex-col bg-gray-50 animate-in fade-in duration-300">
       {/* Header CRM */}
@@ -1288,6 +1391,74 @@ export const CRMView: React.FC<CRMViewProps> = ({
                 </h3>
                 <p className="text-[9px] text-gray-500 mt-1 font-medium">Marcadas como prioridade alta</p>
               </div>
+            </div>
+
+            {/* Visualização de Metas (Gauge) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+               <div className="lg:col-span-2 bg-white border border-gray-200 shadow-sm rounded-sm p-6 relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
+                      <Target size={16} className="text-blue-600" /> Performance vs Meta
+                    </h3>
+                  </div>
+                  <div className="flex flex-col md:flex-row items-center gap-8">
+                      <div className="relative w-48 h-24 overflow-hidden flex items-end justify-center">
+                          <div className="absolute top-0 left-0 w-full h-full bg-gray-100 rounded-t-full"></div>
+                          <div 
+                            className={`absolute top-0 left-0 w-full h-full rounded-t-full origin-bottom transition-all duration-1000 ease-out ${
+                                (aiMetrics.faturado / (aiMetrics.goal || 1)) >= 1 ? 'bg-green-500' : 
+                                (aiMetrics.faturado / (aiMetrics.goal || 1)) >= 0.7 ? 'bg-amber-500' : 'bg-red-500'
+                            }`}
+                            style={{ transform: `rotate(${Math.min((aiMetrics.faturado / (aiMetrics.goal || 1)) * 180, 180) - 180}deg)` }}
+                          ></div>
+                          <div className="absolute bottom-0 w-32 h-16 bg-white rounded-t-full flex items-end justify-center pb-2 z-10">
+                              <span className="text-2xl font-black text-gray-900">
+                                  {aiMetrics.goal > 0 ? ((aiMetrics.faturado / aiMetrics.goal) * 100).toFixed(1) : 0}%
+                              </span>
+                          </div>
+                      </div>
+                      <div className="flex-1 space-y-4 w-full">
+                          <div className="flex justify-between items-end border-b border-gray-100 pb-2">
+                              <div>
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Realizado</p>
+                                  <p className="text-xl font-bold text-gray-900">{formatCurrency(aiMetrics.faturado)}</p>
+                              </div>
+                              <div className="text-right">
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Meta</p>
+                                  <p className="text-xl font-bold text-gray-900">{formatCurrency(aiMetrics.goal)}</p>
+                              </div>
+                          </div>
+                          <div className="flex justify-between items-end">
+                              <div>
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Projeção (Carteira)</p>
+                                  <p className="text-lg font-bold text-blue-600">{formatCurrency(aiMetrics.emAberto + aiMetrics.faturado)}</p>
+                              </div>
+                              <div className="text-right">
+                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gap</p>
+                                  <p className={`text-lg font-bold ${aiMetrics.goal - aiMetrics.faturado > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                                      {formatCurrency(Math.max(0, aiMetrics.goal - aiMetrics.faturado))}
+                                  </p>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+               </div>
+
+               <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-6 flex flex-col justify-center items-center text-center space-y-4">
+                  <div className="p-4 bg-blue-50 rounded-full text-blue-600 mb-2">
+                      <Bot size={32} />
+                  </div>
+                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Assistente de Vendas</h3>
+                  <p className="text-xs text-gray-500 max-w-[200px]">
+                      Use a IA para analisar seu funil e sugerir ações para atingir a meta.
+                  </p>
+                  <button 
+                    onClick={handleGenerateAIInsights}
+                    className="px-4 py-2 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest rounded hover:bg-black transition-colors shadow-lg flex items-center gap-2"
+                  >
+                      <Sparkles size={14} className="text-amber-400" /> Gerar Análise
+                  </button>
+               </div>
             </div>
 
             {/* Visualização do Funil e Gráficos Adicionais */}
@@ -1555,6 +1726,15 @@ export const CRMView: React.FC<CRMViewProps> = ({
                     Análise IA
                 </button>
 
+                <button 
+                    onClick={checkAutoRules}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-purple-200 bg-purple-50 text-purple-700 text-[10px] font-bold uppercase tracking-widest hover:bg-purple-100 transition-colors"
+                    title="Automações Inteligentes"
+                >
+                    <Bot size={12} className="text-purple-500" />
+                    Automações
+                </button>
+
 
                 {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.onlyHot) && (
                     <button 
@@ -1567,91 +1747,144 @@ export const CRMView: React.FC<CRMViewProps> = ({
                 )}
             </div>
 
-            <div className="flex-1 flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
-              {STAGES.map((stage, stageIndex) => {
-                const col = pipelineColumns[stage.id];
-                return (
-                  <div key={stage.id} className="flex-1 min-w-[280px] max-w-[350px] flex flex-col h-full">
-                    <div className={`p-3 rounded-t-md border-t-4 bg-white border-x border-b border-gray-200 shadow-sm mb-3 flex justify-between items-center ${col.color}`}>
-                      <div className="flex items-center gap-2">
-                        <col.icon size={14} className="text-gray-400" />
-                        <h3 className="text-[11px] font-bold uppercase text-gray-700">{col.title}</h3>
+            <DragDropContext onDragEnd={onDragEnd}>
+              <div className="flex-1 flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                {STAGES.map((stage, stageIndex) => {
+                  const col = pipelineColumns[stage.id];
+                  return (
+                    <div key={stage.id} className="flex-1 min-w-[280px] max-w-[350px] flex flex-col h-full">
+                      <div className={`p-3 rounded-t-md border-t-4 bg-white border-x border-b border-gray-200 shadow-sm mb-3 flex justify-between items-center ${col.color}`}>
+                        <div className="flex items-center gap-2">
+                          <col.icon size={14} className="text-gray-400" />
+                          <h3 className="text-[11px] font-bold uppercase text-gray-700">{col.title}</h3>
+                        </div>
+                        <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[9px] font-bold">
+                          {col.items.length}
+                        </span>
                       </div>
-                      <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[9px] font-bold">
-                        {col.items.length}
-                      </span>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
-                      {col.items.map((item, idx) => (
-                        <div 
-                          key={`${item.PED_IN_CODIGO}-${idx}`} 
-                          onClick={() => { setSelectedOrder(item); setModalTab('ITENS'); }}
-                          className={`p-3 rounded shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden
-                            ${movingOrder === String(item.PED_IN_CODIGO) ? 'opacity-50 pointer-events-none' : ''}
-                            ${item.IS_HOT ? 'bg-orange-50/30 border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)]' : 'bg-white border border-gray-200'}
-                          `}
-                        >
-                          <div className={`absolute left-0 top-0 bottom-0 w-1 ${col.bg.replace('bg-', 'bg-').replace('50', '500')}`}></div>
-                          <div className="pl-2">
-                            <div className="flex justify-between items-start mb-2">
-                              <span className="text-[9px] font-mono text-gray-400">#{item.PED_IN_CODIGO}</span>
-                              <div className="flex items-center gap-2">
-                                  {item.IS_HOT && <Flame size={12} className="text-orange-500 fill-orange-500 animate-pulse" title="Orçamento Quente" />}
-                                  <span className="text-[9px] font-bold text-gray-400">{formatDate(item.PED_DT_EMISSAO)}</span>
+                      
+                      <Droppable droppableId={stage.id}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            className={`flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 ${snapshot.isDraggingOver ? 'bg-gray-50/50' : ''}`}
+                          >
+                            {col.items.map((item, idx) => (
+                              <Draggable
+                                // @ts-ignore
+                                key={`${item.PED_IN_CODIGO}`}
+                                draggableId={`${item.PED_IN_CODIGO}`}
+                                index={idx}
+                              >
+                                {(provided, snapshot) => (
+                                  <div 
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    style={{ ...provided.draggableProps.style }}
+                                    onClick={() => { setSelectedOrder(item); setModalTab('ITENS'); }}
+                                    className={`p-3 rounded shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden
+                                      ${movingOrder === String(item.PED_IN_CODIGO) ? 'opacity-50 pointer-events-none' : ''}
+                                      ${item.IS_HOT ? 'bg-orange-50/30 border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)]' : 'bg-white border border-gray-200'}
+                                      ${snapshot.isDragging ? 'rotate-2 scale-105 shadow-xl z-50' : ''}
+                                    `}
+                                  >
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${col.bg.replace('bg-', 'bg-').replace('50', '500')}`}></div>
+                                    <div className="pl-2">
+                                      <div className="flex justify-between items-start mb-2">
+                                        <span className="text-[9px] font-mono text-gray-400">#{item.PED_IN_CODIGO}</span>
+                                        <div className="flex items-center gap-2">
+                                            {item.IS_HOT && <Flame size={12} className="text-orange-500 fill-orange-500 animate-pulse" title="Orçamento Quente" />}
+                                            <span className="text-[9px] font-bold text-gray-400">{formatDate(item.PED_DT_EMISSAO)}</span>
+                                        </div>
+                                      </div>
+                                      <h4 className="text-[11px] font-bold text-gray-900 leading-tight mb-1 line-clamp-2">{item.CLIENTE_NOME}</h4>
+                                      <p className="text-[10px] text-gray-500 mb-3 truncate">{item.REPRESENTANTE_NOME}</p>
+                                      
+                                      <div className="flex justify-between items-end border-t border-gray-50 pt-2">
+                                        <div>
+                                          <p className="text-[9px] text-gray-400 uppercase">Valor Est.</p>
+                                          <p className="text-sm font-bold text-gray-800">{formatCurrency(item.TOTAL_VALOR)}</p>
+                                        </div>
+                                        
+                                        {/* Quick Move Arrows */}
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                            {/* WhatsApp Button */}
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const phone = item.CLIENTE_TELEFONE ? item.CLIENTE_TELEFONE.replace(/\D/g, '') : '';
+                                                    if (!phone) {
+                                                        alert('Cliente sem telefone cadastrado.');
+                                                        return;
+                                                    }
+                                                    
+                                                    let message = '';
+                                                    const firstName = item.CLIENTE_NOME.split(' ')[0];
+                                                    
+                                                    if (col.id === 'ENVIO_PROPOSTA') {
+                                                        message = `Olá ${firstName}, tudo bem? Gostaria de saber se teve chance de avaliar a proposta do pedido ${item.PED_IN_CODIGO}?`;
+                                                    } else if (col.id === 'NEGOCIACAO') {
+                                                        message = `Olá ${firstName}, podemos agendar uma conversa rápida sobre os detalhes do pedido ${item.PED_IN_CODIGO}?`;
+                                                    } else {
+                                                        message = `Olá ${firstName}, estou entrando em contato referente ao pedido ${item.PED_IN_CODIGO}.`;
+                                                    }
+                                                    
+                                                    window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
+                                                }}
+                                                className="p-1.5 text-green-600 hover:bg-green-50 rounded-full transition-colors mr-1"
+                                                title="Enviar WhatsApp"
+                                            >
+                                                <MessageCircle size={14} />
+                                            </button>
+
+                                            {stageIndex > 0 && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleMoveStage(item, STAGES[stageIndex - 1].id); }}
+                                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900" 
+                                                    title="Mover para Anterior"
+                                                >
+                                                    <ArrowLeft size={12} />
+                                                </button>
+                                            )}
+                                            {stageIndex < STAGES.length - 1 && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleMoveStage(item, STAGES[stageIndex + 1].id); }}
+                                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900" 
+                                                    title="Mover para Próximo"
+                                                >
+                                                    <ArrowRight size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                            {col.items.length === 0 && (
+                              <div className="h-24 border-2 border-dashed border-gray-200 rounded-md flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold">
+                                Vazio
                               </div>
-                            </div>
-                            <h4 className="text-[11px] font-bold text-gray-900 leading-tight mb-1 line-clamp-2">{item.CLIENTE_NOME}</h4>
-                            <p className="text-[10px] text-gray-500 mb-3 truncate">{item.REPRESENTANTE_NOME}</p>
-                            
-                            <div className="flex justify-between items-end border-t border-gray-50 pt-2">
-                              <div>
-                                <p className="text-[9px] text-gray-400 uppercase">Valor Est.</p>
-                                <p className="text-sm font-bold text-gray-800">{formatCurrency(item.TOTAL_VALOR)}</p>
-                              </div>
-                              
-                              {/* Quick Move Arrows */}
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                                  {stageIndex > 0 && (
-                                      <button 
-                                          onClick={(e) => { e.stopPropagation(); handleMoveStage(item, STAGES[stageIndex - 1].id); }}
-                                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900" 
-                                          title="Mover para Anterior"
-                                      >
-                                          <ArrowLeft size={12} />
-                                      </button>
-                                  )}
-                                  {stageIndex < STAGES.length - 1 && (
-                                      <button 
-                                          onClick={(e) => { e.stopPropagation(); handleMoveStage(item, STAGES[stageIndex + 1].id); }}
-                                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900" 
-                                          title="Mover para Próximo"
-                                      >
-                                          <ArrowRight size={12} />
-                                      </button>
-                                  )}
-                              </div>
-                            </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
-                      {col.items.length === 0 && (
-                        <div className="h-24 border-2 border-dashed border-gray-200 rounded-md flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold">
-                          Vazio
-                        </div>
-                      )}
+                        )}
+                      </Droppable>
+                      
+                      <div className="mt-2 p-2 bg-white border border-gray-200 rounded shadow-sm text-center">
+                        <p className="text-[9px] text-gray-400 uppercase">Total na Coluna</p>
+                        <p className="text-xs font-bold text-gray-700">
+                          {formatCurrency(col.items.reduce((acc, curr) => acc + curr.TOTAL_VALOR, 0))}
+                        </p>
+                      </div>
                     </div>
-                    
-                    <div className="mt-2 p-2 bg-white border border-gray-200 rounded shadow-sm text-center">
-                      <p className="text-[9px] text-gray-400 uppercase">Total na Coluna</p>
-                      <p className="text-xs font-bold text-gray-700">
-                        {formatCurrency(col.items.reduce((acc, curr) => acc + curr.TOTAL_VALOR, 0))}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </DragDropContext>
           </div>
         )}
 
@@ -1861,57 +2094,49 @@ export const CRMView: React.FC<CRMViewProps> = ({
             <div className="flex-1 overflow-auto custom-scrollbar">
               {/* Desktop View */}
               <table className="w-full text-left border-collapse hidden md:table">
-                <thead className="bg-gray-50 sticky top-0 z-10">
-                  <tr>
-                    <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest border-b">Cliente / Razão Social</th>
-                    <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest border-b text-center">Última Compra</th>
-                    <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest border-b text-center">Pedidos</th>
-                    <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest border-b text-right">LTV (Total Gasto)</th>
-                    <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest border-b text-right">Ticket Médio</th>
-                    <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest border-b text-center">Ação</th>
+                <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                  <tr className="text-[10px] uppercase font-black text-gray-400 tracking-widest">
+                    <th className="p-3 font-bold">Cliente</th>
+                    <th className="p-3 font-bold text-center">Última Compra</th>
+                    <th className="p-3 font-bold text-center">Pedidos</th>
+                    <th className="p-3 font-bold text-right">Total Gasto</th>
+                    <th className="p-3 font-bold text-center">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {clientsWallet.slice(0, 100).map((client) => (
-                    <tr key={client.id} className="hover:bg-rose-50/30 transition-colors group">
+                  {clientsWallet.map(client => (
+                    <tr key={client.id} className="hover:bg-gray-50 transition-colors group">
                       <td className="p-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs group-hover:bg-rose-100 group-hover:text-rose-600 transition-colors">
-                            {client.name.substring(0, 2)}
+                          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-[10px] group-hover:bg-white group-hover:shadow-sm transition-all">
+                            {client.name.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-gray-900 line-clamp-1">{client.name}</p>
-                            <p className="text-[9px] text-gray-400 flex items-center gap-1">
-                              ID: {client.id} • Rep: {client.repName}
-                            </p>
+                            <p className="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{client.name}</p>
+                            <p className="text-[9px] text-gray-400 font-medium">ID: {client.id}</p>
                           </div>
                         </div>
                       </td>
                       <td className="p-3 text-center">
-                        <div className="inline-flex flex-col items-center">
-                          <span className="text-[10px] font-medium text-gray-700">{client.lastPurchaseDate ? formatDate(client.lastPurchaseDate) : '-'}</span>
-                          {/* Badge de Recência */}
-                          {client.lastPurchaseDate && new Date().getTime() - new Date(client.lastPurchaseDate).getTime() > 1000 * 60 * 60 * 24 * 90 && (
-                            <span className="text-[8px] text-red-500 font-bold uppercase">Inativo +90d</span>
-                          )}
-                        </div>
+                        <span className="text-[10px] font-medium text-gray-600 bg-gray-50 px-2 py-1 rounded-full border border-gray-100">
+                          {formatDate(client.lastPurchaseDate)}
+                        </span>
                       </td>
-                      <td className="p-3 text-center text-xs font-mono text-gray-600">{client.ordersCount}</td>
-                      <td className="p-3 text-right">
-                        <span className="text-xs font-bold text-gray-900">{formatCurrency(client.totalSpent)}</span>
+                      <td className="p-3 text-center">
+                        <span className="text-xs font-bold text-gray-900">{client.ordersCount}</span>
                       </td>
                       <td className="p-3 text-right">
-                         <span className="text-xs font-medium text-gray-500">
-                           {client.ordersCount > 0 ? formatCurrency(client.totalSpent / client.ordersCount) : formatCurrency(0)}
-                         </span>
+                        <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-sm border border-green-100">
+                          {formatCurrency(client.totalSpent)}
+                        </span>
                       </td>
                       <td className="p-3 text-center">
                         <button 
-                          onClick={() => setSelectedClient(client)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                          title="Ver Detalhes do Cliente"
+                          onClick={() => setSelectedClientForTimeline(client)}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                          title="Ver Linha do Tempo"
                         >
-                          <ArrowRight size={14} />
+                          <History size={14} />
                         </button>
                       </td>
                     </tr>
@@ -1919,40 +2144,39 @@ export const CRMView: React.FC<CRMViewProps> = ({
                 </tbody>
               </table>
 
-              {/* Mobile View (Cards) */}
+              {/* Mobile View */}
               <div className="md:hidden divide-y divide-gray-100">
-                {clientsWallet.slice(0, 100).map((client) => (
-                  <div key={client.id} className="p-4 hover:bg-rose-50/30 transition-colors" onClick={() => setSelectedClient(client)}>
-                    <div className="flex justify-between items-start mb-2">
+                {clientsWallet.map(client => (
+                  <div key={client.id} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex justify-between items-start mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-xs">
-                          {client.name.substring(0, 2)}
+                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-xs">
+                          {client.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-gray-900 line-clamp-1">{client.name}</p>
-                          <p className="text-[9px] text-gray-400">ID: {client.id} • Rep: {client.repName}</p>
+                          <p className="text-sm font-bold text-gray-900">{client.name}</p>
+                          <p className="text-[10px] text-gray-400 font-medium">ID: {client.id}</p>
                         </div>
                       </div>
-                      <ArrowRight size={14} className="text-gray-300" />
+                      <button 
+                        onClick={() => setSelectedClientForTimeline(client)}
+                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
+                      >
+                        <History size={16} />
+                      </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-y-2 mt-3">
-                      <div>
-                        <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Última Compra</p>
-                        <p className="text-[10px] font-bold text-gray-700">{client.lastPurchaseDate ? formatDate(client.lastPurchaseDate) : '-'}</p>
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      <div className="bg-gray-50 p-2 rounded border border-gray-100 text-center">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Última</p>
+                        <p className="text-[10px] font-bold text-gray-700">{formatDate(client.lastPurchaseDate)}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Pedidos</p>
-                        <p className="text-[10px] font-bold text-gray-700">{client.ordersCount}</p>
+                      <div className="bg-gray-50 p-2 rounded border border-gray-100 text-center">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pedidos</p>
+                        <p className="text-[10px] font-bold text-gray-900">{client.ordersCount}</p>
                       </div>
-                      <div>
-                        <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">LTV Total</p>
-                        <p className="text-[10px] font-bold text-rose-600">{formatCurrency(client.totalSpent)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[8px] font-black uppercase text-gray-400 tracking-widest">Ticket Médio</p>
-                        <p className="text-[10px] font-bold text-gray-700">
-                          {client.ordersCount > 0 ? formatCurrency(client.totalSpent / client.ordersCount) : formatCurrency(0)}
-                        </p>
+                      <div className="bg-green-50 p-2 rounded border border-green-100 text-center">
+                        <p className="text-[8px] font-bold text-green-600 uppercase tracking-widest mb-1">Total</p>
+                        <p className="text-[10px] font-bold text-green-700">{formatCurrency(client.totalSpent)}</p>
                       </div>
                     </div>
                   </div>
@@ -2830,6 +3054,83 @@ export const CRMView: React.FC<CRMViewProps> = ({
         contextName="CRM / Funil de Vendas"
         isLocalIA={isUsingLocalAI()}
       />
+
+      {/* Modal de Automações */}
+      {showAutoActionsModal && (
+        <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-2xl rounded-lg shadow-2xl border border-gray-200 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-purple-50 rounded-t-lg">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-purple-100 p-2 rounded-full">
+                            <Bot size={20} className="text-purple-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold text-purple-900 uppercase tracking-wide">Automações Inteligentes</h2>
+                            <p className="text-[10px] text-purple-600 font-medium">Sugestões de ações baseadas em regras</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowAutoActionsModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-white/50 rounded-full">
+                        <X size={18} />
+                    </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto custom-scrollbar space-y-4">
+                    {autoActions.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                            <Sparkles size={32} className="mx-auto mb-3 text-gray-300" />
+                            <p className="text-sm font-medium">Nenhuma ação sugerida no momento.</p>
+                            <p className="text-xs mt-1">O sistema não encontrou orçamentos parados há mais de 5 dias.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Ações Sugeridas ({autoActions.length})</p>
+                            {autoActions.map((action, idx) => (
+                                <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-md hover:border-purple-200 transition-colors">
+                                    <div className="mt-0.5">
+                                        <input type="checkbox" checked readOnly className="accent-purple-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-xs font-bold text-gray-800">{action.title}</h4>
+                                            <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">TAREFA</span>
+                                        </div>
+                                        <p className="text-[11px] text-gray-600 mt-1">{action.description}</p>
+                                        <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                                            <span><span className="font-bold">Cliente:</span> {action.order.CLIENTE_NOME}</span>
+                                            <span><span className="font-bold">Rep:</span> {action.order.REPRESENTANTE_NOME}</span>
+                                            <span><span className="font-bold">Vencimento:</span> {new Date(action.due_date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-lg">
+                    <button onClick={() => setShowAutoActionsModal(false)} className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-100 transition-colors">Cancelar</button>
+                    {autoActions.length > 0 && (
+                        <button onClick={executeAutoActions} className="px-6 py-2 bg-purple-600 text-white text-xs font-bold uppercase rounded hover:bg-purple-700 transition-colors shadow-md flex items-center gap-2">
+                            <Bot size={14} />
+                            Executar Ações
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Customer Timeline Modal */}
+      {selectedClientForTimeline && (
+          <CustomerTimeline
+              clientName={selectedClientForTimeline.name}
+              clientId={selectedClientForTimeline.id}
+              salesHistory={selectedClientForTimeline.history}
+              appointments={appointments}
+              tasks={tasks}
+              onClose={() => setSelectedClientForTimeline(null)}
+          />
+      )}
     </div>
   );
 };
