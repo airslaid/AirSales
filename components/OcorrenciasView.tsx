@@ -3,8 +3,12 @@ import { Ocorrencia, AppUser } from '../types';
 import { fetchOcorrencias, upsertOcorrencia, deleteOcorrencia, fetchAppUsers } from '../services/supabaseService';
 import { 
   AlertTriangle, Plus, Search, Edit2, Trash2, X, Save, CheckCircle2, 
-  Clock, FileText, Building2, User, Check, Calendar, ListTodo, Filter
+  Clock, FileText, Building2, User, Check, Calendar, ListTodo, Filter,
+  LayoutGrid, BarChart3
 } from 'lucide-react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell
+} from 'recharts';
 import { toast } from 'sonner';
 import { OcorrenciaAcoesModal } from './OcorrenciaAcoesModal';
 
@@ -18,6 +22,7 @@ const PROCESSOS = [
 ];
 
 export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
+  const [viewMode, setViewMode] = useState<'GRID' | 'DASHBOARD'>('GRID');
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,6 +175,57 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
     return Array.from(types).sort();
   }, [ocorrencias]);
 
+  const dashboardData = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    
+    // Filter data for the current year, respecting permissions and other filters (except date range)
+    const yearFiltered = ocorrencias.filter(o => {
+      // Permission check
+      const isQualidade = user?.email?.toLowerCase() === 'qualidade@grupoairslaid.com.br';
+      const isAdmin = user?.is_admin;
+      const userProcess = user?.processo;
+      const hasPermission = isAdmin || isQualidade || (userProcess && o.process === userProcess);
+      if (!hasPermission) return false;
+
+      // Year check
+      if (!o.registration_date) return false;
+      const regYear = new Date(o.registration_date).getFullYear();
+      if (regYear !== currentYear) return false;
+
+      // Search term filter
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = (
+        o.ro_number?.toLowerCase().includes(searchLower) ||
+        o.description?.toLowerCase().includes(searchLower) ||
+        o.origin?.toLowerCase().includes(searchLower) ||
+        o.requester?.toLowerCase().includes(searchLower)
+      );
+      if (!matchesSearch) return false;
+
+      // Advanced Filters (except date range)
+      if (filters.responsible && o.responsible !== filters.responsible) return false;
+      if (filters.type && o.type !== filters.type) return false;
+      if (filters.process && o.process !== filters.process) return false;
+      
+      return true;
+    });
+
+    const opened = yearFiltered.length;
+    const closed = yearFiltered.filter(o => o.corrective_action_completed).length;
+    
+    const comparisonData = [
+      { name: 'Abertas', total: opened, color: '#e11d48' },
+      { name: 'Fechadas', total: closed, color: '#10b981' }
+    ];
+
+    const processDistribution = PROCESSOS.map(p => ({
+      name: p,
+      total: yearFiltered.filter(o => o.process === p).length
+    })).filter(d => d.total > 0).sort((a, b) => b.total - a.total);
+
+    return { comparisonData, processDistribution, currentYear };
+  }, [ocorrencias, filters, searchTerm, user]);
+
   return (
     <div className="h-full flex flex-col bg-gray-50 animate-in fade-in duration-300">
       <div className="p-4 bg-white border-b border-gray-200 shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -192,6 +248,20 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-sm border border-gray-200">
+            <button 
+              onClick={() => setViewMode('GRID')}
+              className={`px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'GRID' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <LayoutGrid size={14} /> Grid
+            </button>
+            <button 
+              onClick={() => setViewMode('DASHBOARD')}
+              className={`px-3 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${viewMode === 'DASHBOARD' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              <BarChart3 size={14} /> Dashboard
+            </button>
           </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
@@ -290,6 +360,102 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <AlertTriangle size={48} className="mb-4 opacity-20" />
             <p className="text-sm font-bold uppercase tracking-widest">Nenhuma ocorrência encontrada</p>
+          </div>
+        ) : viewMode === 'DASHBOARD' ? (
+          <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-5xl mx-auto">
+            {/* Gráfico 1: Abertas x Fechadas */}
+            <div className="bg-white p-6 rounded-sm border border-gray-200 shadow-sm flex flex-col h-[450px]">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 flex items-center gap-2">
+                  <CheckCircle2 size={16} className="text-emerald-500" />
+                  Status das ROs (Abertas x Fechadas) - {dashboardData.currentYear}
+                </h3>
+                <div className="text-[10px] font-bold text-gray-400 uppercase">Ano Corrente</div>
+              </div>
+              <div className="flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dashboardData.comparisonData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#6b7280' }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fontWeight: 700, fill: '#6b7280' }}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f9fafb' }}
+                      contentStyle={{ borderRadius: '4px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                    />
+                    <Bar dataKey="total" radius={[4, 4, 0, 0]} barSize={80}>
+                      {dashboardData.comparisonData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
+                <div className="text-center">
+                  <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Abertas em {dashboardData.currentYear}</p>
+                  <p className="text-3xl font-black text-rose-600">{dashboardData.comparisonData[0].total}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Fechadas em {dashboardData.currentYear}</p>
+                  <p className="text-3xl font-black text-emerald-600">{dashboardData.comparisonData[1].total}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Gráfico 2: Distribuição por Processo */}
+            <div className="bg-white p-6 rounded-sm border border-gray-200 shadow-sm flex flex-col min-h-[400px]">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-800 flex items-center gap-2">
+                  <Building2 size={16} className="text-blue-500" />
+                  Distribuição por Processo - {dashboardData.currentYear}
+                </h3>
+                <div className="text-[10px] font-bold text-gray-400 uppercase">Ano Corrente</div>
+              </div>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={dashboardData.processDistribution} 
+                    layout="vertical"
+                    margin={{ top: 0, right: 30, left: 60, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 9, fontWeight: 700, fill: '#6b7280' }}
+                      width={100}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f9fafb' }}
+                      contentStyle={{ borderRadius: '4px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                    />
+                    <Bar dataKey="total" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={24}>
+                      {dashboardData.processDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={`hsl(217, 91%, ${60 - (index * 3)}%)`} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 pt-4 border-t border-gray-50">
+                <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">
+                  Total de Processos com Ocorrências em {dashboardData.currentYear}: {dashboardData.processDistribution.length}
+                </p>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="bg-white border border-gray-200 rounded-sm shadow-sm overflow-hidden">
