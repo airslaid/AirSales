@@ -186,6 +186,49 @@ const normalizeStatus = (text: string | null | undefined): string => {
     .toUpperCase();
 };
 
+const CRM_STATUSES = [
+  'EM ANALISE',
+  'EM ANÁLISE',
+  'EM NEGOCIACAO',
+  'EM NEGOCIAÇÃO',
+  'AGUARDANDO CLIENTE',
+  'EM APROVACAO (INTERNO)',
+  'EM APROVAÇÃO (INTERNO)',
+  'PROPOSTA ENVIADA',
+  'ENCERRADO',
+  'CANCELADO / PERDIDO',
+  'FECHADO (GANHO)',
+  'FECHADO (PERDIDO)'
+];
+
+const shouldPreserveStatus = (existing: string, incoming: string) => {
+  const normalizedExisting = normalizeStatus(existing);
+  const normalizedIncoming = normalizeStatus(incoming);
+  
+  // Se o status atual no Supabase é um status específico do CRM (movimentação manual)
+  // e o status vindo do ERP é apenas um status genérico de "início",
+  // mantemos o status do CRM pois ele é mais rico em informação sobre a negociação.
+  if (CRM_STATUSES.includes(normalizedExisting)) {
+      const isGenericIncoming = 
+        normalizedIncoming === 'ABERTO' || 
+        normalizedIncoming === 'EM ABERTO' || 
+        normalizedIncoming === 'EM APROVACAO' || 
+        normalizedIncoming === 'EM APROVAÇÃO' || 
+        normalizedIncoming === 'EM APROVACAO (INTERNO)' ||
+        normalizedIncoming === 'EM APROVAÇÃO (INTERNO)' ||
+        normalizedIncoming === 'ORCAMENTO' ||
+        normalizedIncoming === 'ORÇAMENTO' ||
+        normalizedIncoming === 'ORC' ||
+        normalizedIncoming === 'PEDIDO' ||
+        normalizedIncoming === '';
+        
+      if (isGenericIncoming) {
+          return true;
+      }
+  }
+  return false;
+};
+
 export const syncSalesToSupabase = async (sales: Sale[]) => {
   if (!sales || sales.length === 0) return;
   try {
@@ -314,6 +357,62 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
       uniqueMap.set(key, row);
     });
     const uniqueRows = Array.from(uniqueMap.values());
+
+    // --- LÓGICA DE PRESERVAÇÃO DE STATUS DO CRM ---
+    // Antes de fazer o upsert, buscamos os status atuais no banco para não sobrescrever 
+    // movimentações manuais feitas no CRM com status genéricos "ABERTO" do ERP.
+    try {
+        const keysToFetch = uniqueRows.map(r => r.ped_in_codigo);
+        // Busca em lotes para evitar limites de URL/Query
+        const batchSize = 500;
+        const existingMap = new Map<string, string>();
+        
+        for (let i = 0; i < keysToFetch.length; i += batchSize) {
+            const batchKeys = keysToFetch.slice(i, i + batchSize);
+            const { data: existingData } = await supabase
+                .from('sales')
+                .select('fil_in_codigo, ser_st_codigo, ped_in_codigo, itp_in_sequencia, ped_st_status')
+                .in('ped_in_codigo', batchKeys);
+            
+            existingData?.forEach(row => {
+                const key = `${row.fil_in_codigo}-${row.ser_st_codigo}-${row.ped_in_codigo}-${row.itp_in_sequencia}`;
+                existingMap.set(key, row.ped_st_status);
+            });
+        }
+
+        // Aplica a preservação no array de upsert (uniqueRows)
+        uniqueRows.forEach(row => {
+            const key = `${row.fil_in_codigo}-${row.ser_st_codigo}-${row.ped_in_codigo}-${row.itp_in_sequencia}`;
+            const existingStatus = existingMap.get(key);
+            if (existingStatus && shouldPreserveStatus(existingStatus, row.ped_st_status)) {
+                row.ped_st_status = existingStatus;
+            }
+        });
+
+        // TAMBÉM aplica a preservação no array ORIGINAL (sales) para que o retorno do dataService reflita a mudança
+        // e evite o "reset" visual imediato no UI.
+        sales.forEach(s => {
+            const fil = Math.floor(toNumeric(findValue(s, 'FIL_IN_CODIGO')));
+            const ser = String(findValue(s, 'SER_ST_CODIGO') || '').trim();
+            const ped = Math.floor(toNumeric(findValue(s, 'PED_IN_CODIGO')));
+            const seq = Math.floor(toNumeric(findValue(s, 'ITP_IN_SEQUENCIA')));
+            
+            const key = `${fil}-${ser}-${ped}-${seq}`;
+            const existingStatus = existingMap.get(key);
+            
+            const currentStatus = String(findValue(s, 'PED_ST_STATUS') || '').trim();
+            
+            if (existingStatus && shouldPreserveStatus(existingStatus, currentStatus)) {
+                // Atualiza no objeto original usando a chave que ele já possui (provavelmente uppercase)
+                const keys = Object.keys(s);
+                const statusKey = keys.find(k => k.toUpperCase() === 'PED_ST_STATUS') || 'PED_ST_STATUS';
+                s[statusKey] = existingStatus;
+            }
+        });
+    } catch (fetchErr) {
+        console.error("Erro ao buscar status existentes para preservação:", fetchErr);
+        // Continua o upsert mesmo se falhar a busca (melhor atualizar do que falhar tudo)
+    }
 
     const { error } = await supabase.from('sales').upsert(uniqueRows, { onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' });
     if (error) throw error;

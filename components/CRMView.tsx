@@ -212,6 +212,47 @@ export const CRMView: React.FC<CRMViewProps> = ({
      order: null as PipelineItem | null
   });
 
+  // --- FILTROS DE PERMISSÃO (AGENDA E TAREFAS) ---
+  const filteredAppointments = useMemo(() => {
+    let list = appointments;
+    if (!user?.is_admin) {
+        list = list.filter(a => a.rep_in_codigo === user?.rep_in_codigo);
+    }
+    
+    // Filtros de UI (Mesmos do Pipeline)
+    if (pipelineFilters.rep) {
+        list = list.filter(a => String(a.rep_in_codigo) === pipelineFilters.rep);
+    }
+    if (pipelineFilters.startDate) {
+        list = list.filter(a => a.start_date >= pipelineFilters.startDate);
+    }
+    if (pipelineFilters.endDate) {
+        list = list.filter(a => a.start_date <= pipelineFilters.endDate);
+    }
+    
+    return list;
+  }, [appointments, user, pipelineFilters]);
+
+  const filteredTasks = useMemo(() => {
+    let list = tasks;
+    if (!user?.is_admin) {
+        list = list.filter(t => t.rep_in_codigo === user?.rep_in_codigo);
+    }
+
+    // Filtros de UI (Mesmos do Pipeline)
+    if (pipelineFilters.rep) {
+        list = list.filter(t => String(t.rep_in_codigo) === pipelineFilters.rep);
+    }
+    if (pipelineFilters.startDate) {
+        list = list.filter(t => t.due_date && t.due_date >= pipelineFilters.startDate);
+    }
+    if (pipelineFilters.endDate) {
+        list = list.filter(t => t.due_date && t.due_date <= pipelineFilters.endDate);
+    }
+
+    return list;
+  }, [tasks, user, pipelineFilters]);
+
   useEffect(() => {
     // Carrega apontamentos se estiver na aba Agenda, Followup ou se abrir um pedido
     if (activeTab === 'AGENDA' || activeTab === 'FOLLOWUP' || selectedOrder) {
@@ -481,16 +522,16 @@ export const CRMView: React.FC<CRMViewProps> = ({
       const statusRaw = String(order.PED_ST_STATUS || order.SITUACAO || '').trim().toUpperCase();
       
       // Lógica de Mapeamento de Status para Colunas (Strict)
-      if (statusRaw === 'ENCERRADO') {
+      if (statusRaw === 'ENCERRADO' || statusRaw === 'FECHADO (GANHO)' || statusRaw.includes('FATURADO')) {
         cols.GANHO.items.push(order);
-      } else if (statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO')) {
+      } else if (statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO') || statusRaw === 'FECHADO (PERDIDO)') {
         cols.PERDIDO.items.push(order);
       } else if (statusRaw.includes('NEGOCIACAO') || statusRaw.includes('NEGOCIAÇÃO')) {
         cols.NEGOCIACAO.items.push(order);
       } else if (statusRaw.includes('PROPOSTA') || statusRaw.includes('ENVIADO')) {
         cols.ENVIO_PROPOSTA.items.push(order);
       } else {
-        // Default bucket: Processo Interno (includes ABERTO, OV, ORC, APROVACAO, ANALISE etc if not specified above)
+        // Default bucket: Processo Interno
         cols.PROCESSO_INTERNO.items.push(order);
       }
     });
@@ -830,15 +871,15 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
   // Filtra a lista de histórico (appointments) baseado na busca
   const historyList = useMemo(() => {
-      if (!searchTerm) return appointments.sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
+      if (!searchTerm) return filteredAppointments.sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
       
       const lower = searchTerm.toLowerCase();
-      return appointments.filter(a => 
+      return filteredAppointments.filter(a => 
           String(a.client_name).toLowerCase().includes(lower) ||
           String(a.description).toLowerCase().includes(lower) ||
           String(a.title).toLowerCase().includes(lower)
       ).sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
-  }, [appointments, searchTerm]);
+  }, [filteredAppointments, searchTerm]);
 
   // Recupera os itens do pedido selecionado
   const selectedOrderItems = useMemo(() => {
@@ -1178,18 +1219,6 @@ export const CRMView: React.FC<CRMViewProps> = ({
     ).slice(0, 10);
   }, [clientSearchTerm, clientsWallet]);
 
-  // Metricas para o Cockpit
-  const aiMetrics = useMemo(() => {
-    const faturado = pipelineColumns.GANHO.items.reduce((acc, i) => acc + (Number(i.TOTAL_VALOR) || 0), 0);
-    const emAberto = [
-      ...pipelineColumns.PROCESSO_INTERNO.items, 
-      ...pipelineColumns.ENVIO_PROPOSTA.items, 
-      ...pipelineColumns.NEGOCIACAO.items
-    ].reduce((acc, i) => acc + (Number(i.TOTAL_VALOR) || 0), 0);
-    const goal = 100000; // Meta de exemplo, pode ser ajustada
-    return { faturado, emAberto, goal };
-  }, [pipelineColumns]);
-
   return (
     <div className="h-full flex flex-col bg-gray-50 animate-in fade-in duration-300">
       {/* Header CRM */}
@@ -1393,76 +1422,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
               </div>
             </div>
 
-            {/* Visualização de Metas (Gauge) */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-               <div className="lg:col-span-2 bg-white border border-gray-200 shadow-sm rounded-sm p-6 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
-                      <Target size={16} className="text-blue-600" /> Performance vs Meta
-                    </h3>
-                  </div>
-                  <div className="flex flex-col md:flex-row items-center gap-8">
-                      <div className="relative w-48 h-24 overflow-hidden flex items-end justify-center">
-                          <div className="absolute top-0 left-0 w-full h-full bg-gray-100 rounded-t-full"></div>
-                          <div 
-                            className={`absolute top-0 left-0 w-full h-full rounded-t-full origin-bottom transition-all duration-1000 ease-out ${
-                                (aiMetrics.faturado / (aiMetrics.goal || 1)) >= 1 ? 'bg-green-500' : 
-                                (aiMetrics.faturado / (aiMetrics.goal || 1)) >= 0.7 ? 'bg-amber-500' : 'bg-red-500'
-                            }`}
-                            style={{ transform: `rotate(${Math.min((aiMetrics.faturado / (aiMetrics.goal || 1)) * 180, 180) - 180}deg)` }}
-                          ></div>
-                          <div className="absolute bottom-0 w-32 h-16 bg-white rounded-t-full flex items-end justify-center pb-2 z-10">
-                              <span className="text-2xl font-black text-gray-900">
-                                  {aiMetrics.goal > 0 ? ((aiMetrics.faturado / aiMetrics.goal) * 100).toFixed(1) : 0}%
-                              </span>
-                          </div>
-                      </div>
-                      <div className="flex-1 space-y-4 w-full">
-                          <div className="flex justify-between items-end border-b border-gray-100 pb-2">
-                              <div>
-                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Realizado</p>
-                                  <p className="text-xl font-bold text-gray-900">{formatCurrency(aiMetrics.faturado)}</p>
-                              </div>
-                              <div className="text-right">
-                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Meta</p>
-                                  <p className="text-xl font-bold text-gray-900">{formatCurrency(aiMetrics.goal)}</p>
-                              </div>
-                          </div>
-                          <div className="flex justify-between items-end">
-                              <div>
-                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Projeção (Carteira)</p>
-                                  <p className="text-lg font-bold text-blue-600">{formatCurrency(aiMetrics.emAberto + aiMetrics.faturado)}</p>
-                              </div>
-                              <div className="text-right">
-                                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gap</p>
-                                  <p className={`text-lg font-bold ${aiMetrics.goal - aiMetrics.faturado > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                      {formatCurrency(Math.max(0, aiMetrics.goal - aiMetrics.faturado))}
-                                  </p>
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-               </div>
-
-               <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-6 flex flex-col justify-center items-center text-center space-y-4">
-                  <div className="p-4 bg-blue-50 rounded-full text-blue-600 mb-2">
-                      <Bot size={32} />
-                  </div>
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Assistente de Vendas</h3>
-                  <p className="text-xs text-gray-500 max-w-[200px]">
-                      Use a IA para analisar seu funil e sugerir ações para atingir a meta.
-                  </p>
-                  <button 
-                    onClick={handleGenerateAIInsights}
-                    className="px-4 py-2 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest rounded hover:bg-black transition-colors shadow-lg flex items-center gap-2"
-                  >
-                      <Sparkles size={14} className="text-amber-400" /> Gerar Análise
-                  </button>
-               </div>
-            </div>
-
             {/* Visualização do Funil e Gráficos Adicionais */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-6">
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
@@ -1606,43 +1567,6 @@ export const CRMView: React.FC<CRMViewProps> = ({
                     );
                   })}
                 </div>
-              </div>
-
-              <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-6">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
-                  <AlertCircle size={16} className="text-amber-500" /> Oportunidades Críticas
-                </h3>
-                <div className="space-y-3">
-                  {[...pipelineColumns.PROCESSO_INTERNO.items, ...pipelineColumns.ENVIO_PROPOSTA.items, ...pipelineColumns.NEGOCIACAO.items]
-                    .filter(i => i.IS_HOT)
-                    .sort((a, b) => b.TOTAL_VALOR - a.TOTAL_VALOR)
-                    .slice(0, 6)
-                    .map(item => (
-                      <div key={item.PED_IN_CODIGO} className="p-3 bg-gray-50 border border-gray-100 rounded-sm hover:border-rose-200 transition-colors cursor-pointer group" onClick={() => setSelectedOrder(item)}>
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className="text-[10px] font-bold text-gray-900 truncate flex-1 uppercase tracking-tight">{item.CLIENTE_NOME}</h4>
-                          <span className="text-[9px] font-black text-rose-600 ml-2">{formatCurrency(item.TOTAL_VALOR)}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[8px] text-gray-400 uppercase font-medium">#{item.PED_IN_CODIGO} • {item.REPRESENTANTE_NOME}</span>
-                          <ArrowRight size={10} className="text-gray-300 group-hover:text-rose-500 transition-transform group-hover:translate-x-1" />
-                        </div>
-                      </div>
-                    ))
-                  }
-                  {([...pipelineColumns.PROCESSO_INTERNO.items, ...pipelineColumns.ENVIO_PROPOSTA.items, ...pipelineColumns.NEGOCIACAO.items].filter(i => i.IS_HOT).length === 0) && (
-                    <div className="py-12 text-center">
-                      <CheckCircle2 size={32} className="mx-auto text-gray-200 mb-2" />
-                      <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Nenhuma oportunidade crítica</p>
-                    </div>
-                  )}
-                </div>
-                <button 
-                  onClick={() => setActiveTab('PIPELINE')}
-                  className="w-full mt-6 py-2 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-black transition-colors rounded-sm"
-                >
-                  Ver Pipeline Completo
-                </button>
               </div>
             </div>
           </div>
@@ -1903,6 +1827,48 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
+
+                        {/* Filtros de Representante e Data (Mesmos do Pipeline) */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                                value={pipelineFilters.rep}
+                                onChange={(e) => updateFilters({ rep: e.target.value })}
+                            >
+                                <option value="">Todos Representantes</option>
+                                {uniqueReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.startDate}
+                                    onChange={(e) => updateFilters({ startDate: e.target.value })}
+                                />
+                                <span className="text-gray-300 shrink-0">-</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.endDate}
+                                    onChange={(e) => updateFilters({ endDate: e.target.value })}
+                                />
+                            </div>
+
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate) && (
+                                <button 
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '' })}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    title="Limpar Filtros"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
                         {/* Toggle View Mode */}
                         <div className="flex bg-gray-100 p-0.5 rounded-sm border border-gray-200 w-full sm:w-auto">
                             <button 
@@ -2195,9 +2161,52 @@ export const CRMView: React.FC<CRMViewProps> = ({
         {activeTab === 'AGENDA' && (
             <div className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-sm overflow-hidden animate-in fade-in">
                 <div className="p-3 border-b bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-gray-700 flex items-center gap-2">
-                        <Calendar size={14} /> Próximos Compromissos
-                    </h3>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-700 flex items-center gap-2">
+                            <Calendar size={14} /> Próximos Compromissos
+                        </h3>
+
+                        {/* Filtros de Representante e Data (Mesmos do Pipeline) */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                                value={pipelineFilters.rep}
+                                onChange={(e) => updateFilters({ rep: e.target.value })}
+                            >
+                                <option value="">Todos Representantes</option>
+                                {uniqueReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.startDate}
+                                    onChange={(e) => updateFilters({ startDate: e.target.value })}
+                                />
+                                <span className="text-gray-300 shrink-0">-</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.endDate}
+                                    onChange={(e) => updateFilters({ endDate: e.target.value })}
+                                />
+                            </div>
+
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate) && (
+                                <button 
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '' })}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    title="Limpar Filtros"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
                     <div className="flex gap-2 w-full sm:w-auto">
                         <button 
                             onClick={() => handleExportAppointments('Relatorio_Agenda')}
@@ -2215,13 +2224,13 @@ export const CRMView: React.FC<CRMViewProps> = ({
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100">
                     <div className="space-y-3">
-                        {appointments.length === 0 ? (
+                        {filteredAppointments.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
                                 <Calendar size={48} className="mb-2 opacity-50" />
                                 <p className="text-xs font-medium">Nenhum compromisso agendado.</p>
                             </div>
                         ) : (
-                            appointments.map(evt => (
+                            filteredAppointments.map(evt => (
                                 <div key={evt.id} className="bg-white p-4 rounded border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition-shadow relative overflow-hidden group">
                                     <div className={`absolute left-0 top-0 bottom-0 w-1 ${evt.priority === 'CRITICA' ? 'bg-red-500' : evt.priority === 'ALTA' ? 'bg-orange-500' : evt.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
                                     <div className="flex flex-col items-center justify-center min-w-[80px] border-r border-gray-100 pr-4">
@@ -2261,6 +2270,48 @@ export const CRMView: React.FC<CRMViewProps> = ({
                         <h3 className="text-xs font-bold uppercase tracking-widest text-gray-700 flex items-center gap-2">
                             <LayoutList size={14} /> Gestão de Tarefas
                         </h3>
+
+                        {/* Filtros de Representante e Data (Mesmos do Pipeline) */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                                value={pipelineFilters.rep}
+                                onChange={(e) => updateFilters({ rep: e.target.value })}
+                            >
+                                <option value="">Todos Representantes</option>
+                                {uniqueReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.startDate}
+                                    onChange={(e) => updateFilters({ startDate: e.target.value })}
+                                />
+                                <span className="text-gray-300 shrink-0">-</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.endDate}
+                                    onChange={(e) => updateFilters({ endDate: e.target.value })}
+                                />
+                            </div>
+
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate) && (
+                                <button 
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '' })}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    title="Limpar Filtros"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
                         <div className="flex bg-gray-200 p-0.5 rounded text-[9px] font-bold uppercase w-full sm:w-auto">
                             {(['TODAS', 'PENDENTES', 'CONCLUIDAS'] as const).map(f => (
                                 <button 
@@ -2297,7 +2348,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {tasks.filter(t => {
+                            {filteredTasks.filter(t => {
                                 if (taskFilter === 'PENDENTES') return t.status === 'PENDENTE';
                                 if (taskFilter === 'CONCLUIDAS') return t.status === 'CONCLUIDA';
                                 return true;
