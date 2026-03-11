@@ -30,6 +30,7 @@ import { CRMView, CRMExternalAction } from './components/CRMView';
 import { OverviewPanel } from './components/OverviewPanel'; // Importação do novo componente
 import { FormsView } from './components/FormsView';
 import { OcorrenciasView } from './components/OcorrenciasView';
+import { SolicitacaoCotacaoView } from './components/SolicitacaoCotacaoView';
 import { NotificationsMenu } from './components/NotificationsMenu';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
@@ -38,6 +39,7 @@ const MODULES = [
   { id: 'OVERVIEW', label: 'Visão Geral', icon: LayoutDashboard, adminOnly: false },
   { id: 'CRM', label: 'CRM Operacional', icon: Handshake, adminOnly: false },
   { id: 'FORMULARIOS', label: 'Formulários', icon: ClipboardList, adminOnly: false },
+  { id: 'SOLICITACAO_COTACAO', label: 'Solicitação de Cotação', icon: ClipboardList, adminOnly: false },
   { id: 'OCORRENCIAS', label: 'Controle Ocorrências', icon: AlertTriangle, adminOnly: false },
   { id: 'ENTREGA', label: 'Indicador de Entrega', icon: Truck, adminOnly: false },
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
@@ -1626,6 +1628,8 @@ export default function App() {
              />
           ) : activeModuleId === 'FORMULARIOS' ? (
              <FormsView user={currentUser} />
+          ) : activeModuleId === 'SOLICITACAO_COTACAO' ? (
+             <SolicitacaoCotacaoView user={currentUser} />
           ) : activeModuleId === 'OCORRENCIAS' ? (
              <OcorrenciasView user={currentUser} />
           ) : activeModuleId === 'METAS' ? ( 

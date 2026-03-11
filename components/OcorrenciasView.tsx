@@ -32,6 +32,7 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
     responsible: '',
     type: '',
     process: '',
+    status: '',
     dateStart: '',
     dateEnd: ''
   });
@@ -159,6 +160,12 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
     if (filters.type && o.type !== filters.type) return false;
     if (filters.process && o.process !== filters.process) return false;
     
+    if (filters.status) {
+      const isCompleted = !!o.corrective_action_completed;
+      if (filters.status === 'CONCLUIDA' && !isCompleted) return false;
+      if (filters.status === 'PENDENTE' && isCompleted) return false;
+    }
+    
     if (filters.dateStart && o.registration_date && o.registration_date < filters.dateStart) return false;
     if (filters.dateEnd && o.registration_date && o.registration_date > filters.dateEnd) return false;
 
@@ -281,7 +288,7 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
       </div>
 
       {showFilters && (
-        <div className="px-4 py-3 bg-white border-b border-gray-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 animate-in slide-in-from-top-2 duration-200">
+        <div className="px-4 py-3 bg-white border-b border-gray-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 animate-in slide-in-from-top-2 duration-200">
           <div className="space-y-1">
             <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Responsável</label>
             <select 
@@ -306,6 +313,18 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
               {uniqueTypes.map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Status</label>
+            <select 
+              className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-sm text-[10px] outline-none focus:border-rose-500"
+              value={filters.status}
+              onChange={e => setFilters({...filters, status: e.target.value})}
+            >
+              <option value="">Todos</option>
+              <option value="PENDENTE">Pendentes</option>
+              <option value="CONCLUIDA">Concluídas</option>
             </select>
           </div>
           <div className="space-y-1">
@@ -340,7 +359,7 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
                 onChange={e => setFilters({...filters, dateEnd: e.target.value})}
               />
               <button 
-                onClick={() => setFilters({ responsible: '', type: '', process: '', dateStart: '', dateEnd: '' })}
+                onClick={() => setFilters({ responsible: '', type: '', process: '', status: '', dateStart: '', dateEnd: '' })}
                 className="p-1.5 text-gray-400 hover:text-rose-600 transition-colors"
                 title="Limpar Filtros"
               >
@@ -467,6 +486,7 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
                     <th className="p-3 border-r border-gray-200">Solicitante</th>
                     <th className="p-3 border-r border-gray-200">Tipo / Origem</th>
                     <th className="p-3 border-r border-gray-200">Datas</th>
+                    <th className="p-3 border-r border-gray-200 text-center">Dias</th>
                     <th className="p-3 border-r border-gray-200">Processo</th>
                     <th className="p-3 border-r border-gray-200 text-center">Procedente</th>
                     <th className="p-3 border-r border-gray-200">Ação Imediata</th>
@@ -491,6 +511,20 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
                       <td className="p-3 border-r border-gray-100">
                         <div><span className="text-gray-400">Rec:</span> {item.receipt_date ? new Date(item.receipt_date).toLocaleDateString('pt-BR') : '-'}</div>
                         <div><span className="text-gray-400">Reg:</span> {item.registration_date ? new Date(item.registration_date).toLocaleDateString('pt-BR') : '-'}</div>
+                      </td>
+                      <td className="p-3 border-r border-gray-100 text-center">
+                        {(() => {
+                          if (item.corrective_action_completed) return <span className="text-gray-300">-</span>;
+                          const start = item.registration_date ? new Date(item.registration_date) : new Date();
+                          const today = new Date();
+                          const diffTime = Math.abs(today.getTime() - start.getTime());
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                          return (
+                            <span className={`font-black ${diffDays > 15 ? 'text-rose-600' : diffDays > 7 ? 'text-amber-600' : 'text-gray-600'}`}>
+                              {diffDays}d
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3 border-r border-gray-100">
                         <div className="font-bold text-gray-900">{item.process}</div>
@@ -608,6 +642,7 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
                       <option value="Ocorrência de processo">Ocorrência de processo</option>
                       <option value="Não conformidade">Não conformidade</option>
                       <option value="Oportunidade de melhoria">Oportunidade de melhoria</option>
+                      <option value="Fornecedor">Fornecedor</option>
                     </select>
                   </div>
 

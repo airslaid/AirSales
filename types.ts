@@ -119,6 +119,23 @@ export interface OcorrenciaAcao {
   created_at?: string;
 }
 
+export interface SolicitacaoCotacao {
+  id: string;
+  cliente: string;
+  tipo_solicitacao: 'Orçamento' | 'Amostra';
+  prioridade: 'Crítico' | 'Normal';
+  observacao: string;
+  status_produto: 'Novo' | 'Recorrente';
+  status_orcamento: 'Novo' | 'Em execução' | 'Concluído';
+  data_entrega: string | null;
+  data_ultima_alteracao_status?: string | null;
+  data_ultima_alteracao_pcp?: string | null;
+  arquivos?: string[]; // URLs ou base64
+  created_at?: string;
+  created_by_id: string;
+  created_by_name: string;
+}
+
 export interface VisitReport {
   id: string;
   type: string; // 'Filtro Prensa' default
