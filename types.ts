@@ -126,8 +126,9 @@ export interface SolicitacaoCotacao {
   prioridade: 'Crítico' | 'Normal';
   observacao: string;
   status_produto: 'Novo' | 'Recorrente';
-  status_orcamento: 'Novo' | 'Em execução' | 'Concluído';
+  status_orcamento: 'Novo' | 'Em execução' | 'Concluído' | 'Em Desenho' | 'Declinado';
   data_entrega: string | null;
+  data_conclusao?: string | null;
   data_ultima_alteracao_status?: string | null;
   data_ultima_alteracao_pcp?: string | null;
   arquivos?: string[]; // URLs ou base64

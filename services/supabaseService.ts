@@ -8,9 +8,19 @@ export const fetchSolicitacoesCotacao = async (): Promise<SolicitacaoCotacao[]> 
   try {
     const { data, error } = await supabase.from('solicitacoes_cotacao').select('*').order('created_at', { ascending: false });
     if (error) throw error;
+    
+    // If Supabase returns empty, check if we have local data from a failed sync
+    if (!data || data.length === 0) {
+      const localData = localStorage.getItem('AIR_SALES_SOLICITACOES_COTACAO');
+      if (localData) {
+        console.info("Solicitacoes Cotacao: Supabase empty, using localStorage data");
+        return JSON.parse(localData);
+      }
+    }
+    
     return data || [];
   } catch (err: any) {
-    console.warn("Solicitacoes Cotacao: Table might not exist, falling back to localStorage", err.message);
+    console.warn("Solicitacoes Cotacao: Error fetching from Supabase, falling back to localStorage", err.message);
     const localData = localStorage.getItem('AIR_SALES_SOLICITACOES_COTACAO');
     return localData ? JSON.parse(localData) : [];
   }
@@ -22,11 +32,23 @@ export const upsertSolicitacaoCotacao = async (solicitacao: SolicitacaoCotacao) 
   if (!payload.created_at) payload.created_at = new Date().toISOString();
   
   try {
-    const { error } = await supabase.from('solicitacoes_cotacao').upsert([payload]);
-    if (error) throw error;
+    console.log("Supabase: Attempting upsert to 'solicitacoes_cotacao'", payload);
+    const { data, error } = await supabase.from('solicitacoes_cotacao').upsert([payload]).select();
+    if (error) {
+      console.error("Supabase Error detail:", error);
+      throw error;
+    }
+    console.log("Supabase: Upsert successful", data);
     return payload;
   } catch (err: any) {
-    console.warn("Solicitacoes Cotacao: Error saving to Supabase, falling back to localStorage", err.message);
+    console.error("Solicitacoes Cotacao: Critical error saving to Supabase", {
+      message: err.message,
+      details: err.details,
+      hint: err.hint,
+      code: err.code
+    });
+    
+    // Fallback to localStorage
     const localData = localStorage.getItem('AIR_SALES_SOLICITACOES_COTACAO');
     const solicitacoes: SolicitacaoCotacao[] = localData ? JSON.parse(localData) : [];
     const index = solicitacoes.findIndex(s => s.id === payload.id);

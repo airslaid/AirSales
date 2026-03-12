@@ -309,7 +309,7 @@ export default function App() {
         data = [...pd, ...ov, ...dv];
       } else {
         let filterToUse = activeModuleId;
-        if (activeModuleId === 'CRM') filterToUse = ''; 
+        if (activeModuleId === 'CRM') filterToUse = 'OV'; 
         if (activeModuleId === 'PERFORMANCE' || activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') filterToUse = 'PD,DV';
         if (activeModuleId === 'ENTREGA') filterToUse = 'PD';
         data = await fetchData('supabase', "", tableName, filterToUse);
@@ -769,11 +769,9 @@ export default function App() {
     // mas para evitar conflitos de filtragem dupla que podem resultar em lista vazia,
     // mantemos a isolação se necessário. No entanto, o problema anterior era a falta de sincronia.
     // Vamos garantir que o filtro global NÃO se aplique ao CRM se ele já faz isso internamente com os mesmos campos.
-    if (activeModuleId !== 'CRM') {
-        if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
-        if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
-        if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
-    }
+    if (filters.startDate) result = result.filter(item => (item[dateFilterField] || '') >= filters.startDate!);
+    if (filters.endDate) result = result.filter(item => (item[dateFilterField] || '') <= filters.endDate!);
+    if (filters.representante) result = result.filter(item => String(item.REP_IN_CODIGO) === filters.representante);
     
     if (filters.status) result = result.filter(item => String(item.PED_ST_STATUS || item.SITUACAO || '').toUpperCase() === filters.status.toUpperCase());
     if (filters.filial) result = result.filter(item => String(item.FILIAL_NOME || '').toUpperCase() === filters.filial.toUpperCase());

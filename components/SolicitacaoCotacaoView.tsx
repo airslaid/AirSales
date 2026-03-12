@@ -5,7 +5,7 @@ import {
   Plus, Search, Edit2, Trash2, X, Save, 
   FileText, User, Calendar, Filter,
   LayoutGrid, ClipboardList, AlertCircle, CheckCircle2,
-  Paperclip, Upload
+  Paperclip, Upload, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,9 +33,12 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
   const loadData = async () => {
     setLoading(true);
     try {
+      console.log("SolicitacaoCotacaoView: Loading data...");
       const data = await fetchSolicitacoesCotacao();
+      console.log("SolicitacaoCotacaoView: Data loaded:", data);
       setSolicitacoes(data);
     } catch (error) {
+      console.error("SolicitacaoCotacaoView: Error loading data:", error);
       toast.error("Erro ao carregar solicitações");
     } finally {
       setLoading(false);
@@ -80,6 +83,11 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
       if (editingItem) {
         if (formData.status_orcamento !== editingItem.status_orcamento) {
           payload.data_ultima_alteracao_status = now;
+          if (formData.status_orcamento === 'Concluído' || formData.status_orcamento === 'Declinado') {
+            payload.data_conclusao = now;
+          } else {
+            payload.data_conclusao = null;
+          }
         }
         if (formData.data_entrega !== editingItem.data_entrega) {
           payload.data_ultima_alteracao_pcp = now;
@@ -87,16 +95,22 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
       } else {
         // Initial values for new items
         payload.data_ultima_alteracao_status = now;
+        if (payload.status_orcamento === 'Concluído' || payload.status_orcamento === 'Declinado') {
+          payload.data_conclusao = now;
+        }
         if (payload.data_entrega) {
           payload.data_ultima_alteracao_pcp = now;
         }
       }
 
-      await upsertSolicitacaoCotacao(payload);
+      console.log("SolicitacaoCotacaoView: Saving payload:", payload);
+      const result = await upsertSolicitacaoCotacao(payload);
+      console.log("SolicitacaoCotacaoView: Save result:", result);
       toast.success(editingItem ? "Solicitação atualizada!" : "Solicitação registrada!");
       setShowModal(false);
       loadData();
     } catch (error) {
+      console.error("SolicitacaoCotacaoView: Error saving:", error);
       toast.error("Erro ao salvar solicitação");
     }
   };
@@ -122,10 +136,13 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
     if (!selectedItemForUpdate) return;
     try {
       const now = new Date().toISOString();
+      const isFinishing = updateValue === 'Concluído' || updateValue === 'Declinado';
+      
       const payload: SolicitacaoCotacao = {
         ...selectedItemForUpdate,
         status_orcamento: updateValue as any,
-        data_ultima_alteracao_status: now
+        data_ultima_alteracao_status: now,
+        data_conclusao: isFinishing ? now : null
       };
       await upsertSolicitacaoCotacao(payload);
       toast.success("Status atualizado!");
@@ -156,10 +173,14 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
 
   const filteredData = solicitacoes.filter(s => {
     const searchLower = searchTerm.toLowerCase();
+    const cliente = (s.cliente || '').toLowerCase();
+    const observacao = (s.observacao || '').toLowerCase();
+    const createdBy = (s.created_by_name || '').toLowerCase();
+    
     return (
-      s.cliente?.toLowerCase().includes(searchLower) ||
-      s.observacao?.toLowerCase().includes(searchLower) ||
-      s.created_by_name?.toLowerCase().includes(searchLower)
+      cliente.includes(searchLower) ||
+      observacao.includes(searchLower) ||
+      createdBy.includes(searchLower)
     );
   });
 
@@ -167,8 +188,33 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
     total: solicitacoes.length,
     novo: solicitacoes.filter(s => s.status_orcamento === 'Novo').length,
     execucao: solicitacoes.filter(s => s.status_orcamento === 'Em execução').length,
+    desenho: solicitacoes.filter(s => s.status_orcamento === 'Em Desenho').length,
     concluido: solicitacoes.filter(s => s.status_orcamento === 'Concluído').length,
+    declinado: solicitacoes.filter(s => s.status_orcamento === 'Declinado').length,
     critico: solicitacoes.filter(s => s.prioridade === 'Crítico').length
+  };
+
+  const calculateDuration = (start: string, end?: string | null) => {
+    if (!start) return '-';
+    const startDate = new Date(start);
+    if (isNaN(startDate.getTime())) return '-';
+    
+    const endDate = end ? new Date(end) : new Date();
+    if (isNaN(endDate.getTime())) return '-';
+    
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      if (diffHours === 0) {
+        const diffMinutes = Math.floor(diffTime / (1000 * 60));
+        if (diffMinutes === 0) return 'Agora';
+        return `${diffMinutes}min`;
+      }
+      return `${diffHours}h`;
+    }
+    return `${diffDays}d`;
   };
 
   return (
@@ -184,6 +230,14 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
           </p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button 
+            onClick={loadData}
+            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-sm transition-all"
+            title="Atualizar dados"
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
           <div className="relative flex-1 sm:w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input 
@@ -211,7 +265,7 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
         ) : (
           <>
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
               <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm">
                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Total</p>
                 <p className="text-xl font-black text-gray-900">{stats.total}</p>
@@ -224,11 +278,19 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
                 <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Em Execução</p>
                 <p className="text-xl font-black text-gray-900">{stats.execucao}</p>
               </div>
+              <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm border-l-4 border-l-blue-500">
+                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Em Desenho</p>
+                <p className="text-xl font-black text-gray-900">{stats.desenho}</p>
+              </div>
               <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm border-l-4 border-l-emerald-500">
                 <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Concluídos</p>
                 <p className="text-xl font-black text-gray-900">{stats.concluido}</p>
               </div>
-              <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm border-l-4 border-l-red-500">
+              <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm border-l-4 border-l-red-400">
+                <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Declinados</p>
+                <p className="text-xl font-black text-gray-900">{stats.declinado}</p>
+              </div>
+              <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm border-l-4 border-l-red-600">
                 <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mb-1">Críticos</p>
                 <p className="text-xl font-black text-gray-900">{stats.critico}</p>
               </div>
@@ -250,7 +312,8 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
                         <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Tipo</th>
                         <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Prioridade</th>
                         <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Status Prod.</th>
-                        <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Status Orç.</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Status Orç.</th>
+                        <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Lead Time</th>
                         <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Últ. Alt. Status</th>
                         <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Entrega</th>
                         <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">Últ. Alt. PCP</th>
@@ -288,14 +351,30 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
                               <span className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">{item.status_produto}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 text-center">
                             <span className={`px-2 py-1 rounded-sm text-[9px] font-black uppercase tracking-widest border whitespace-nowrap ${
                               item.status_orcamento === 'Novo' ? 'bg-gray-50 text-gray-600 border-gray-200' : 
                               item.status_orcamento === 'Em execução' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
+                              item.status_orcamento === 'Em Desenho' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              item.status_orcamento === 'Declinado' ? 'bg-red-50 text-red-700 border-red-200' :
                               'bg-emerald-50 text-emerald-700 border-emerald-200'
                             }`}>
                               {item.status_orcamento}
                             </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className={`text-[10px] font-black uppercase tracking-widest ${
+                                item.status_orcamento === 'Concluído' ? 'text-emerald-600' : 
+                                item.status_orcamento === 'Declinado' ? 'text-red-600' :
+                                item.prioridade === 'Crítico' ? 'text-red-500 animate-pulse' : 'text-amber-600'
+                              }`}>
+                                {calculateDuration(item.created_at || '', item.data_conclusao)}
+                              </span>
+                              <span className="text-[8px] text-gray-400 uppercase font-bold">
+                                {item.status_orcamento === 'Concluído' || item.status_orcamento === 'Declinado' ? 'Total' : 'Aberto'}
+                              </span>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
@@ -471,6 +550,25 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
                 </select>
               </div>
 
+              {/* Status Orçamento */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-[11px] font-bold text-gray-700 uppercase tracking-tight">
+                  <ClipboardList size={14} className="text-gray-400" />
+                  Status Orçamento <span className="text-red-500">*</span>
+                </label>
+                <select 
+                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-sm text-xs outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                  value={formData.status_orcamento || ''}
+                  onChange={e => setFormData({...formData, status_orcamento: e.target.value as any})}
+                >
+                  <option value="Novo">Novo</option>
+                  <option value="Em execução">Em execução</option>
+                  <option value="Em Desenho">Em Desenho</option>
+                  <option value="Concluído">Concluído</option>
+                  <option value="Declinado">Declinado</option>
+                </select>
+              </div>
+
               {/* Arquivos associados */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-[11px] font-bold text-gray-700 uppercase tracking-tight">
@@ -535,7 +633,9 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
                 >
                   <option value="Novo">Novo</option>
                   <option value="Em execução">Em execução</option>
+                  <option value="Em Desenho">Em Desenho</option>
                   <option value="Concluído">Concluído</option>
+                  <option value="Declinado">Declinado</option>
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-2">
