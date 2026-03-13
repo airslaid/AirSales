@@ -1,4 +1,20 @@
 
+export interface Customer {
+  id?: string;
+  agn_in_codigo: number;
+  agn_st_nome: string;
+  agn_st_cgc: string;
+  agn_st_inscrestadual?: string;
+  agn_st_logradouro?: string;
+  agn_st_numero?: string;
+  agn_st_bairro?: string;
+  agn_st_municipio?: string;
+  uf_st_sigla?: string;
+  rep_agn_in_codigo: number;
+  agn_dt_ultimaatucad?: string;
+  created_at?: string;
+}
+
 export type Sale = Record<string, any>;
 
 export type SortDirection = 'asc' | 'desc';
@@ -66,6 +82,7 @@ export interface CRMAppointment {
   req_confirmation: boolean;
   notify_email: boolean;
   hide_appointment: boolean;
+  attachments?: string[]; // URLs ou base64
 }
 
 export interface CRMTask {

@@ -18,9 +18,16 @@ import autoTable from 'jspdf-autotable';
 
 import { Toaster, toast } from 'sonner';
 
-import { Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal } from './types';
+import { 
+  Sale, ColumnConfig, DataSource, AppUser, FilterConfig, SortConfig, SalesGoal, Customer 
+} from './types';
 import { fetchData } from './services/dataService';
-import { fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, syncSalesToSupabase, deleteSale, deleteAllSales, updateSaleDelayReason } from './services/supabaseService';
+import { 
+  fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, 
+  deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, 
+  syncSalesToSupabase, deleteSale, deleteAllSales, updateSaleDelayReason,
+  fetchCustomers, syncCustomersToSupabase
+} from './services/supabaseService';
 import { generateSalesInsights, isUsingLocalAI } from './services/aiService';
 import { SalesTable } from './components/SalesTable';
 import { StatCard } from './components/StatCard';
@@ -31,6 +38,7 @@ import { OverviewPanel } from './components/OverviewPanel'; // Importação do n
 import { FormsView } from './components/FormsView';
 import { OcorrenciasView } from './components/OcorrenciasView';
 import { SolicitacaoCotacaoView } from './components/SolicitacaoCotacaoView';
+import { CustomerWalletView } from './components/CustomerWalletView';
 import { NotificationsMenu } from './components/NotificationsMenu';
 import { SERVICE_PRINCIPAL_CONFIG, POWERBI_CONFIG } from './config';
 import { getServicePrincipalToken } from './services/authService';
@@ -41,6 +49,7 @@ const MODULES = [
   { id: 'FORMULARIOS', label: 'Formulários', icon: ClipboardList, adminOnly: false },
   { id: 'SOLICITACAO_COTACAO', label: 'Solicitação de Cotação', icon: ClipboardList, adminOnly: false },
   { id: 'OCORRENCIAS', label: 'Controle Ocorrências', icon: AlertTriangle, adminOnly: false },
+  { id: 'CARTEIRA_CLIENTES', label: 'Carteira de Clientes', icon: HeartHandshake, adminOnly: false },
   { id: 'ENTREGA', label: 'Indicador de Entrega', icon: Truck, adminOnly: false },
   { id: 'OV', label: 'Orçamentos', icon: FileText, table: 'PEDIDOS_DETALHADOS' },
   { id: 'PD', label: 'Pedidos de Venda', icon: ShoppingBag, table: 'PEDIDOS_DETALHADOS' },
@@ -140,6 +149,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [salesGoals, setSalesGoals] = useState<SalesGoal[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesData, setSalesData] = useState<Sale[]>([]);
   const [fullRepsList, setFullRepsList] = useState<{code: number, name: string}[]>([]);
   const [salesColumns, setSalesColumns] = useState<ColumnConfig[]>([]);
@@ -250,6 +260,7 @@ export default function App() {
   useEffect(() => {
     loadAppUsers();
     loadGoals();
+    loadCustomers();
     loadRepsForSelection();
     const handleClickOutside = (event: MouseEvent) => {
       if (columnSelectorRef.current && !columnSelectorRef.current.contains(event.target as Node)) setShowColumnSelector(false);
@@ -287,6 +298,66 @@ export default function App() {
 
   const loadAppUsers = async () => { try { const users = await fetchAppUsers(); setAppUsers(users); } catch (e) {} };
   const loadGoals = async () => { try { const goals = await fetchSalesGoals(); setSalesGoals(goals); } catch (e) {} };
+  
+  const loadCustomers = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchCustomers(currentUser?.is_admin ? undefined : currentUser?.rep_in_codigo || undefined);
+      setCustomers(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSyncCustomers = async () => {
+    let tokenToUse = pbiToken;
+    
+    // Tenta obter token automático se o manual não estiver preenchido
+    if (!tokenToUse) {
+      if (POWERBI_CONFIG.workspaceId && !POWERBI_CONFIG.workspaceId.includes("PREENCHA")) {
+        try {
+          tokenToUse = await getServicePrincipalToken(SERVICE_PRINCIPAL_CONFIG);
+        } catch (err) {
+          console.error("Erro ao obter token automático:", err);
+        }
+      }
+    }
+
+    if (!tokenToUse) {
+      setShowTokenModal(true);
+      showNotification("Token do Power BI não configurado", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      showNotification("Iniciando sincronização de clientes...", "warning");
+      const data = await fetchData('powerbi', tokenToUse, 'D_CLIENTE');
+      if (data && data.length > 0) {
+        const syncSuccess = await syncCustomersToSupabase(data);
+        if (syncSuccess) {
+          await loadCustomers();
+          showNotification(`${data.length} clientes sincronizados com sucesso!`, "success");
+          console.log(`[Customer Import Validation] Successfully imported and validated ${data.length} customers.`);
+        } else {
+          showNotification(`Falha ao sincronizar ${data.length} clientes. Verifique os logs.`, "error");
+          console.error(`[Customer Import Validation] Failed to sync ${data.length} customers to Supabase.`);
+        }
+      } else {
+        showNotification("Nenhum cliente encontrado no dataset.", "warning");
+        console.log("[Customer Import Validation] No customers found in the dataset to import.");
+      }
+    } catch (err: any) {
+      if (err.message.includes("CORS") || err.message.includes("Failed to fetch")) {
+        setShowTokenModal(true);
+      }
+      showNotification(`Erro na sincronização: ${err.message}`, "error");
+      console.error(`[Customer Import Validation] Error during synchronization process: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadRepsForSelection = async () => { try { const data = await fetchAllRepresentatives(); setFullRepsList(data); } catch (e) {} };
 
   const loadData = async () => {
@@ -1433,7 +1504,7 @@ export default function App() {
         </div> 
       </aside> 
       {mobileSidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm" onClick={() => setMobileSidebarOpen(false)} />} 
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative"> 
+      <div className="flex-1 flex flex-col min-w-0 h-full min-h-0 overflow-hidden relative"> 
         <header className="h-12 bg-white border-b border-gray-200 px-4 flex justify-between items-center shrink-0 z-10 shadow-sm"> 
           <div className="flex items-center gap-4"> 
             <button onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)} className="lg:hidden"><Menu size={18}/></button> 
@@ -1467,7 +1538,7 @@ export default function App() {
              {/* CRM has simpler header for now */}
           </div>
         </header> 
-        <main className="flex-1 flex flex-col overflow-hidden p-2 sm:p-4 w-full"> 
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden p-2 sm:p-4 w-full"> 
           {/* Renderização Condicional dos Módulos */}
           {activeModuleId === 'OVERVIEW' ? (
              <OverviewPanel 
@@ -1630,10 +1701,16 @@ export default function App() {
              <SolicitacaoCotacaoView user={currentUser} />
           ) : activeModuleId === 'OCORRENCIAS' ? (
              <OcorrenciasView user={currentUser} />
+          ) : activeModuleId === 'CARTEIRA_CLIENTES' ? (
+             <CustomerWalletView 
+                customers={customers} 
+                onRefresh={handleSyncCustomers} 
+                isLoading={loading} 
+             />
           ) : activeModuleId === 'METAS' ? ( 
-            <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+            <div className="grid grid-cols-12 gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300 flex-1 min-h-0 overflow-y-auto custom-scrollbar"> 
               {/* Conteúdo de Metas (Inalterado) */}
-              <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}> 
+              <div className={`col-span-12 lg:col-span-4 bg-white border ${editingGoalId ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300 h-fit`}> 
                 <div className="flex items-center justify-between border-b pb-2"><h3 className="text-[10px] font-bold uppercase tracking-widest">{editingGoalId ? 'Editando Meta' : 'Nova Meta de Vendas'}</h3>{editingGoalId && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}</div> 
                 <div className="space-y-2"> 
                   <div><label className="text-[9px] font-black uppercase text-gray-400">Representante</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] mt-0.5 outline-none focus:border-gray-900" value={newGoal.rep_in_codigo} onChange={e => {const code = Number(e.target.value); const name = availableReps.find(r => r.code === code)?.name || ''; setNewGoal(p => ({...p, rep_in_codigo: code, rep_nome: name}));}}><option value="0">Selecionar Representante</option>{availableReps.map(r => <option key={r.code} value={r.code}>{r.name}</option>)}</select></div> 
@@ -1649,7 +1726,7 @@ export default function App() {
               </div> 
             </div> 
           ) : activeModuleId === 'PERFORMANCE' ? ( 
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 h-full overflow-y-auto custom-scrollbar"> 
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 flex-1 min-h-0 overflow-y-auto custom-scrollbar"> 
               <div className="bg-white border border-gray-200 p-3 shadow-sm flex flex-col sm:flex-row items-center gap-4 justify-between sticky top-0 z-10"> 
                 <div className="flex items-center gap-2"><div className="p-2 bg-gray-900 text-white"><BarChart3 size={16}/></div><div><h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-900">Relatório de Atingimento</h3><p className="text-[9px] text-gray-500 font-medium">Comparativo Meta x Realizado (Pedidos)</p></div></div> 
                 <div className="flex items-center gap-2 w-full sm:w-auto">{currentUser?.is_admin && (<div className="flex-1 sm:w-56 relative" ref={perfRepSelectorRef}><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Filtrar Representantes</label><button onClick={() => setShowPerfRepSelector(!showPerfRepSelector)} className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] font-bold flex items-center justify-between hover:border-gray-400 transition-colors outline-none"><span className="truncate">{perfSelectedReps.length === 0 ? 'Todos os Representantes' : perfSelectedReps.length === 1 ? availableReps.find(r => r.code === perfSelectedReps[0])?.name || '1 Selecionado' : `${perfSelectedReps.length} Selecionados`}</span><ChevronDown size={12} className="text-gray-500"/></button>{showPerfRepSelector && (<div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl z-50 max-h-60 overflow-y-auto custom-scrollbar rounded-sm animate-in fade-in zoom-in-95 duration-100"><div onClick={() => setPerfSelectedReps([])} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm ${perfSelectedReps.length === 0 ? 'bg-gray-900 border-gray-900' : 'border-gray-300'}`}>{perfSelectedReps.length === 0 && <CheckCircle2 size={10} className="text-white"/>}</div><span className={`text-[9px] font-bold uppercase tracking-widest ${perfSelectedReps.length === 0 ? 'text-gray-900' : 'text-gray-500'}`}>Todos</span></div>{availableReps.map(r => {const isSelected = perfSelectedReps.includes(r.code); return (<div key={r.code} onClick={() => togglePerfRepSelection(r.code)} className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 border-b border-gray-50 last:border-0 group"><div className={`w-3.5 h-3.5 border flex items-center justify-center rounded-sm transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-gray-400'}`}>{isSelected && <CheckCircle2 size={10} className="text-white"/>}</div><div className="flex flex-col"><span className={`text-[9px] font-bold uppercase leading-none ${isSelected ? 'text-gray-900' : 'text-gray-500'}`}>{r.name}</span><span className="text-[7px] text-gray-300 font-mono">{r.code}</span></div></div>);})}</div>)}</div>)}<div className="flex-1 sm:w-24"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Ano</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfYear} onChange={e => setPerfYear(Number(e.target.value))}>{[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}</select></div><div className="flex-1 sm:w-32"><label className="text-[8px] font-black uppercase text-gray-400 tracking-tighter block mb-0.5">Mês</label><select className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 text-[10px] outline-none font-bold" value={perfMonth} onChange={e => setPerfMonth(Number(e.target.value))}>{MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></div></div></div> 
@@ -1657,8 +1734,8 @@ export default function App() {
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden"><div className="p-3 bg-gray-50 border-b flex justify-between items-center"><span className="text-[10px] font-bold uppercase text-gray-500">Performance por Representante</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Representante</th><th className="px-4 py-2 text-left w-1/3">Progresso da Meta</th><th className="px-4 py-2 text-right">Meta (R$)</th><th className="px-4 py-2 text-right">Realizado (R$)</th><th className="px-4 py-2 text-center">% Ating.</th></tr></thead><tbody className="divide-y divide-gray-100">{performanceData.length === 0 ? (<tr><td colSpan={5} className="p-8 text-center text-[10px] font-bold text-gray-300 uppercase tracking-widest">Sem dados para o período selecionado</td></tr>) : (performanceData.map((row) => (<tr key={row.code} className="hover:bg-gray-50 transition-colors"><td className="px-4 py-3"><div className="font-bold text-gray-900">{row.name}</div><div className="text-[8px] text-gray-400 font-mono">COD: {row.code}</div></td><td className="px-4 py-3 align-middle"><div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-1000 ${row.percent >= 100 ? 'bg-green-500' : row.percent >= 70 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(row.percent, 100)}%` }}></div></div></td><td className="px-4 py-3 text-right font-mono text-gray-500">{currencyFormat(row.goal)}</td><td className="px-4 py-3 text-right font-mono font-bold text-gray-900">{currencyFormat(row.realized)}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${row.percent >= 100 ? 'bg-green-100 text-green-700' : row.percent >= 70 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{row.percent.toFixed(1)}%</span></td></tr>)))}</tbody></table></div></div> 
             </div> 
           ) : activeModuleId === 'USERS' ? ( 
-            <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 h-full overflow-y-auto custom-scrollbar"> 
-              <div className={`col-span-12 lg:col-span-4 bg-white border ${newUser.id ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300`}>
+            <div className="grid grid-cols-12 gap-4 animate-in fade-in duration-300 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden custom-scrollbar"> 
+              <div className={`col-span-12 lg:col-span-4 bg-white border ${newUser.id ? 'border-amber-500 shadow-amber-50' : 'border-gray-200 shadow-sm'} p-3 space-y-2 transition-all duration-300 h-fit lg:h-full lg:overflow-y-auto custom-scrollbar`}>
                 <div className="flex items-center justify-between border-b pb-2">
                   <h3 className="text-[10px] font-bold uppercase tracking-widest">{newUser.id ? 'Editar Acesso' : 'Novo Acesso'}</h3>
                   {newUser.id && <div className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase tracking-widest rounded-full">Modo de Edição</div>}
@@ -1726,12 +1803,53 @@ export default function App() {
                     <p className="text-[8px] text-gray-400 mt-1 text-center">Use para resetar o banco antes de uma carga limpa.</p>
                 </div>
               </div> 
-              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 overflow-hidden shadow-sm"><div className="p-3 bg-gray-50 border-b flex items-center justify-between"><span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span></div><div className="overflow-x-auto"><table className="w-full text-[10px]"><thead className="bg-gray-50/50 border-b"><tr className="text-[9px] font-black uppercase text-gray-400"><th className="px-4 py-2 text-left">Usuário</th><th className="px-4 py-2 text-center">Nível / Vínculo</th><th className="px-4 py-2 text-center">Ações</th></tr></thead><tbody className="divide-y">{appUsers.map(u => (<tr key={u.id} className={`hover:bg-gray-50 transition-colors ${newUser.id === u.id ? 'bg-amber-50' : ''}`}><td className="px-4 py-2"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div><div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div></div></td><td className="px-4 py-2 text-center">{u.is_admin ? (<span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>) : (<span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>)}
-{u.processo && <span className="block mt-1 px-2 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 text-[8px] font-black uppercase tracking-widest rounded-full w-fit mx-auto">{u.processo}</span>}
-</td><td className="px-4 py-2 text-center"><div className="flex items-center justify-center gap-2"><button onClick={() => handleEditUser(u)} className={`p-1.5 transition-colors ${newUser.id === u.id ? 'text-amber-600' : 'text-gray-300 hover:text-blue-600'}`} title="Editar Usuário"><Edit2 size={14}/></button><button onClick={async () => { console.log('Removing user access:', u.name); await deleteAppUser(u.id!); loadAppUsers(); }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Excluir Usuário"><Trash2 size={14}/></button></div></td></tr>))}</tbody></table></div></div> 
+              <div className="col-span-12 lg:col-span-8 bg-white border border-gray-200 shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <div className="p-3 bg-gray-50 border-b flex items-center justify-between shrink-0">
+                  <span className="text-[10px] font-bold uppercase text-gray-500">Usuários Cadastrados</span>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[10px]">
+                      <thead className="bg-gray-50/50 border-b sticky top-0 z-10">
+                        <tr className="text-[9px] font-black uppercase text-gray-400">
+                          <th className="px-4 py-2 text-left bg-gray-50">Usuário</th>
+                          <th className="px-4 py-2 text-center bg-gray-50">Nível / Vínculo</th>
+                          <th className="px-4 py-2 text-center bg-gray-50">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {appUsers.map(u => (
+                          <tr key={u.id} className={`hover:bg-gray-50 transition-colors ${newUser.id === u.id ? 'bg-amber-50' : ''}`}>
+                            <td className="px-4 py-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500"><User size={12} /></div>
+                                <div><p className="font-bold text-gray-900">{u.name}</p><p className="text-[9px] text-gray-400">{u.email}</p></div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              {u.is_admin ? (
+                                <span className="px-2 py-0.5 bg-gray-900 text-white text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto"><Shield size={8} /> Admin</span>
+                              ) : (
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 border border-blue-100 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 w-fit mx-auto">Rep: {u.rep_in_codigo || 'N/A'}</span>
+                              )}
+                              {u.processo && <span className="block mt-1 px-2 py-0.5 bg-purple-50 text-purple-600 border border-purple-100 text-[8px] font-black uppercase tracking-widest rounded-full w-fit mx-auto">{u.processo}</span>}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <div className="flex items-center justify-center gap-2">
+                                <button onClick={() => handleEditUser(u)} className={`p-1.5 transition-colors ${newUser.id === u.id ? 'text-amber-600' : 'text-gray-300 hover:text-blue-600'}`} title="Editar Usuário"><Edit2 size={14}/></button>
+                                <button onClick={async () => { console.log('Removing user access:', u.name); await deleteAppUser(u.id!); loadAppUsers(); }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Excluir Usuário"><Trash2 size={14}/></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div> 
           ) : ( 
-            <div className="flex flex-col h-full gap-2 overflow-hidden"> 
+            <div className="flex flex-col flex-1 min-h-0 gap-2 overflow-hidden"> 
               <div className="bg-white border border-gray-200 shadow-sm overflow-hidden animate-in fade-in duration-300 shrink-0"> 
                 <div className="p-2 border-b bg-gray-50 flex items-center justify-between cursor-pointer" onClick={() => setFiltersExpanded(!filtersExpanded)}> 
                   <div className="flex items-center gap-2"><Filter size={12} className="text-gray-900" /><span className="text-[9px] font-bold uppercase tracking-widest">Painel de Inteligência</span></div> 

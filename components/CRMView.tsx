@@ -28,7 +28,7 @@ import {
   ArrowLeft, Send, Briefcase, FileText, Flame, Plus,
   Flag, Check, List, User, MessageCircle, Smartphone, History,
   LayoutList, Edit2, Trash2, AlertTriangle, LayoutGrid, FileSpreadsheet,
-  Filter, X, PieChart, Sparkles, Bot, Target
+  Filter, X, PieChart, Sparkles, Bot, Target, Paperclip, Upload
 } from 'lucide-react';
 import { AIInsightsModal } from './AIInsightsModal';
 import { CustomerTimeline } from './CustomerTimeline';
@@ -47,6 +47,7 @@ interface CRMViewProps {
   onExternalActionHandled?: () => void;
   globalFilters?: any;
   onGlobalFilterChange?: (newFilters: any) => void;
+  initialTab?: CRMTab;
 }
 
 interface PipelineItem extends Sale {
@@ -74,7 +75,7 @@ interface ClientWalletItem {
   history: Sale[];
 }
 
-type CRMTab = 'COCKPIT' | 'PIPELINE' | 'FOLLOWUP' | 'CLIENTES' | 'AGENDA' | 'TAREFAS';
+type CRMTab = 'COCKPIT' | 'PIPELINE' | 'FOLLOWUP' | 'AGENDA' | 'TAREFAS';
 
 const STAGES = [
   { id: 'PROCESSO_INTERNO', label: 'Processo Interno', icon: Clock, color: 'border-gray-500', bg: 'bg-gray-50', text: 'text-gray-700' },
@@ -112,9 +113,10 @@ export const CRMView: React.FC<CRMViewProps> = ({
   externalAction, 
   onExternalActionHandled,
   globalFilters,
-  onGlobalFilterChange
+  onGlobalFilterChange,
+  initialTab
 }) => {
-  const [activeTab, setActiveTab] = useState<CRMTab>('COCKPIT');
+  const [activeTab, setActiveTab] = useState<CRMTab>(initialTab || 'COCKPIT');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClient, setSelectedClient] = useState<ClientWalletItem | null>(null);
   
@@ -192,13 +194,41 @@ export const CRMView: React.FC<CRMViewProps> = ({
   const [appointments, setAppointments] = useState<CRMAppointment[]>([]);
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CRMAppointment | null>(null);
+  const [agendaViewMode, setAgendaViewMode] = useState<'LIST' | 'CALENDAR'>('LIST');
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<string | null>(null);
   const [newEvent, setNewEvent] = useState<Partial<CRMAppointment>>({
     req_confirmation: false, notify_email: true, hide_appointment: false,
     recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
-    start_time: '09:00', end_time: '10:00'
+    start_time: '09:00', end_time: '10:00',
+    attachments: []
   });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setNewEvent(prev => ({
+          ...prev,
+          attachments: [...(prev.attachments || []), base64String]
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeAttachment = (index: number) => {
+    setNewEvent(prev => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, i) => i !== index)
+    }));
+  };
 
   // Follow-up State
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
@@ -252,6 +282,50 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
     return list;
   }, [tasks, user, pipelineFilters]);
+
+  // Calendar Logic
+  const calendarDays = useMemo(() => {
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const days = [];
+    
+    // Days from previous month
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthLastDay - i);
+      days.push({ date: d, isCurrentMonth: false });
+    }
+    
+    // Days from current month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(year, month, i);
+      days.push({ date: d, isCurrentMonth: true });
+    }
+    
+    // Days from next month
+    const remainingSlots = 42 - days.length;
+    for (let i = 1; i <= remainingSlots; i++) {
+      const d = new Date(year, month + 1, i);
+      days.push({ date: d, isCurrentMonth: false });
+    }
+    
+    return days;
+  }, [currentCalendarDate]);
+
+  const appointmentsForSelectedDay = useMemo(() => {
+    if (!selectedCalendarDay) return [];
+    return filteredAppointments.filter(a => a.start_date === selectedCalendarDay);
+  }, [filteredAppointments, selectedCalendarDay]);
+
+  const changeMonth = (offset: number) => {
+    const newDate = new Date(currentCalendarDate);
+    newDate.setMonth(newDate.getMonth() + offset);
+    setCurrentCalendarDate(newDate);
+  };
 
   useEffect(() => {
     // Carrega apontamentos se estiver na aba Agenda, Followup ou se abrir um pedido
@@ -1057,7 +1131,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
         recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
         start_date: new Date().toISOString().split('T')[0],
         end_date: new Date().toISOString().split('T')[0],
-        start_time: '09:00', end_time: '10:00'
+        start_time: '09:00', end_time: '10:00',
+        attachments: []
       });
   };
 
@@ -1252,12 +1327,6 @@ export const CRMView: React.FC<CRMViewProps> = ({
               className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'FOLLOWUP' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
             >
               <History size={14} /> Follow-up
-            </button>
-            <button 
-              onClick={() => setActiveTab('CLIENTES')}
-              className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'CLIENTES' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
-            >
-              <Building2 size={14} /> Clientes
             </button>
             <button 
               onClick={() => setActiveTab('AGENDA')}
@@ -2035,128 +2104,6 @@ export const CRMView: React.FC<CRMViewProps> = ({
             </div>
         )}
 
-        {/* ... (Lógica da Tab Clientes permanece igual) ... */}
-        {activeTab === 'CLIENTES' && (
-          <div className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-sm overflow-hidden">
-            {/* Toolbar Clientes */}
-            <div className="p-3 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="relative w-full sm:w-64">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar Cliente ou CNPJ..." 
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-sm text-xs outline-none focus:border-rose-500 transition-colors"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-wrap gap-3 sm:gap-4 text-[10px] text-gray-500">
-                <span>Total Clientes: <strong>{clientsWallet.length}</strong></span>
-                <span>Ticket Médio Geral: <strong>{formatCurrency(clientsWallet.reduce((acc, c) => acc + c.totalSpent, 0) / (clientsWallet.reduce((acc, c) => acc + c.ordersCount, 0) || 1))}</strong></span>
-              </div>
-            </div>
-
-            {/* Tabela de Clientes */}
-            <div className="flex-1 overflow-auto custom-scrollbar">
-              {/* Desktop View */}
-              <table className="w-full text-left border-collapse hidden md:table">
-                <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
-                  <tr className="text-[10px] uppercase font-black text-gray-400 tracking-widest">
-                    <th className="p-3 font-bold">Cliente</th>
-                    <th className="p-3 font-bold text-center">Última Compra</th>
-                    <th className="p-3 font-bold text-center">Pedidos</th>
-                    <th className="p-3 font-bold text-right">Total Gasto</th>
-                    <th className="p-3 font-bold text-center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {clientsWallet.map(client => (
-                    <tr key={client.id} className="hover:bg-gray-50 transition-colors group">
-                      <td className="p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 font-bold text-[10px] group-hover:bg-white group-hover:shadow-sm transition-all">
-                            {client.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{client.name}</p>
-                            <p className="text-[9px] text-gray-400 font-medium">ID: {client.id}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <span className="text-[10px] font-medium text-gray-600 bg-gray-50 px-2 py-1 rounded-full border border-gray-100">
-                          {formatDate(client.lastPurchaseDate)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        <span className="text-xs font-bold text-gray-900">{client.ordersCount}</span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-sm border border-green-100">
-                          {formatCurrency(client.totalSpent)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        <button 
-                          onClick={() => setSelectedClientForTimeline(client)}
-                          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
-                          title="Ver Linha do Tempo"
-                        >
-                          <History size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {/* Mobile View */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {clientsWallet.map(client => (
-                  <div key={client.id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-xs">
-                          {client.name.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-bold text-gray-900">{client.name}</p>
-                          <p className="text-[10px] text-gray-400 font-medium">ID: {client.id}</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => setSelectedClientForTimeline(client)}
-                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"
-                      >
-                        <History size={16} />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      <div className="bg-gray-50 p-2 rounded border border-gray-100 text-center">
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Última</p>
-                        <p className="text-[10px] font-bold text-gray-700">{formatDate(client.lastPurchaseDate)}</p>
-                      </div>
-                      <div className="bg-gray-50 p-2 rounded border border-gray-100 text-center">
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pedidos</p>
-                        <p className="text-[10px] font-bold text-gray-900">{client.ordersCount}</p>
-                      </div>
-                      <div className="bg-green-50 p-2 rounded border border-green-100 text-center">
-                        <p className="text-[8px] font-bold text-green-600 uppercase tracking-widest mb-1">Total</p>
-                        <p className="text-[10px] font-bold text-green-700">{formatCurrency(client.totalSpent)}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {clientsWallet.length > 100 && (
-                <div className="p-4 text-center text-[10px] text-gray-400 uppercase font-bold border-t">
-                  Exibindo top 100 de {clientsWallet.length} clientes. Use a busca para encontrar outros.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* AGENDA TAB */}
         {activeTab === 'AGENDA' && (
             <div className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-sm overflow-hidden animate-in fade-in">
@@ -2206,6 +2153,22 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                 </button>
                             )}
                         </div>
+
+                        {/* Toggle View Mode */}
+                        <div className="flex bg-gray-100 p-0.5 rounded-sm border border-gray-200 w-full sm:w-auto">
+                            <button 
+                                onClick={() => setAgendaViewMode('LIST')}
+                                className={`flex-1 sm:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 transition-all ${agendaViewMode === 'LIST' ? 'bg-white shadow-sm text-rose-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <List size={12} /> Lista
+                            </button>
+                            <button 
+                                onClick={() => setAgendaViewMode('CALENDAR')}
+                                className={`flex-1 sm:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 transition-all ${agendaViewMode === 'CALENDAR' ? 'bg-white shadow-sm text-rose-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <Calendar size={12} /> Calendário
+                            </button>
+                        </div>
                     </div>
                     <div className="flex gap-2 w-full sm:w-auto">
                         <button 
@@ -2215,7 +2178,18 @@ export const CRMView: React.FC<CRMViewProps> = ({
                             <FileSpreadsheet size={14} /> Exportar
                         </button>
                         <button 
-                            onClick={() => setShowEventModal(true)}
+                            onClick={() => {
+                                setEditingEvent(null);
+                                setNewEvent({
+                                    req_confirmation: false, notify_email: true, hide_appointment: false,
+                                    recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
+                                    start_date: new Date().toISOString().split('T')[0],
+                                    end_date: new Date().toISOString().split('T')[0],
+                                    start_time: '09:00', end_time: '10:00',
+                                    attachments: []
+                                });
+                                setShowEventModal(true);
+                            }}
                             className="flex-1 sm:flex-none px-3 py-1.5 bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-rose-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
                         >
                             <Plus size={14} /> Novo
@@ -2223,42 +2197,173 @@ export const CRMView: React.FC<CRMViewProps> = ({
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100">
-                    <div className="space-y-3">
-                        {filteredAppointments.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-                                <Calendar size={48} className="mb-2 opacity-50" />
-                                <p className="text-xs font-medium">Nenhum compromisso agendado.</p>
-                            </div>
-                        ) : (
-                            filteredAppointments.map(evt => (
-                                <div key={evt.id} className="bg-white p-4 rounded border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition-shadow relative overflow-hidden group">
-                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${evt.priority === 'CRITICA' ? 'bg-red-500' : evt.priority === 'ALTA' ? 'bg-orange-500' : evt.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
-                                    <div className="flex flex-col items-center justify-center min-w-[80px] border-r border-gray-100 pr-4">
-                                        <span className="text-xs font-bold text-gray-500 uppercase">{new Date(evt.start_date).toLocaleDateString('pt-BR', { weekday: 'short' })}</span>
-                                        <span className="text-2xl font-black text-gray-900">{new Date(evt.start_date).getDate()}</span>
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase">{new Date(evt.start_date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <h4 className="text-sm font-bold text-gray-900">{evt.title}</h4>
-                                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${evt.status === 'CONCLUIDO' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                                {evt.status.replace('_', ' ')}
-                                            </span>
+                    {agendaViewMode === 'LIST' ? (
+                        <div className="space-y-3">
+                            {filteredAppointments.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                                    <Calendar size={48} className="mb-2 opacity-50" />
+                                    <p className="text-xs font-medium">Nenhum compromisso agendado.</p>
+                                </div>
+                            ) : (
+                                filteredAppointments.map(evt => (
+                                    <div key={evt.id} className="bg-white p-4 rounded border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${evt.priority === 'CRITICA' ? 'bg-red-500' : evt.priority === 'ALTA' ? 'bg-orange-500' : evt.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
+                                        <div className="flex flex-col items-center justify-center min-w-[80px] border-r border-gray-100 pr-4">
+                                            <span className="text-xs font-bold text-gray-500 uppercase">{new Date(evt.start_date).toLocaleDateString('pt-BR', { weekday: 'short' })}</span>
+                                            <span className="text-2xl font-black text-gray-900">{new Date(evt.start_date).getDate()}</span>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase">{new Date(evt.start_date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
                                         </div>
-                                        <p className="text-[11px] text-gray-600 mb-2 flex items-center gap-1"><Building2 size={12} className="text-gray-400"/> {evt.client_name || 'Cliente Geral'}</p>
-                                        <div className="flex flex-wrap gap-3 text-[10px] text-gray-500">
-                                            <span className="flex items-center gap-1"><Clock size={12} /> {evt.start_time} - {evt.end_time}</span>
-                                            <span className="flex items-center gap-1"><MapPin size={12} /> {evt.location || 'Sem local definido'}</span>
-                                            <span className="flex items-center gap-1"><Flag size={12} /> Prioridade: {evt.priority}</span>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h4 className="text-sm font-bold text-gray-900">{evt.title}</h4>
+                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${evt.status === 'CONCLUIDO' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {evt.status.replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-gray-600 mb-2 flex items-center gap-1"><Building2 size={12} className="text-gray-400"/> {evt.client_name || 'Cliente Geral'}</p>
+                                            <div className="flex flex-wrap gap-3 text-[10px] text-gray-500">
+                                                <span className="flex items-center gap-1"><Clock size={12} /> {evt.start_time} - {evt.end_time}</span>
+                                                <span className="flex items-center gap-1"><MapPin size={12} /> {evt.location || 'Sem local definido'}</span>
+                                                <span className="flex items-center gap-1"><Flag size={12} /> Prioridade: {evt.priority}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => deleteCRMAppointment(evt.id).then(loadAppointments)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><XCircle size={18}/></button>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => deleteCRMAppointment(evt.id).then(loadAppointments)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><XCircle size={18}/></button>
+                                ))
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col lg:flex-row gap-4 h-full animate-in fade-in zoom-in-95 duration-300">
+                            {/* Calendar Card */}
+                            <div className="flex-1 bg-white rounded border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
+                                <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                                    <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
+                                        <Calendar size={14} className="text-rose-600" />
+                                        {currentCalendarDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                    </h4>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-rose-600 transition-colors" title="Mês Anterior"><ArrowLeft size={16}/></button>
+                                        <button onClick={() => setCurrentCalendarDate(new Date())} className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all">Hoje</button>
+                                        <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-rose-600 transition-colors" title="Próximo Mês"><ArrowRight size={16}/></button>
                                     </div>
                                 </div>
-                            ))
-                        )}
-                    </div>
+                                <div className="grid grid-cols-7 bg-gray-50/30 border-b border-gray-100">
+                                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                                        <div key={d} className="py-2.5 text-center text-[9px] font-black uppercase text-gray-400 tracking-widest">{d}</div>
+                                    ))}
+                                </div>
+                                <div className="flex-1 grid grid-cols-7 auto-rows-fr">
+                                    {calendarDays.map((dateObj, idx) => {
+                                        const dateStr = dateObj.date.toISOString().split('T')[0];
+                                        const dayAppointments = filteredAppointments.filter(a => a.start_date === dateStr);
+                                        const hasAppointments = dayAppointments.length > 0;
+                                        const isSelected = selectedCalendarDay === dateStr;
+                                        const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                                        
+                                        return (
+                                            <button 
+                                                key={idx}
+                                                onClick={() => setSelectedCalendarDay(dateStr)}
+                                                className={`relative p-2 border-r border-b border-gray-50 flex flex-col items-center justify-start transition-all hover:bg-rose-50/50 group min-h-[60px] ${!dateObj.isCurrentMonth ? 'bg-gray-50/30' : 'bg-white'} ${isSelected ? 'bg-rose-50 ring-1 ring-inset ring-rose-200 z-10' : ''}`}
+                                            >
+                                                <span className={`text-[11px] font-bold mb-1 transition-all ${!dateObj.isCurrentMonth ? 'text-gray-300' : isToday ? 'text-white bg-rose-600 w-5 h-5 flex items-center justify-center rounded-full shadow-sm' : 'text-gray-600'} ${isSelected && !isToday ? 'text-rose-700 scale-110 transform' : ''}`}>
+                                                    {dateObj.date.getDate()}
+                                                </span>
+                                                {hasAppointments && (
+                                                    <div className="flex flex-col gap-0.5 w-full overflow-hidden">
+                                                        {dayAppointments.slice(0, 2).map(app => (
+                                                            <div key={app.id} className={`h-1 w-full rounded-full ${app.priority === 'CRITICA' ? 'bg-red-400' : app.priority === 'ALTA' ? 'bg-orange-400' : 'bg-blue-400'} opacity-60`}></div>
+                                                        ))}
+                                                        {dayAppointments.length > 2 && (
+                                                            <span className="text-[8px] font-bold text-gray-400 text-center">+{dayAppointments.length - 2}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {/* Selected Day Appointments */}
+                            <div className="w-full lg:w-80 bg-white rounded border border-gray-200 shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-4 duration-300">
+                                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Clock size={12} className="text-rose-500" />
+                                        {selectedCalendarDay ? new Date(selectedCalendarDay + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', weekday: 'long' }) : 'Selecione um dia'}
+                                    </h4>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50/20">
+                                    {!selectedCalendarDay ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-50 text-center p-6">
+                                            <Calendar size={32} className="mb-3" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">Selecione um dia no calendário para ver os compromissos</p>
+                                        </div>
+                                    ) : appointmentsForSelectedDay.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-50 text-center p-6">
+                                            <CheckCircle2 size={32} className="mb-3 text-green-400" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest">Nenhum compromisso agendado para este dia</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {appointmentsForSelectedDay.map(evt => (
+                                                <div key={evt.id} className="p-3 rounded border border-gray-100 bg-white shadow-sm hover:border-rose-200 hover:shadow transition-all relative overflow-hidden group">
+                                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${evt.priority === 'CRITICA' ? 'bg-red-500' : evt.priority === 'ALTA' ? 'bg-orange-500' : evt.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
+                                                    <div className="flex justify-between items-start mb-1.5">
+                                                        <h5 className="text-xs font-bold text-gray-800 line-clamp-2 leading-tight">{evt.title}</h5>
+                                                        <span className="text-[9px] font-black text-gray-400 shrink-0 ml-2">{evt.start_time}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-500 mb-3 flex items-center gap-1">
+                                                        <Building2 size={10} className="text-gray-300" />
+                                                        <span className="truncate">{evt.client_name || 'Cliente Geral'}</span>
+                                                    </p>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${evt.status === 'CONCLUIDO' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {evt.status.replace('_', ' ')}
+                                                        </span>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setEditingEvent(evt);
+                                                                    setNewEvent({ ...evt });
+                                                                    setShowEventModal(true);
+                                                                }}
+                                                                className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                                            >
+                                                                <Edit2 size={12}/>
+                                                            </button>
+                                                            <button onClick={() => deleteCRMAppointment(evt.id).then(loadAppointments)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={12}/></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                {selectedCalendarDay && (
+                                    <div className="p-4 border-t border-gray-100 bg-white">
+                                        <button 
+                                            onClick={() => {
+                                                setNewEvent(prev => ({ 
+                                                    ...prev, 
+                                                    start_date: selectedCalendarDay, 
+                                                    end_date: selectedCalendarDay,
+                                                    start_time: '09:00',
+                                                    end_time: '10:00'
+                                                }));
+                                                setShowEventModal(true);
+                                            }}
+                                            className="w-full py-2.5 bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded shadow-sm hover:bg-rose-700 hover:shadow-md transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Plus size={14} /> Novo Compromisso
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
@@ -2621,6 +2726,37 @@ export const CRMView: React.FC<CRMViewProps> = ({
                       <div className="space-y-1">
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Descrição</label>
                           <textarea className="w-full p-2 border border-gray-300 rounded text-xs outline-none h-24 resize-none" placeholder="Detalhes do compromisso..." value={newEvent.description || ''} onChange={e => setNewEvent({...newEvent, description: e.target.value})} />
+                      </div>
+
+                      {/* Anexos */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                              <Paperclip size={12} /> Anexos
+                          </label>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                              {(newEvent.attachments || []).map((file, idx) => (
+                                  <div key={idx} className="relative group">
+                                      <div className="w-16 h-16 bg-gray-100 border border-gray-200 rounded flex items-center justify-center overflow-hidden">
+                                          {file.startsWith('data:image') ? (
+                                              <img src={file} alt="Anexo" className="w-full h-full object-cover" />
+                                          ) : (
+                                              <FileText size={24} className="text-gray-400" />
+                                          )}
+                                      </div>
+                                      <button 
+                                          onClick={() => removeAttachment(idx)}
+                                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                          <X size={10} />
+                                      </button>
+                                  </div>
+                              ))}
+                              <label className="w-16 h-16 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 transition-colors">
+                                  <Upload size={16} className="text-gray-400" />
+                                  <span className="text-[8px] font-bold text-gray-400 uppercase">Adicionar</span>
+                                  <input type="file" className="hidden" multiple onChange={handleFileChange} />
+                              </label>
+                          </div>
                       </div>
                   </div>
 

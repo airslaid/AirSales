@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia, OcorrenciaAcao, SolicitacaoCotacao } from '../types';
+import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia, OcorrenciaAcao, SolicitacaoCotacao, Customer } from '../types';
 
 // --- Solicitacao Cotacao Service ---
 
@@ -9,13 +9,9 @@ export const fetchSolicitacoesCotacao = async (): Promise<SolicitacaoCotacao[]> 
     const { data, error } = await supabase.from('solicitacoes_cotacao').select('*').order('created_at', { ascending: false });
     if (error) throw error;
     
-    // If Supabase returns empty, check if we have local data from a failed sync
-    if (!data || data.length === 0) {
-      const localData = localStorage.getItem('AIR_SALES_SOLICITACOES_COTACAO');
-      if (localData) {
-        console.info("Solicitacoes Cotacao: Supabase empty, using localStorage data");
-        return JSON.parse(localData);
-      }
+    // Update local storage with fresh data
+    if (data) {
+      localStorage.setItem('AIR_SALES_SOLICITACOES_COTACAO', JSON.stringify(data));
     }
     
     return data || [];
@@ -38,6 +34,18 @@ export const upsertSolicitacaoCotacao = async (solicitacao: SolicitacaoCotacao) 
       console.error("Supabase Error detail:", error);
       throw error;
     }
+    
+    // Update local storage on success
+    const localData = localStorage.getItem('AIR_SALES_SOLICITACOES_COTACAO');
+    const solicitacoes: SolicitacaoCotacao[] = localData ? JSON.parse(localData) : [];
+    const index = solicitacoes.findIndex(s => s.id === payload.id);
+    if (index >= 0) {
+      solicitacoes[index] = payload;
+    } else {
+      solicitacoes.push(payload);
+    }
+    localStorage.setItem('AIR_SALES_SOLICITACOES_COTACAO', JSON.stringify(solicitacoes));
+    
     console.log("Supabase: Upsert successful", data);
     return payload;
   } catch (err: any) {
@@ -66,6 +74,15 @@ export const deleteSolicitacaoCotacao = async (id: string) => {
   try {
     const { error } = await supabase.from('solicitacoes_cotacao').delete().eq('id', id);
     if (error) throw error;
+    
+    // Update local storage on success
+    const localData = localStorage.getItem('AIR_SALES_SOLICITACOES_COTACAO');
+    if (localData) {
+      const solicitacoes: SolicitacaoCotacao[] = JSON.parse(localData);
+      const filtered = solicitacoes.filter(s => s.id !== id);
+      localStorage.setItem('AIR_SALES_SOLICITACOES_COTACAO', JSON.stringify(filtered));
+    }
+    
     return true;
   } catch (err: any) {
     console.warn("Solicitacoes Cotacao: Error deleting from Supabase, falling back to localStorage", err.message);
@@ -758,8 +775,8 @@ export const fetchCRMAppointments = async (): Promise<CRMAppointment[]> => {
     // Fallback: Return Mock Data if table doesn't exist
     console.warn("CRM Appointments: Using Mock Data (Table might not exist)", err.message);
     const mockEvents: CRMAppointment[] = [
-      { id: '1', title: 'Visita Técnica TGA', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], start_time: '09:00', end_time: '11:00', activity_type: 'VISITA', priority: 'ALTA', status: 'AGENDADO', recurrence: 'UNICO', client_name: 'TGA TECH LTDA', rep_in_codigo: 50, req_confirmation: true, notify_email: true, hide_appointment: false },
-      { id: '2', title: 'Alinhamento Comercial', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], start_time: '14:00', end_time: '15:00', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO', recurrence: 'UNICO', client_name: 'CLARIANT S.A.', rep_in_codigo: 50, req_confirmation: false, notify_email: false, hide_appointment: false },
+      { id: '1', title: 'Visita Técnica TGA', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], start_time: '09:00', end_time: '11:00', activity_type: 'VISITA', priority: 'ALTA', status: 'AGENDADO', recurrence: 'UNICO', client_name: 'TGA TECH LTDA', rep_in_codigo: 50, req_confirmation: true, notify_email: true, hide_appointment: false, attachments: [] },
+      { id: '2', title: 'Alinhamento Comercial', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], start_time: '14:00', end_time: '15:00', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO', recurrence: 'UNICO', client_name: 'CLARIANT S.A.', rep_in_codigo: 50, req_confirmation: false, notify_email: false, hide_appointment: false, attachments: [] },
     ];
     return mockEvents;
   }
@@ -824,5 +841,94 @@ export const deleteCRMTask = async (id: string) => {
     return true;
   } catch (err) {
     throw err;
+  }
+};
+
+// --- Customers Service ---
+
+export const fetchCustomers = async (repCode?: number): Promise<Customer[]> => {
+  try {
+    let query = supabase.from('customers').select('*').order('agn_st_nome', { ascending: true });
+    
+    if (repCode) {
+      query = query.eq('rep_agn_in_codigo', repCode);
+    }
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Customers: Table might not exist or error fetching", err.message);
+    return [];
+  }
+};
+
+export const syncCustomersToSupabase = async (customers: any[]) => {
+  if (!customers || customers.length === 0) {
+    console.log("[Customer Sync] No customers provided for synchronization.");
+    return false;
+  }
+
+  console.log(`[Customer Sync] Starting validation for ${customers.length} records...`);
+
+  // Normaliza os dados para o formato do Supabase
+  const normalized = customers.map((c, index) => {
+    const agn_in_codigo = Math.floor(toNumeric(findValue(c, 'AGN_IN_CODIGO') || findValue(c, 'CLI_IN_CODIGO')));
+    const agn_st_nome = String(findValue(c, 'AGN_ST_NOME') || findValue(c, 'CLIENTE_NOME') || 'N/A').trim();
+    
+    if (agn_in_codigo === 0 && index === 0) {
+      console.log("[Customer Sync] Sample record keys:", Object.keys(c));
+    }
+
+    if (agn_in_codigo === 0) {
+      // console.warn(`[Customer Sync] Record at index ${index} missing valid code:`, c);
+    }
+
+    return {
+      agn_in_codigo,
+      agn_st_nome,
+      agn_st_cgc: String(findValue(c, 'AGN_ST_CGC') || '').trim(),
+      agn_st_inscrestadual: String(findValue(c, 'AGN_ST_INSCRESTADUAL') || '').trim(),
+      agn_st_logradouro: String(findValue(c, 'AGN_ST_LOGRADOURO') || '').trim(),
+      agn_st_numero: String(findValue(c, 'AGN_ST_NUMERO') || '').trim(),
+      agn_st_bairro: String(findValue(c, 'AGN_ST_BAIRRO') || '').trim(),
+      agn_st_municipio: String(findValue(c, 'AGN_ST_MUNICIPIO') || '').trim(),
+      uf_st_sigla: String(findValue(c, 'UF_ST_SIGLA') || '').trim(),
+      rep_agn_in_codigo: Math.floor(toNumeric(findValue(c, 'REP_AGN_IN_CODIGO') || findValue(c, 'REP_IN_CODIGO'))),
+      agn_dt_ultimaatucad: findValue(c, 'AGN_DT_ULTIMAATUCAD') || null
+    };
+  }).filter(c => c.agn_in_codigo > 0);
+
+  console.log(`[Customer Sync] Validation complete. ${normalized.length} of ${customers.length} records are valid.`);
+
+  if (normalized.length === 0) {
+    console.error("[Customer Sync] No valid customer records found after normalization.");
+    return false;
+  }
+
+  // Divide em chunks de 100 para evitar limites
+  const chunkSize = 100;
+  let hasError = false;
+
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    const chunk = normalized.slice(i, i + chunkSize);
+    console.log(`[Customer Sync] Upserting chunk ${Math.floor(i/chunkSize) + 1}...`);
+    
+    const { error } = await supabase
+      .from('customers')
+      .upsert(chunk, { onConflict: 'agn_in_codigo' });
+    
+    if (error) {
+      console.error(`[Customer Sync] Error synchronizing chunk at index ${i}:`, error);
+      hasError = true;
+    }
+  }
+
+  if (!hasError) {
+    console.log("[Customer Sync] Synchronization completed successfully.");
+    return true;
+  } else {
+    console.error("[Customer Sync] Synchronization completed with errors.");
+    return false;
   }
 };
