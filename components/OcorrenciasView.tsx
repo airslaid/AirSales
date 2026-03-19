@@ -84,7 +84,7 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
         description: '',
         receipt_date: new Date().toISOString().split('T')[0],
         registration_date: new Date().toISOString().split('T')[0],
-        company: 'Air Slaid',
+        company: '',
         process: 'Comercial',
         sub_process: 'Vendas',
         responsible: '',
@@ -618,16 +618,12 @@ export const OcorrenciasView: React.FC<OcorrenciasViewProps> = ({ user }) => {
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-gray-700 uppercase">Solicitante</label>
-                      <select 
-                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-sm text-xs outline-none focus:border-rose-500"
+                      <input 
+                        type="text" 
+                        className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-sm text-xs outline-none cursor-not-allowed"
                         value={formData.requester || ''}
-                        onChange={e => setFormData({...formData, requester: e.target.value})}
-                      >
-                        <option value="">Selecione...</option>
-                        {users.map(u => (
-                          <option key={u.id} value={u.name}>{u.name}</option>
-                        ))}
-                      </select>
+                        readOnly
+                      />
                     </div>
                   </div>
 

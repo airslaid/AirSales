@@ -348,7 +348,6 @@ export const FormsView: React.FC<FormsViewProps> = ({ user }) => {
         {/* Header Form */}
         <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
             <div className="flex items-center gap-2">
-                <span className="font-bold text-red-600 text-xl tracking-tighter">air slaid</span>
             </div>
             <div className="text-right">
                 <h1 className="text-xl font-bold text-gray-900 uppercase">Relatório de Visita</h1>
@@ -383,9 +382,9 @@ export const FormsView: React.FC<FormsViewProps> = ({ user }) => {
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Solicitante</label>
                         <input 
                             type="text" 
-                            className="w-full p-2 border border-gray-300 rounded-sm"
+                            className="w-full p-2 border border-gray-300 rounded-sm bg-gray-50 cursor-not-allowed"
                             value={currentReport.solicitante || ''}
-                            onChange={e => setCurrentReport({...currentReport, solicitante: e.target.value})}
+                            readOnly
                         />
                     </div>
                     <div>
