@@ -1,0 +1,3552 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Sale, CRMAppointment, AppUser, CRMTask, Customer } from '../types';
+import { 
+  updateOrderStatus, 
+  updateOrderHotStatus, 
+  fetchCRMAppointments, 
+  upsertCRMAppointment, 
+  deleteCRMAppointment,
+  fetchCRMTasks,
+  upsertCRMTask,
+  deleteCRMTask,
+  fetchAppUsers
+} from '../services/supabaseService';
+import { generateSalesInsights, isUsingLocalAI } from '../services/aiService';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { 
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, 
+  PieChart as RePieChart, Pie, Cell, Legend, LabelList
+} from 'recharts';
+import { 
+  Kanban, Users, DollarSign, Calendar, TrendingUp, 
+  ArrowRight, Search, Building2, Phone, Mail, 
+  MoreHorizontal, AlertCircle, CheckCircle2, XCircle, Clock,
+  LucideIcon, Package, ShoppingBag, Receipt, MapPin, 
+  ArrowLeft, Send, Briefcase, FileText, Flame, Plus,
+  Flag, Check, List, User, MessageCircle, Smartphone, History,
+  LayoutList, Edit2, Trash2, AlertTriangle, LayoutGrid, FileSpreadsheet,
+  Filter, X, PieChart, Sparkles, Bot, Target, Paperclip, Upload
+} from 'lucide-react';
+import { AIInsightsModal } from './AIInsightsModal';
+import { CustomerTimeline } from './CustomerTimeline';
+
+export interface CRMExternalAction {
+  type: 'OPEN_TASK' | 'OPEN_APPOINTMENT';
+  id: string;
+}
+
+interface CRMViewProps {
+  data: Sale[];
+  salesData: Sale[]; // Dados completos para histórico
+  customers?: Customer[];
+  onRefresh?: () => Promise<void>;
+  user: AppUser | null;
+  externalAction?: CRMExternalAction | null;
+  onExternalActionHandled?: () => void;
+  globalFilters?: any;
+  onGlobalFilterChange?: (newFilters: any) => void;
+  initialTab?: CRMTab;
+}
+
+interface PipelineItem extends Sale {
+  TOTAL_VALOR: number;
+  ITENS_COUNT: number;
+}
+
+interface PipelineColumn {
+  id: string;
+  title: string;
+  items: PipelineItem[];
+  color: string;
+  bg: string;
+  icon: LucideIcon;
+  text?: string;
+}
+
+interface ClientWalletItem {
+  id: number;
+  name: string;
+  cnpj?: string;
+  totalSpent: number;
+  ordersCount: number;
+  lastPurchaseDate: string;
+  repName: string;
+  history: Sale[];
+}
+
+type CRMTab = 'COCKPIT' | 'PIPELINE' | 'FOLLOWUP' | 'AGENDA' | 'TAREFAS';
+
+const STAGES = [
+  { id: 'PROCESSO_INTERNO', label: 'Processo Interno', icon: Clock, color: 'border-gray-500', bg: 'bg-gray-50', text: 'text-gray-700' },
+  { id: 'ENVIO_PROPOSTA', label: 'Envio da Proposta', icon: Send, color: 'border-blue-500', bg: 'bg-blue-50', text: 'text-blue-700' },
+  { id: 'NEGOCIACAO', label: 'Negociação', icon: Briefcase, color: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
+  { id: 'GANHO', label: 'Fechado', icon: CheckCircle2, color: 'border-green-500', bg: 'bg-green-50', text: 'text-green-700' },
+  { id: 'PERDIDO', label: 'Cancelado', icon: XCircle, color: 'border-red-500', bg: 'bg-red-50', text: 'text-red-700' }
+];
+
+const formatCurrency = (val: number) => 
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+const parseLocalDate = (dateStr?: string) => {
+  if (!dateStr) return new Date();
+  if (dateStr.includes('T')) return new Date(dateStr);
+  return new Date(dateStr + 'T12:00:00');
+};
+
+const getLocalISODate = (date = new Date()) => {
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+};
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-';
+  const date = parseLocalDate(dateStr);
+  return new Intl.DateTimeFormat('pt-BR').format(date);
+};
+
+const getDaysRemaining = (dueDate?: string) => {
+  if (!dueDate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = parseLocalDate(dueDate);
+  due.setHours(0, 0, 0, 0);
+  const diffTime = due.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+export const CRMView: React.FC<CRMViewProps> = ({ 
+  data = [], 
+  salesData = [], 
+  customers = [],
+  onRefresh, 
+  user, 
+  externalAction, 
+  onExternalActionHandled,
+  globalFilters,
+  onGlobalFilterChange,
+  initialTab
+}) => {
+  const [activeTab, setActiveTab] = useState<CRMTab>(initialTab || 'COCKPIT');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClient, setSelectedClient] = useState<ClientWalletItem | null>(null);
+  
+  // AI States
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiInsights, setAiInsights] = useState<string | null>(null);
+
+  // Tasks State
+  const [tasks, setTasks] = useState<CRMTask[]>([]);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<CRMTask | null>(null);
+  const [allUsers, setAllUsers] = useState<AppUser[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<'TODAS' | 'PENDENTES' | 'CONCLUIDAS'>('TODAS');
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [newTask, setNewTask] = useState<Partial<CRMTask>>({
+    priority: 'MEDIA',
+    status: 'PENDENTE'
+  });
+  
+  // Client Search for Tasks
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  
+  // Pipeline Filters
+  const [pipelineFilters, setPipelineFilters] = useState({
+      rep: globalFilters?.representante || '',
+      startDate: globalFilters?.startDate || '',
+      endDate: globalFilters?.endDate || '',
+      onlyHot: false,
+      orderNumber: ''
+  });
+
+  // Sync with global filters when they change externally
+  useEffect(() => {
+    if (globalFilters) {
+      setPipelineFilters(prev => ({
+        ...prev,
+        rep: globalFilters.representante || '',
+        startDate: globalFilters.startDate || '',
+        endDate: globalFilters.endDate || ''
+      }));
+    }
+  }, [globalFilters?.representante, globalFilters?.startDate, globalFilters?.endDate]);
+
+  // Helper to update filters and notify parent if needed
+  const updateFilters = (updates: Partial<typeof pipelineFilters>) => {
+    const newFilters = { ...pipelineFilters, ...updates };
+    setPipelineFilters(newFilters);
+    
+    // If we updated a global field, notify parent
+    if (onGlobalFilterChange && (updates.rep !== undefined || updates.startDate !== undefined || updates.endDate !== undefined)) {
+      onGlobalFilterChange({
+        ...globalFilters,
+        ...(updates.rep !== undefined && { representante: updates.rep }),
+        ...(updates.startDate !== undefined && { startDate: updates.startDate }),
+        ...(updates.endDate !== undefined && { endDate: updates.endDate })
+      });
+    }
+  };
+
+  // Follow-up View Mode
+  const [followUpViewMode, setFollowUpViewMode] = useState<'OPPORTUNITIES' | 'HISTORY'>('OPPORTUNITIES');
+
+  // Customer Timeline State
+  const [selectedClientForTimeline, setSelectedClientForTimeline] = useState<ClientWalletItem | null>(null);
+
+  // Modal Pedido State
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [modalTab, setModalTab] = useState<'ITENS' | 'HISTORICO'>('ITENS');
+  const [movingOrder, setMovingOrder] = useState<string | null>(null);
+  const [togglingHot, setTogglingHot] = useState(false);
+
+  // Agenda State
+  const [appointments, setAppointments] = useState<CRMAppointment[]>([]);
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CRMAppointment | null>(null);
+  const [agendaViewMode, setAgendaViewMode] = useState<'LIST' | 'CALENDAR'>('LIST');
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<string | null>(null);
+  const [newEvent, setNewEvent] = useState<Partial<CRMAppointment>>({
+    req_confirmation: false, notify_email: true, hide_appointment: false,
+    recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
+    start_date: getLocalISODate(),
+    end_date: getLocalISODate(),
+    start_time: '09:00', end_time: '10:00',
+    attachments: []
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setNewEvent(prev => ({
+          ...prev,
+          attachments: [...(prev.attachments || []), base64String]
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeAttachment = (index: number) => {
+    setNewEvent(prev => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  // Follow-up State
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [editingFollowUpId, setEditingFollowUpId] = useState<string | null>(null);
+  const [deleteFollowUpId, setDeleteFollowUpId] = useState<string | null>(null);
+  const [followUpData, setFollowUpData] = useState({
+     type: 'TELEFONEMA' as 'TELEFONEMA' | 'EMAIL' | 'REUNIAO' | 'VISITA' | 'COMPROMISSO', 
+     notes: '',
+     date: getLocalISODate(),
+     time: new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+     order: null as PipelineItem | null
+  });
+
+  // --- FILTROS DE PERMISSÃO (AGENDA E TAREFAS) ---
+  const filteredAppointments = useMemo(() => {
+    let list = appointments;
+    if (!user?.is_admin) {
+        list = list.filter(a => a.rep_in_codigo === user?.rep_in_codigo);
+    }
+    
+    // Filtros de UI (Mesmos do Pipeline)
+    if (pipelineFilters.rep) {
+        list = list.filter(a => String(a.rep_in_codigo) === pipelineFilters.rep);
+    }
+    if (pipelineFilters.startDate) {
+        list = list.filter(a => a.start_date >= pipelineFilters.startDate);
+    }
+    if (pipelineFilters.endDate) {
+        list = list.filter(a => a.start_date <= pipelineFilters.endDate);
+    }
+    if (pipelineFilters.orderNumber) {
+        const regex = new RegExp(`\\b${pipelineFilters.orderNumber}\\b`);
+        list = list.filter(a => 
+            regex.test(String(a.description)) || 
+            regex.test(String(a.title))
+        );
+    }
+    
+    return list;
+  }, [appointments, user, pipelineFilters]);
+
+  const filteredTasks = useMemo(() => {
+    let list = tasks;
+    if (!user?.is_admin) {
+        list = list.filter(t => t.rep_in_codigo === user?.rep_in_codigo);
+    }
+
+    // Filtros de UI (Mesmos do Pipeline)
+    if (pipelineFilters.rep) {
+        list = list.filter(t => String(t.rep_in_codigo) === pipelineFilters.rep);
+    }
+    if (!pipelineFilters.orderNumber) {
+        list = list.filter(t => {
+            // Tarefas pendentes devem aparecer mesmo que atrasadas (fora do mês atual)
+            if (t.status !== 'CONCLUIDO') return true;
+            
+            if (pipelineFilters.startDate && (!t.due_date || t.due_date < pipelineFilters.startDate)) return false;
+            if (pipelineFilters.endDate && (!t.due_date || t.due_date > pipelineFilters.endDate)) return false;
+            
+            return true;
+        });
+    }
+    if (pipelineFilters.orderNumber) {
+        const regex = new RegExp(`\\b${pipelineFilters.orderNumber}\\b`);
+        list = list.filter(t => 
+            regex.test(String(t.description)) || 
+            regex.test(String(t.title))
+        );
+    }
+
+    return list;
+  }, [tasks, user, pipelineFilters]);
+
+  // Calendar Logic
+  const calendarDays = useMemo(() => {
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+    
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const days = [];
+    
+    // Days from previous month
+    const prevMonthLastDay = new Date(year, month, 0).getDate();
+    for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, prevMonthLastDay - i);
+      days.push({ date: d, isCurrentMonth: false });
+    }
+    
+    // Days from current month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(year, month, i);
+      days.push({ date: d, isCurrentMonth: true });
+    }
+    
+    // Days from next month
+    const remainingSlots = 42 - days.length;
+    for (let i = 1; i <= remainingSlots; i++) {
+      const d = new Date(year, month + 1, i);
+      days.push({ date: d, isCurrentMonth: false });
+    }
+    
+    return days;
+  }, [currentCalendarDate]);
+
+  const appointmentsForSelectedDay = useMemo(() => {
+    if (!selectedCalendarDay) return [];
+    return filteredAppointments.filter(a => a.start_date === selectedCalendarDay);
+  }, [filteredAppointments, selectedCalendarDay]);
+
+  const changeMonth = (offset: number) => {
+    const newDate = new Date(currentCalendarDate);
+    newDate.setMonth(newDate.getMonth() + offset);
+    setCurrentCalendarDate(newDate);
+  };
+
+  useEffect(() => {
+    // Carrega apontamentos se estiver na aba Agenda, Followup ou se abrir um pedido
+    if (activeTab === 'AGENDA' || activeTab === 'FOLLOWUP' || selectedOrder) {
+        loadAppointments();
+    }
+    if (activeTab === 'TAREFAS') {
+        loadTasks();
+        loadUsers();
+    }
+  }, [activeTab, selectedOrder]);
+
+  // Auto Rules State
+  const [showAutoActionsModal, setShowAutoActionsModal] = useState(false);
+  const [autoActions, setAutoActions] = useState<any[]>([]);
+
+  const checkAutoRules = () => {
+    const proposalItems = pipelineColumns['ENVIO_PROPOSTA'].items;
+    const today = new Date();
+    const actions: any[] = [];
+
+    proposalItems.forEach(item => {
+        const emissionDate = new Date(item.PED_DT_EMISSAO);
+        const diffTime = Math.abs(today.getTime() - emissionDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 5) {
+            actions.push({
+                type: 'TASK',
+                order: item,
+                title: 'Cobrar retorno de Proposta',
+                description: `Orçamento #${item.PED_IN_CODIGO} está em "Envio de Proposta" há ${diffDays} dias.`,
+                due_date: getLocalISODate(today)
+            });
+        }
+    });
+
+    setAutoActions(actions);
+    setShowAutoActionsModal(true);
+  };
+
+  const executeAutoActions = async () => {
+      for (const action of autoActions) {
+          if (action.type === 'TASK') {
+              const task: CRMTask = {
+                  id: '',
+                  title: action.title,
+                  description: action.description,
+                  client_id: Number(action.order.CLI_IN_CODIGO),
+                  client_name: action.order.CLIENTE_NOME,
+                  rep_in_codigo: Number(action.order.REP_IN_CODIGO),
+                  rep_nome: action.order.REPRESENTANTE_NOME,
+                  created_by_id: user?.id || 'system',
+                  created_by_name: user?.name || 'Sistema',
+                  created_at: new Date().toISOString(),
+                  status: 'PENDENTE',
+                  priority: 'ALTA',
+                  due_date: action.due_date
+              };
+              await upsertCRMTask(task);
+          }
+      }
+      setShowAutoActionsModal(false);
+      if (onRefresh) await onRefresh();
+      alert(`${autoActions.length} tarefas criadas com sucesso!`);
+  };
+
+  const loadAppointments = async () => {
+      const evts = await fetchCRMAppointments();
+      setAppointments(evts);
+  };
+
+  const loadTasks = async () => {
+    setLoadingTasks(true);
+    try {
+      const data = await fetchCRMTasks();
+      setTasks(data);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const loadUsers = async () => {
+    const users = await fetchAppUsers();
+    setAllUsers(users);
+  };
+
+  // Handle External Actions (Notifications)
+  useEffect(() => {
+    if (externalAction) {
+      if (externalAction.type === 'OPEN_TASK') {
+        setActiveTab('TAREFAS');
+        loadTasks().then(() => {
+             fetchCRMTasks().then(allTasks => {
+                 const task = allTasks.find(t => t.id === externalAction.id);
+                 if (task) {
+                     setEditingTask(task);
+                     setNewTask({
+                         title: task.title,
+                         description: task.description,
+                         client_id: task.client_id,
+                         client_name: task.client_name,
+                         rep_in_codigo: task.rep_in_codigo,
+                         priority: task.priority,
+                         status: task.status,
+                         due_date: task.due_date
+                     });
+                     setShowTaskModal(true);
+                 }
+             });
+        });
+      } else if (externalAction.type === 'OPEN_APPOINTMENT') {
+        setActiveTab('AGENDA');
+        loadAppointments().then(() => {
+            fetchCRMAppointments().then(allAppts => {
+                const appt = allAppts.find(a => a.id === externalAction.id);
+                if (appt) {
+                    setEditingEvent(appt);
+                    setNewEvent(appt);
+                    setClientSearchTerm(appt.client_name || '');
+                    setShowClientDropdown(false);
+                    setShowEventModal(true);
+                }
+            });
+        });
+      }
+      
+      if (onExternalActionHandled) {
+          onExternalActionHandled();
+      }
+    }
+  }, [externalAction]);
+
+  const handleSaveTask = async () => {
+    if (!newTask.title || !newTask.rep_in_codigo) {
+      console.warn('Por favor, preencha o título e o representante.');
+      return;
+    }
+
+    const rep = allUsers.find(u => u.rep_in_codigo === newTask.rep_in_codigo);
+    
+    const taskData: CRMTask = {
+      id: editingTask?.id || '',
+      title: newTask.title || '',
+      description: newTask.description || '',
+      client_id: newTask.client_id ? Number(newTask.client_id) : undefined,
+      client_name: newTask.client_name,
+      rep_in_codigo: newTask.rep_in_codigo || 0,
+      rep_nome: rep?.name || 'Representante',
+      created_by_id: user?.id || 'admin',
+      created_by_name: user?.name || 'Administrador',
+      created_at: editingTask?.created_at || new Date().toISOString(),
+      status: (newTask.status as any) || 'PENDENTE',
+      priority: (newTask.priority as any) || 'MEDIA',
+      completed_at: newTask.completed_at,
+      due_date: newTask.due_date
+    };
+
+    try {
+      await upsertCRMTask(taskData);
+      setShowTaskModal(false);
+      setEditingTask(null);
+      setNewTask({ priority: 'MEDIA', status: 'PENDENTE' });
+      loadTasks();
+    } catch (err) {
+      console.error('Erro ao salvar tarefa:', err);
+    }
+  };
+
+  const handleToggleTaskStatus = async (task: CRMTask) => {
+    const isCompleting = task.status !== 'CONCLUIDA';
+    const updatedTask: CRMTask = {
+      ...task,
+      status: isCompleting ? 'CONCLUIDA' : 'PENDENTE',
+      completed_at: isCompleting ? new Date().toISOString() : undefined
+    };
+
+    try {
+      await upsertCRMTask(updatedTask);
+      loadTasks();
+    } catch (err) {
+      console.error('Erro ao atualizar tarefa:', err);
+    }
+  };
+
+  const handleDeleteTask = (id: string) => {
+    setDeleteTaskId(id);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!deleteTaskId) return;
+    try {
+      await deleteCRMTask(deleteTaskId);
+      setDeleteTaskId(null);
+      loadTasks();
+    } catch (err) {
+      console.error('Erro ao excluir tarefa:', err);
+    }
+  };
+
+  const handleExportAppointments = (filenamePrefix: string = 'Relatorio_CRM') => {
+      const historyData = appointments.map(a => ({
+          'Data': formatDate(a.start_date),
+          'Hora': a.start_time,
+          'Cliente': a.client_name,
+          'Tipo': a.activity_type,
+          'Status': a.status,
+          'Descricao': a.description || ''
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(historyData);
+      const wscols = [{ wch: 12 }, { wch: 8 }, { wch: 40 }, { wch: 15 }, { wch: 15 }, { wch: 60 }];
+      ws['!cols'] = wscols;
+      XLSX.utils.book_append_sheet(wb, ws, "Dados");
+      XLSX.writeFile(wb, `${filenamePrefix}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  // --- UNIQUE REPS FOR FILTER ---
+  // Map for quick CNPJ lookup by client ID
+  const customerCnpjMap = useMemo(() => {
+    const map = new Map<number, string>();
+    if (customers && customers.length > 0) {
+      customers.forEach(c => {
+        if (c.agn_st_cgc) {
+          map.set(c.agn_in_codigo, c.agn_st_cgc);
+        }
+      });
+    }
+    return map;
+  }, [customers]);
+
+  const uniqueReps = useMemo(() => {
+      const reps = new Map<string, string>();
+      const safeData = Array.isArray(data) ? data : [];
+      safeData.forEach(item => {
+          if (item.REP_IN_CODIGO && item.REPRESENTANTE_NOME) {
+              reps.set(String(item.REP_IN_CODIGO), item.REPRESENTANTE_NOME);
+          }
+      });
+      return Array.from(reps.entries()).map(([id, name]) => ({ id, name })).sort((a,b) => a.name.localeCompare(b.name));
+  }, [data]);
+
+  // --- LÓGICA DO PIPELINE (KANBAN) ---
+  const pipelineColumns = useMemo(() => {
+    // Agrupa por ID do Pedido para não repetir itens do mesmo pedido no card
+    const uniqueOrdersMap = new Map<string, PipelineItem>();
+    
+    const safeData = Array.isArray(data) ? data : [];
+
+    safeData.forEach(item => {
+      // --- FILTROS DO PIPELINE ---
+      if (pipelineFilters.onlyHot && !item.IS_HOT) return;
+      if (pipelineFilters.rep && String(item.REP_IN_CODIGO) !== pipelineFilters.rep) return;
+      if (pipelineFilters.orderNumber && String(item.PED_IN_CODIGO).trim() !== pipelineFilters.orderNumber.trim()) return;
+      
+      const statusRaw = String(item.PED_ST_STATUS || item.SITUACAO || '').trim().toUpperCase();
+      const isFinished = statusRaw === 'ENCERRADO' || statusRaw === 'FECHADO (GANHO)' || statusRaw.includes('FATURADO') || statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO') || statusRaw === 'FECHADO (PERDIDO)';
+
+      // Itens em aberto (ou pesquisas diretas por pedido) ignoram o filtro de data padrão para não sumirem do Pipeline ao virar o mês
+      if (!pipelineFilters.orderNumber && isFinished) {
+          if (pipelineFilters.startDate && (!item.PED_DT_EMISSAO || item.PED_DT_EMISSAO < pipelineFilters.startDate)) return;
+          if (pipelineFilters.endDate && (!item.PED_DT_EMISSAO || item.PED_DT_EMISSAO > pipelineFilters.endDate)) return;
+      }
+      // ---------------------------
+      // Chave única: Pedido + Cliente + Filial para evitar colisões de numeração
+      const id = `${item.PED_IN_CODIGO}_${item.CLIENTE_NOME || ''}_${item.FILIAL_NOME || ''}`;
+      
+      if (!uniqueOrdersMap.has(id)) {
+        uniqueOrdersMap.set(id, {
+          ...item,
+          TOTAL_VALOR: 0,
+          ITENS_COUNT: 0,
+          IS_HOT: item.IS_HOT // Garante que a propriedade seja copiada
+        });
+      }
+      const current = uniqueOrdersMap.get(id)!;
+      current.TOTAL_VALOR += Number(item.ITP_RE_VALORMERCADORIA || 0);
+      current.ITENS_COUNT += 1;
+    });
+
+    const uniqueOrders = Array.from(uniqueOrdersMap.values());
+
+    const cols: Record<string, PipelineColumn> = {
+      PROCESSO_INTERNO: { id: 'PROCESSO_INTERNO', title: 'Processo Interno', items: [], color: 'border-gray-500', bg: 'bg-gray-50', icon: Clock },
+      ENVIO_PROPOSTA: { id: 'ENVIO_PROPOSTA', title: 'Envio da Proposta', items: [], color: 'border-blue-500', bg: 'bg-blue-50', icon: Send },
+      NEGOCIACAO: { id: 'NEGOCIACAO', title: 'Negociação', items: [], color: 'border-amber-500', bg: 'bg-amber-50', icon: Briefcase },
+      GANHO: { id: 'GANHO', title: 'Fechado', items: [], icon: CheckCircle2, color: 'border-green-500', bg: 'bg-green-50', text: 'text-green-700' },
+      PERDIDO: { id: 'PERDIDO', title: 'Cancelado', items: [], icon: XCircle, color: 'border-red-500', bg: 'bg-red-50', text: 'text-red-700' },
+    };
+
+    uniqueOrders.forEach(order => {
+      const statusRaw = String(order.PED_ST_STATUS || order.SITUACAO || '').trim().toUpperCase();
+      
+      // Lógica de Mapeamento de Status para Colunas (Strict)
+      if (statusRaw === 'ENCERRADO' || statusRaw === 'FECHADO (GANHO)' || statusRaw.includes('FATURADO')) {
+        cols.GANHO.items.push(order);
+      } else if (statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO') || statusRaw === 'FECHADO (PERDIDO)') {
+        cols.PERDIDO.items.push(order);
+      } else if (statusRaw.includes('NEGOCIACAO') || statusRaw.includes('NEGOCIAÇÃO')) {
+        cols.NEGOCIACAO.items.push(order);
+      } else if (statusRaw.includes('PROPOSTA') || statusRaw.includes('ENVIADO')) {
+        cols.ENVIO_PROPOSTA.items.push(order);
+      } else {
+        // Default bucket: Processo Interno
+        cols.PROCESSO_INTERNO.items.push(order);
+      }
+    });
+
+    return cols;
+  }, [data, pipelineFilters]);
+
+  const handleExportSummary = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(16);
+    doc.text('Resumo do Funil de Vendas', 14, 15);
+    
+    doc.setFontSize(10);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 22);
+    
+    // Filters Info
+    let filterText = 'Filtros: ';
+    if (pipelineFilters.rep) {
+        // @ts-ignore
+        const r = uniqueReps.find(u => u.id === pipelineFilters.rep);
+        filterText += `Rep: ${r?.name || 'Todos'} | `;
+    } else {
+        filterText += 'Rep: Todos | ';
+    }
+    
+    if (pipelineFilters.startDate && pipelineFilters.endDate) {
+        filterText += `Período: ${formatDate(pipelineFilters.startDate)} a ${formatDate(pipelineFilters.endDate)}`;
+    } else {
+        filterText += 'Período: Todo o histórico';
+    }
+    doc.text(filterText, 14, 28);
+
+    // Data Preparation
+    const summaryData = STAGES.map(stage => {
+        const items = pipelineColumns[stage.id].items;
+        const count = items.length;
+        const value = items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
+        return {
+            id: stage.id,
+            stage: stage.label,
+            count,
+            value
+        };
+    });
+
+    const totalCount = summaryData.reduce((acc, i) => acc + i.count, 0);
+    const totalValue = summaryData.reduce((acc, i) => acc + i.value, 0);
+
+    // Table Data
+    const tableBody = summaryData.map(d => [
+        d.stage,
+        d.count.toString(),
+        formatCurrency(d.value),
+        totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) + '%' : '0%'
+    ]);
+
+    // Add Total Row
+    tableBody.push([
+        'TOTAL GERAL',
+        totalCount.toString(),
+        formatCurrency(totalValue),
+        '100%'
+    ]);
+
+    // Generate Table
+    autoTable(doc, {
+        head: [['Etapa', 'Qtd', 'Valor (R$)', '% Valor']],
+        body: tableBody,
+        startY: 35,
+        theme: 'grid',
+        headStyles: { fillColor: [26, 33, 48] },
+        styles: { fontSize: 10 },
+    });
+
+    // Chart Section
+    // @ts-ignore
+    let startY = (doc as any).lastAutoTable.finalY + 20;
+    
+    doc.setFontSize(14);
+    doc.text('Gráfico de Quantidade por Etapa', 14, startY);
+    startY += 10;
+
+    const maxCount = Math.max(...summaryData.map(d => d.count));
+    const chartHeight = 60;
+    const barWidth = 25;
+    const startX = 20;
+    const gap = 15;
+
+    summaryData.forEach((data, index) => {
+        // Calculate bar height relative to max count
+        // If maxCount is 0, barHeight is 0
+        const barHeight = maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
+        
+        const x = startX + (index * (barWidth + gap));
+        const y = startY + chartHeight - barHeight; // Y starts from top, so subtract height
+
+        // Color Logic
+        let r=107, g=114, b=128; // Default Gray
+        if (data.id === 'PROCESSO_INTERNO') { r=107; g=114; b=128; }
+        if (data.id === 'ENVIO_PROPOSTA') { r=59; g=130; b=246; } // Blue
+        if (data.id === 'NEGOCIACAO') { r=245; g=158; b=11; } // Amber
+        if (data.id === 'GANHO') { r=34; g=197; b=94; } // Green
+        if (data.id === 'PERDIDO') { r=239; g=68; b=68; } // Red
+
+        doc.setFillColor(r, g, b);
+        
+        // Draw Bar
+        // x, y, w, h, style
+        if (barHeight > 0) {
+            doc.rect(x, y, barWidth, barHeight, 'F');
+        } else {
+            // Draw a tiny line for 0 just to show position
+            doc.setDrawColor(200, 200, 200);
+            doc.line(x, startY + chartHeight, x + barWidth, startY + chartHeight);
+        }
+
+        // Label (Count) on top of bar
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        if (barHeight > 0) {
+            doc.text(data.count.toString(), x + barWidth / 2, y - 2, { align: 'center' });
+        } else {
+            doc.text("0", x + barWidth / 2, startY + chartHeight - 2, { align: 'center' });
+        }
+
+        // Label (Stage Name) below bar
+        doc.setFontSize(8);
+        const splitTitle = doc.splitTextToSize(data.stage, barWidth + 5);
+        doc.text(splitTitle, x + barWidth / 2, startY + chartHeight + 5, { align: 'center' });
+    });
+
+    doc.save(`Resumo_Funil_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
+  const handleExportPipeline = () => {
+      const flatData: any[] = [];
+      
+      STAGES.forEach(stage => {
+          const col = pipelineColumns[stage.id];
+          col.items.forEach(item => {
+              flatData.push({
+                  'Estagio': col.title,
+                  'Pedido': item.PED_IN_CODIGO,
+                  'Cliente': item.CLIENTE_NOME,
+                  'Representante': item.REPRESENTANTE_NOME,
+                  'Emissao': formatDate(item.PED_DT_EMISSAO),
+                  'Valor Estimado': item.TOTAL_VALOR,
+                  'Status Original': item.PED_ST_STATUS,
+                  'Hot Lead': item.IS_HOT ? 'SIM' : 'NÃO',
+                  'Itens': item.ITENS_COUNT
+              });
+          });
+      });
+
+      if (flatData.length === 0) {
+          console.warn('Não há dados para exportar com os filtros atuais.');
+          return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(flatData);
+      
+      // Ajustar largura colunas
+      const wscols = [
+          { wch: 20 }, { wch: 10 }, { wch: 40 }, { wch: 30 }, 
+          { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 8 }
+      ];
+      ws['!cols'] = wscols;
+
+      XLSX.utils.book_append_sheet(wb, ws, "Funil de Vendas");
+      XLSX.writeFile(wb, `Pipeline_Funil_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const handleExportSummaryPDF = () => {
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text('Resumo do Funil de Vendas', 14, 22);
+    doc.setFontSize(10);
+    doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, 30);
+    
+    const repName = pipelineFilters.rep 
+      ? uniqueReps.find(r => r.id === pipelineFilters.rep)?.name || pipelineFilters.rep 
+      : 'Todos';
+    doc.text(`Representante: ${repName}`, 14, 36);
+
+    // Prepare data
+    const summaryData = STAGES.map(stage => {
+      const col = pipelineColumns[stage.id];
+      const count = col?.items.length || 0;
+      const totalValue = col?.items.reduce((sum, item) => sum + (item.TOTAL_VALOR || 0), 0) || 0;
+      return {
+        id: stage.id,
+        stage: stage.label,
+        count,
+        totalValue
+      };
+    });
+
+    const totalCount = summaryData.reduce((sum, item) => sum + item.count, 0);
+    const totalValueAll = summaryData.reduce((sum, item) => sum + item.totalValue, 0);
+
+    // Table Data
+    const tableBody = summaryData.map(item => [
+      item.stage,
+      item.count.toString(),
+      formatCurrency(item.totalValue)
+    ]);
+
+    // Add Total Row
+    tableBody.push([
+      'TOTAL',
+      totalCount.toString(),
+      formatCurrency(totalValueAll)
+    ]);
+
+    autoTable(doc, {
+      head: [['Estágio', 'Qtd', 'Valor Total']],
+      body: tableBody,
+      startY: 45,
+      theme: 'grid',
+      headStyles: { fillColor: [41, 128, 185] },
+      footStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' }
+    });
+
+    // Chart
+    const finalY = (doc as any).lastAutoTable.finalY || 100;
+    const chartStartY = finalY + 20;
+    
+    doc.setFontSize(14);
+    doc.text('Quantidade por Status', 14, chartStartY);
+
+    const chartHeight = 80;
+    const chartWidth = 180;
+    const maxCount = Math.max(...summaryData.map(d => d.count));
+    
+    if (maxCount > 0) {
+        const barWidth = (chartWidth / summaryData.length) - 10;
+        
+        summaryData.forEach((item, index) => {
+            const barHeight = (item.count / maxCount) * chartHeight;
+            const x = 14 + (index * (barWidth + 10));
+            const y = chartStartY + 10 + chartHeight - barHeight;
+            
+            // Color mapping based on stage ID
+            let color: [number, number, number] = [100, 100, 100];
+            if (item.id === 'PROCESSO_INTERNO') color = [107, 114, 128]; // Gray
+            if (item.id === 'ENVIO_PROPOSTA') color = [59, 130, 246]; // Blue
+            if (item.id === 'NEGOCIACAO') color = [245, 158, 11]; // Amber
+            if (item.id === 'GANHO') color = [34, 197, 94]; // Green
+            if (item.id === 'PERDIDO') color = [239, 68, 68]; // Red
+
+            doc.setFillColor(...color); 
+            doc.rect(x, y, barWidth, barHeight, 'F');
+            
+            // Label (Count)
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(10);
+            doc.text(item.count.toString(), x + (barWidth/2), y - 2, { align: 'center' });
+            
+            // Label (Stage Name)
+            doc.setFontSize(8);
+            const splitTitle = doc.splitTextToSize(item.stage, barWidth);
+            doc.text(splitTitle, x + (barWidth/2), chartStartY + 10 + chartHeight + 5, { align: 'center' });
+        });
+    } else {
+        doc.setFontSize(10);
+        doc.text('Sem dados para exibir no gráfico.', 14, chartStartY + 20);
+    }
+
+    doc.save(`Resumo_Funil_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
+  const handleGenerateAIInsights = async () => {
+    setAiLoading(true);
+    setAiInsights(null);
+    setShowAIModal(true);
+    
+    // Coletar todos os itens do pipeline para análise
+    const allPipelineItems: Sale[] = [];
+    STAGES.forEach(stage => {
+        const col = pipelineColumns[stage.id];
+        if (col && col.items) {
+            allPipelineItems.push(...col.items);
+        }
+    });
+
+    // Calcular métricas básicas para a IA
+    const totalValue = allPipelineItems.reduce((acc, item) => acc + (Number(item.ITP_RE_VALORMERCADORIA) || 0), 0);
+    const wonValue = pipelineColumns.GANHO.items.reduce((acc, item) => acc + (Number(item.ITP_RE_VALORMERCADORIA) || 0), 0);
+    const lostValue = pipelineColumns.PERDIDO.items.reduce((acc, item) => acc + (Number(item.ITP_RE_VALORMERCADORIA) || 0), 0);
+    
+    const aiMetrics = {
+        total: totalValue,
+        won: wonValue,
+        lost: lostValue,
+        count: allPipelineItems.length,
+        conversionRate: (wonValue + lostValue) > 0 ? (wonValue / (wonValue + lostValue)) * 100 : 0
+    };
+
+    try {
+        const insight = await generateSalesInsights(
+            allPipelineItems, 
+            "CRM / Funil de Vendas", 
+            aiMetrics
+        );
+        setAiInsights(insight);
+    } catch (error) {
+        setAiInsights("Erro ao gerar insights. Verifique sua conexão ou chave de API.");
+    } finally {
+        setAiLoading(false);
+    }
+  };
+
+  // Lista de OVs para Follow-up (exclui ganhos/perdidos)
+  const followUpList = useMemo(() => {
+     // Pega todos os itens que NÃO estão ganhos nem perdidos
+     // Safeguard para garantir que items existam
+     const processoInterno = pipelineColumns.PROCESSO_INTERNO?.items || [];
+     const envioProposta = pipelineColumns.ENVIO_PROPOSTA?.items || [];
+     const negociacao = pipelineColumns.NEGOCIACAO?.items || [];
+
+     const activeItems = [...processoInterno, ...envioProposta, ...negociacao];
+     
+     if (searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        return activeItems.filter(i => 
+            String(i.CLIENTE_NOME).toLowerCase().includes(lower) || 
+            String(i.PED_IN_CODIGO).includes(lower)
+        );
+     }
+     return activeItems.sort((a,b) => b.TOTAL_VALOR - a.TOTAL_VALOR);
+  }, [pipelineColumns, searchTerm]);
+
+  // Filtra a lista de histórico (appointments) baseado na busca
+  const historyList = useMemo(() => {
+      if (!searchTerm) return filteredAppointments.sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
+      
+      const lower = searchTerm.toLowerCase();
+      return filteredAppointments.filter(a => 
+          String(a.client_name).toLowerCase().includes(lower) ||
+          String(a.description).toLowerCase().includes(lower) ||
+          String(a.title).toLowerCase().includes(lower)
+      ).sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
+  }, [filteredAppointments, searchTerm]);
+
+  // Recupera os itens do pedido selecionado
+  const selectedOrderItems = useMemo(() => {
+    if (!selectedOrder) return [];
+    return (data || []).filter(d => d.PED_IN_CODIGO === selectedOrder.PED_IN_CODIGO && d.SER_ST_CODIGO === selectedOrder.SER_ST_CODIGO);
+  }, [selectedOrder, data]);
+
+  // Recupera histórico de follow-ups do pedido selecionado
+  const selectedOrderFollowUps = useMemo(() => {
+    if (!selectedOrder) return [];
+    const orderTag = `[FOLLOW-UP ORÇAMENTO #${selectedOrder.PED_IN_CODIGO}]`;
+    
+    return appointments.filter(appt => {
+        // 1. Se tem a tag específica deste pedido, SEMPRE mostra
+        if (appt.description?.includes(orderTag)) return true;
+        
+        // 2. Se tem tag de OUTRO pedido, NUNCA mostra aqui (mesmo que o nome/ID coincida)
+        if (appt.description?.includes('[FOLLOW-UP ORÇAMENTO #') && !appt.description.includes(orderTag)) return false;
+
+        // 3. Se não tem tag de pedido, usa lógica de ID / Nome
+        const matchesId = appt.client_id === Number(selectedOrder.CLI_IN_CODIGO);
+        const matchesName = !appt.client_id && appt.client_name === selectedOrder.CLIENTE_NOME;
+        
+        return matchesId || matchesName;
+    }).sort((a,b) => new Date(b.start_date + 'T' + b.start_time).getTime() - new Date(a.start_date + 'T' + a.start_time).getTime());
+  }, [selectedOrder, appointments]);
+
+  const onDragEnd = (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) {
+      return;
+    }
+
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    const startStageId = source.droppableId;
+    const finishStageId = destination.droppableId;
+
+    if (startStageId === finishStageId) {
+      return;
+    }
+
+    // Find the order being moved
+    const startColumn = pipelineColumns[startStageId];
+    // draggableId is constructed as `${item.PED_IN_CODIGO}`
+    const orderId = Number(draggableId);
+    const order = startColumn.items.find(i => i.PED_IN_CODIGO === orderId);
+
+    if (order) {
+        handleMoveStage(order, finishStageId);
+    }
+  };
+
+  // Função para mover card entre etapas
+  const handleMoveStage = async (order: any, newStageId: string) => {
+    if (!order) return;
+    
+    // Mapeamento inverso: ID da Coluna -> Texto para salvar no Banco
+    let newStatusText = '';
+    switch (newStageId) {
+        case 'PROCESSO_INTERNO': newStatusText = 'EM APROVAÇÃO (INTERNO)'; break;
+        case 'ENVIO_PROPOSTA': newStatusText = 'PROPOSTA ENVIADA'; break;
+        case 'NEGOCIACAO': newStatusText = 'EM NEGOCIAÇÃO'; break;
+        case 'GANHO': newStatusText = 'ENCERRADO'; break;
+        case 'PERDIDO': newStatusText = 'CANCELADO / PERDIDO'; break;
+        default: newStatusText = 'EM ABERTO';
+    }
+
+    setMovingOrder(String(order.PED_IN_CODIGO));
+    
+    try {
+        const keys = { 
+            fil: Number(order.FIL_IN_CODIGO), 
+            ser: String(order.SER_ST_CODIGO).trim(), 
+            ped: Number(order.PED_IN_CODIGO) 
+        };
+        
+        await updateOrderStatus(keys, newStatusText);
+
+        // --- GERAÇÃO AUTOMÁTICA DE FOLLOW-UP ---
+        const oldStatus = order.PED_ST_STATUS || 'STATUS ANTERIOR';
+        const now = new Date();
+        const autoFollowUp: CRMAppointment = {
+            id: '', // Supabase/Service gera o ID
+            title: `Mudança de Status: ${newStatusText}`,
+            client_id: Number(order.CLI_IN_CODIGO),
+            client_name: order.CLIENTE_NOME,
+            rep_in_codigo: Number(order.REP_IN_CODIGO),
+            start_date: getLocalISODate(now),
+            end_date: getLocalISODate(now),
+            start_time: now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+            end_time: now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+            activity_type: 'COMPROMISSO', // Tipo neutro para log de sistema
+            priority: 'BAIXA',
+            status: 'CONCLUIDO',
+            recurrence: 'UNICO',
+            description: `[FOLLOW-UP ORÇAMENTO #${order.PED_IN_CODIGO}] Mudança de status de ${oldStatus} para ${newStatusText}`,
+            req_confirmation: false,
+            notify_email: false,
+            hide_appointment: false
+        };
+        
+        await upsertCRMAppointment(autoFollowUp);
+        // ---------------------------------------
+        
+        if (onRefresh) {
+            await onRefresh();
+        }
+        
+        // Se estiver com modal aberto, atualiza o objeto local
+        if (selectedOrder && selectedOrder.PED_IN_CODIGO === order.PED_IN_CODIGO) {
+            setSelectedOrder({ ...selectedOrder, PED_ST_STATUS: newStatusText });
+            // Recarrega appointments para aparecer no modal
+            loadAppointments();
+        }
+
+    } catch (error) {
+        console.error('Erro ao mover etapa:', error);
+    } finally {
+        setMovingOrder(null);
+    }
+  };
+
+  const handleToggleHot = async (order: any) => {
+      if (!order) return;
+      const newVal = !order.IS_HOT;
+      
+      // ATUALIZAÇÃO OTIMISTA (Optimistic UI)
+      // Atualiza visualmente imediatamente para melhor experiência
+      if (selectedOrder) {
+          setSelectedOrder({ ...selectedOrder, IS_HOT: newVal });
+      }
+
+      setTogglingHot(true);
+      try {
+          const keys = { 
+            fil: Number(order.FIL_IN_CODIGO), 
+            ser: String(order.SER_ST_CODIGO).trim(), 
+            ped: Number(order.PED_IN_CODIGO) 
+          };
+          
+          await updateOrderHotStatus(keys, newVal);
+          
+          if (onRefresh) {
+              await onRefresh();
+          }
+          
+      } catch (error: any) {
+          console.error("Erro ao atualizar Hot Lead:", error);
+          const msg = error.message || '';
+          
+          // Se o erro for de schema/coluna inexistente, mantemos o estado otimista
+          // e apenas logamos o aviso (ou mostramos toast sutil) em vez de alert/revert.
+          if (msg.includes('schema cache') || msg.includes('column') || msg.includes('is_hot')) {
+             console.warn("Aviso: Coluna 'is_hot' ausente no DB. Estado mantido visualmente.");
+          } else {
+             // Se for outro erro (rede, etc), revertemos
+             if (selectedOrder) {
+                 setSelectedOrder({ ...selectedOrder, IS_HOT: !newVal });
+             }
+             console.error('Erro ao salvar status:', msg);
+          }
+      } finally {
+          setTogglingHot(false);
+      }
+  };
+
+  const handleSaveEvent = async () => {
+      if (!newEvent.title || !newEvent.start_date || !newEvent.start_time) {
+          console.warn('Preencha os campos obrigatórios (*)');
+          return;
+      }
+      
+      const payload = { ...newEvent } as CRMAppointment;
+      await upsertCRMAppointment(payload);
+      setShowEventModal(false);
+      loadAppointments();
+      setNewEvent({
+        req_confirmation: false, notify_email: true, hide_appointment: false,
+        recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
+        start_date: getLocalISODate(),
+        end_date: getLocalISODate(),
+        start_time: '09:00', end_time: '10:00',
+        attachments: []
+      });
+  };
+
+  const handleRegisterFollowUp = async () => {
+      if (!followUpData.order) return;
+      if (!followUpData.notes) {
+          console.warn("Digite uma nota sobre o follow-up.");
+          return;
+      }
+      if (!followUpData.date || !followUpData.time) {
+          console.warn("Data e hora são obrigatórios.");
+          return;
+      }
+
+      const historyEntry: CRMAppointment = {
+          id: editingFollowUpId || '', // Se tiver ID, usa ele para update
+          title: `Follow-up: ${followUpData.order.CLIENTE_NOME}`,
+          start_date: followUpData.date,
+          end_date: followUpData.date,
+          start_time: followUpData.time,
+          end_time: followUpData.time,
+          activity_type: followUpData.type,
+          priority: 'MEDIA',
+          status: 'CONCLUIDO', // Importante: Já nasce concluído
+          recurrence: 'UNICO',
+          description: `[FOLLOW-UP ORÇAMENTO #${followUpData.order.PED_IN_CODIGO}] ${followUpData.notes}`,
+          client_name: followUpData.order.CLIENTE_NOME,
+          client_id: Number(followUpData.order.CLI_IN_CODIGO),
+          rep_in_codigo: Number(followUpData.order.REP_IN_CODIGO),
+          req_confirmation: false, 
+          notify_email: false, 
+          hide_appointment: false
+      };
+
+      try {
+          await upsertCRMAppointment(historyEntry);
+          setShowFollowUpModal(false);
+          setFollowUpData({ 
+              type: 'TELEFONEMA', 
+              notes: '', 
+              date: getLocalISODate(),
+              time: new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}),
+              order: null 
+          });
+          setEditingFollowUpId(null);
+          loadAppointments(); // Recarrega para aparecer na timeline
+          console.log(editingFollowUpId ? "Follow-up atualizado com sucesso!" : "Follow-up registrado com sucesso!");
+      } catch (e) {
+          console.error("Erro ao salvar follow-up:", e);
+      }
+  };
+
+  const handleEditFollowUp = (appt: CRMAppointment) => {
+      if (selectedOrder) {
+          // Edição via Modal do Pedido
+          const cleanNotes = (appt.description || '').replace(`[FOLLOW-UP ORÇAMENTO #${selectedOrder.PED_IN_CODIGO}] `, '').trim();
+          setFollowUpData({
+              type: appt.activity_type as any,
+              notes: cleanNotes,
+              date: appt.start_date,
+              time: appt.start_time,
+              order: selectedOrder
+          });
+          setEditingFollowUpId(appt.id);
+          setShowFollowUpModal(true);
+      } else {
+          // Edição via Lista Geral (Se necessário futuramente)
+      }
+  };
+
+  const handleDeleteClick = (id: string) => {
+      setDeleteFollowUpId(id);
+  };
+
+  const confirmDeleteFollowUp = async () => {
+      if (!deleteFollowUpId) return;
+      try {
+          await deleteCRMAppointment(deleteFollowUpId);
+          loadAppointments();
+      } catch (e) {
+          console.error("Erro ao excluir registro:", e);
+      } finally {
+          setDeleteFollowUpId(null);
+      }
+  };
+
+  const openFollowUpModal = (order: PipelineItem) => {
+      const now = new Date();
+      setFollowUpData({ 
+          type: 'TELEFONEMA', 
+          notes: '', 
+          date: getLocalISODate(now),
+          time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+          order 
+      });
+      setEditingFollowUpId(null); // Garante modo de criação
+      setShowFollowUpModal(true);
+  };
+
+  // --- LÓGICA DA CARTEIRA DE CLIENTES ---
+  const clientsWallet = useMemo(() => {
+    const map = new Map<number, ClientWalletItem>();
+    // Safeguard para evitar erro de leitura de length se salesData for undefined
+    const safeSalesData = Array.isArray(salesData) ? salesData : [];
+    const safeData = Array.isArray(data) ? data : [];
+    const sourceData = safeSalesData.length > 0 ? safeSalesData : safeData;
+
+    // Criar um mapa de CNPJs a partir dos customers para enriquecimento
+    const cnpjMap = new Map<number, string>();
+    if (customers) {
+      customers.forEach(c => {
+        if (c.agn_in_codigo && c.agn_st_cgc) {
+          cnpjMap.set(c.agn_in_codigo, c.agn_st_cgc);
+        }
+      });
+    }
+
+    sourceData.forEach(sale => {
+      const cliId = Number(sale.CLI_IN_CODIGO);
+      if (!cliId) return;
+
+      const isOrder = sale.SER_ST_CODIGO !== 'OV';
+
+      if (!map.has(cliId)) {
+        map.set(cliId, {
+          id: cliId,
+          name: sale.CLIENTE_NOME || 'DESCONHECIDO',
+          cnpj: cnpjMap.get(cliId),
+          totalSpent: 0,
+          ordersCount: 0,
+          lastPurchaseDate: isOrder ? sale.PED_DT_EMISSAO : '',
+          repName: sale.REPRESENTANTE_NOME,
+          history: [] 
+        });
+      }
+
+      const client = map.get(cliId)!;
+      
+      if (isOrder) {
+        const val = Number(sale.ITP_RE_VALORMERCADORIA || 0);
+        client.totalSpent += val;
+        client.ordersCount += 1;
+        
+        if (!client.lastPurchaseDate || sale.PED_DT_EMISSAO > client.lastPurchaseDate) {
+          client.lastPurchaseDate = sale.PED_DT_EMISSAO;
+        }
+      }
+      
+      client.history.push(sale);
+    });
+
+    let clientsList = Array.from(map.values());
+
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      clientsList = clientsList.filter(c => 
+        String(c.name).toLowerCase().includes(lower) || 
+        String(c.id).includes(lower)
+      );
+    }
+
+    return clientsList.sort((a, b) => b.totalSpent - a.totalSpent);
+  }, [salesData, data, searchTerm]);
+
+  const allClientsList = useMemo(() => {
+    const map = new Map<number, { id: number, name: string, cnpj?: string, repName?: string }>();
+    
+    // Add from customers list (authoritative portfolio)
+    if (customers && customers.length > 0) {
+      customers.forEach(c => {
+        const rep = uniqueReps.find(r => r.id === String(c.rep_agn_in_codigo));
+        map.set(c.agn_in_codigo, { 
+          id: c.agn_in_codigo, 
+          name: c.agn_st_nome, 
+          cnpj: c.agn_st_cgc,
+          repName: rep?.name
+        });
+      });
+    }
+    
+    // Add from clientsWallet (historical/orders)
+    clientsWallet.forEach(c => {
+      if (!map.has(c.id)) {
+        map.set(c.id, { id: c.id, name: c.name, cnpj: c.cnpj, repName: c.repName });
+      } else {
+        const existing = map.get(c.id)!;
+        if (!existing.repName) existing.repName = c.repName;
+      }
+    });
+    
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers, clientsWallet, uniqueReps]);
+
+  const filteredClientsForTask = useMemo(() => {
+    if (!clientSearchTerm || clientSearchTerm.length < 2) return [];
+    const lower = clientSearchTerm.toLowerCase();
+    return allClientsList.filter(c => 
+      c.name.toLowerCase().includes(lower) ||
+      String(c.id).includes(lower)
+    ).slice(0, 10);
+  }, [clientSearchTerm, allClientsList]);
+
+  return (
+    <div className="h-full flex flex-col bg-gray-50 animate-in fade-in duration-300">
+      {/* Header CRM */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-rose-600 text-white rounded-lg shadow-sm">
+            <Users size={20} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-widest">CRM Operacional</h2>
+            <p className="text-[10px] text-gray-500">Gestão de Relacionamento e Oportunidades</p>
+          </div>
+        </div>
+
+        <div className="flex bg-gray-100 p-1 rounded-md border border-gray-200 w-full sm:w-auto overflow-x-auto no-scrollbar">
+          <div className="flex min-w-max">
+            <button 
+              onClick={() => setActiveTab('COCKPIT')}
+              className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'COCKPIT' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <LayoutGrid size={14} /> Cockpit
+            </button>
+            <button 
+              onClick={() => setActiveTab('PIPELINE')}
+              className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'PIPELINE' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <Kanban size={14} /> Pipeline
+            </button>
+            <button 
+              onClick={() => setActiveTab('FOLLOWUP')}
+              className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'FOLLOWUP' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <History size={14} /> Follow-up
+            </button>
+            <button 
+              onClick={() => setActiveTab('AGENDA')}
+              className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'AGENDA' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <Calendar size={14} /> Agenda
+            </button>
+            <button 
+              onClick={() => setActiveTab('TAREFAS')}
+              className={`px-3 sm:px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all ${activeTab === 'TAREFAS' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              <LayoutList size={14} /> Tarefas
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Conteúdo Principal */}
+      <div className="flex-1 overflow-hidden p-4">
+        
+        {activeTab === 'COCKPIT' && (
+          <div className="h-full flex flex-col gap-4 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {/* Toolbar de Filtros do Cockpit (Igual ao Pipeline) */}
+            <div className="bg-white border border-gray-200 p-2 shadow-sm rounded-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0 animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center gap-2 mr-2">
+                    <Filter size={14} className="text-gray-400" />
+                    <span className="text-[10px] font-bold uppercase text-gray-500 tracking-widest">Filtros</span>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                    <select 
+                        className="bg-gray-50 border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                        value={pipelineFilters.rep}
+                        onChange={(e) => updateFilters({ rep: e.target.value })}
+                    >
+                        <option value="">Todos Representantes</option>
+                        {uniqueReps.map(r => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                    </select>
+
+                    <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-2 py-1.5 w-full sm:w-auto">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Nº:</span>
+                        <input 
+                            type="text" 
+                            placeholder="Orçamento..."
+                            className="bg-transparent text-[10px] outline-none w-20"
+                            value={pipelineFilters.orderNumber}
+                            onChange={(e) => updateFilters({ orderNumber: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-2 py-1.5 w-full sm:w-auto overflow-x-auto">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                        <input 
+                            type="date" 
+                            className="bg-transparent text-[10px] outline-none w-24"
+                            value={pipelineFilters.startDate}
+                            onChange={(e) => updateFilters({ startDate: e.target.value })}
+                        />
+                        <span className="text-gray-300 shrink-0">-</span>
+                        <input 
+                            type="date" 
+                            className="bg-transparent text-[10px] outline-none w-24"
+                            value={pipelineFilters.endDate}
+                            onChange={(e) => updateFilters({ endDate: e.target.value })}
+                        />
+                    </div>
+                </div>
+
+                <button 
+                    onClick={() => updateFilters({ onlyHot: !pipelineFilters.onlyHot })}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-sm border text-[10px] font-bold uppercase tracking-widest transition-all ${
+                        pipelineFilters.onlyHot 
+                        ? 'bg-orange-50 border-orange-200 text-orange-600' 
+                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}
+                >
+                    <Flame size={12} className={pipelineFilters.onlyHot ? 'fill-orange-600' : ''} />
+                    Só Quentes
+                </button>
+
+                <button 
+                    onClick={handleExportPipeline}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-green-200 bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-widest hover:bg-green-100 transition-colors ml-auto md:ml-0"
+                    title="Exportar Funil para Excel"
+                >
+                    <FileSpreadsheet size={12} />
+                    Exportar Funil
+                </button>
+
+                <button 
+                    onClick={handleExportSummaryPDF}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest hover:bg-blue-100 transition-colors"
+                    title="Exportar Resumo em PDF"
+                >
+                    <FileText size={12} />
+                    Resumo PDF
+                </button>
+
+                <button 
+                    onClick={handleGenerateAIInsights}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-amber-200 bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-widest hover:bg-amber-100 transition-colors"
+                    title="Análise de IA do Funil"
+                >
+                    <Sparkles size={12} className="text-amber-500" />
+                    Análise IA
+                </button>
+
+                {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.onlyHot || pipelineFilters.orderNumber) && (
+                    <button 
+                        onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', onlyHot: false, orderNumber: '' })}
+                        className="ml-auto text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                        title="Limpar Filtros"
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+
+            {/* KPIs do Cockpit */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm relative overflow-hidden group">
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><TrendingUp size={48} /></div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total em Negociação</p>
+                <h3 className="text-2xl font-black text-gray-900 tracking-tighter">
+                  {formatCurrency(
+                    pipelineColumns.PROCESSO_INTERNO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0) +
+                    pipelineColumns.ENVIO_PROPOSTA.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0) +
+                    pipelineColumns.NEGOCIACAO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0)
+                  )}
+                </h3>
+                <p className="text-[9px] text-gray-500 mt-1 font-medium">Soma das colunas ativas do funil</p>
+              </div>
+
+              <div className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm relative overflow-hidden group">
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle2 size={48} /></div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Taxa de Conversão (Valor)</p>
+                <h3 className="text-2xl font-black text-green-600 tracking-tighter">
+                  {(() => {
+                    const activeVal = 
+                      pipelineColumns.PROCESSO_INTERNO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0) +
+                      pipelineColumns.ENVIO_PROPOSTA.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0) +
+                      pipelineColumns.NEGOCIACAO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
+                    const wonVal = pipelineColumns.GANHO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
+                    const total = activeVal + wonVal;
+                    return total > 0 ? ((wonVal / total) * 100).toFixed(1) : '0.0';
+                  })()}%
+                </h3>
+                <p className="text-[9px] text-gray-500 mt-1 font-medium">Aberto/Aprovação vs Ganho</p>
+              </div>
+
+              <div className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm relative overflow-hidden group">
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><ShoppingBag size={48} /></div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Ticket Médio (Funil)</p>
+                <h3 className="text-2xl font-black text-blue-600 tracking-tighter">
+                  {(() => {
+                    const allItems = [...pipelineColumns.PROCESSO_INTERNO.items, ...pipelineColumns.ENVIO_PROPOSTA.items, ...pipelineColumns.NEGOCIACAO.items, ...pipelineColumns.GANHO.items];
+                    const totalVal = allItems.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
+                    return formatCurrency(allItems.length > 0 ? totalVal / allItems.length : 0);
+                  })()}
+                </h3>
+                <p className="text-[9px] text-gray-500 mt-1 font-medium">Média por oportunidade no funil</p>
+              </div>
+
+              <div className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm relative overflow-hidden group">
+                <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Flame size={48} /></div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Oportunidades Quentes</p>
+                <h3 className="text-2xl font-black text-rose-600 tracking-tighter">
+                  {[...pipelineColumns.PROCESSO_INTERNO.items, ...pipelineColumns.ENVIO_PROPOSTA.items, ...pipelineColumns.NEGOCIACAO.items].filter(i => i.IS_HOT).length}
+                </h3>
+                <p className="text-[9px] text-gray-500 mt-1 font-medium">Marcadas como prioridade alta</p>
+              </div>
+            </div>
+
+            {/* Visualização do Funil e Gráficos Adicionais */}
+            <div className="grid grid-cols-1 gap-4">
+              <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-6">
+                <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 flex items-center gap-2">
+                    <LayoutGrid size={16} className="text-rose-600" /> Funil de Vendas (Volume)
+                  </h3>
+                </div>
+
+                <div className="h-[300px] min-h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <BarChart
+                      layout="vertical"
+                      data={STAGES.map(s => ({
+                        name: s.label,
+                        value: pipelineColumns[s.id].items.length,
+                        amount: pipelineColumns[s.id].items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0),
+                        color: s.id === 'GANHO' ? '#22c55e' : s.id === 'PERDIDO' ? '#ef4444' : s.id === 'NEGOCIACAO' ? '#f59e0b' : s.id === 'ENVIO_PROPOSTA' ? '#3b82f6' : '#6b7280'
+                      }))}
+                      margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis 
+                        dataKey="name" 
+                        type="category" 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fontSize: 9, fontWeight: 'bold', fill: '#6b7280' }}
+                        width={window.innerWidth < 640 ? 70 : 100}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: 'transparent' }}
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-white p-3 border border-gray-200 shadow-xl rounded-sm">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">{data.name}</p>
+                                <p className="text-xs font-bold text-gray-900">{data.value} Oportunidades</p>
+                                <p className="text-[10px] font-bold text-rose-600">{formatCurrency(data.amount)}</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
+                        {STAGES.map((s, index) => (
+                          <Cell key={`cell-${index}`} fill={
+                            s.id === 'GANHO' ? '#22c55e' : 
+                            s.id === 'PERDIDO' ? '#ef4444' : 
+                            s.id === 'NEGOCIACAO' ? '#f59e0b' : 
+                            s.id === 'ENVIO_PROPOSTA' ? '#3b82f6' : '#6b7280'
+                          } />
+                        ))}
+                        <LabelList dataKey="value" position="right" style={{ fontSize: 9, fontWeight: 'bold', fill: '#111827' }} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 shadow-sm rounded-sm p-6">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-8 flex items-center gap-2">
+                  <PieChart size={16} className="text-blue-600" /> Distribuição por Representante
+                </h3>
+                <div className="h-[300px] min-h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+                    <RePieChart>
+                      <Pie
+                        data={(() => {
+                          const repMap = new Map<string, number>();
+                          [...pipelineColumns.PROCESSO_INTERNO.items, ...pipelineColumns.ENVIO_PROPOSTA.items, ...pipelineColumns.NEGOCIACAO.items].forEach(i => {
+                            const name = i.REPRESENTANTE_NOME || 'Outros';
+                            repMap.set(name, (repMap.get(name) || 0) + i.TOTAL_VALOR);
+                          });
+                          return Array.from(repMap.entries())
+                            .map(([name, value]) => ({ name, value }))
+                            .sort((a, b) => b.value - a.value)
+                            .slice(0, 5);
+                        })()}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={window.innerWidth < 640 ? 40 : 60}
+                        outerRadius={window.innerWidth < 640 ? 60 : 80}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {['#1a2130', '#3b82f6', '#f59e0b', '#22c55e', '#ef4444'].map((color, index) => (
+                          <Cell key={`cell-${index}`} fill={color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: number) => formatCurrency(value)}
+                        contentStyle={{ fontSize: '10px', fontWeight: 'bold', borderRadius: '4px' }}
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={36} 
+                        iconType="circle"
+                        formatter={(value) => <span className="text-[9px] sm:text-[10px] font-bold uppercase text-gray-500 tracking-tight">{value}</span>}
+                      />
+                    </RePieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 bg-white border border-gray-200 shadow-sm rounded-sm p-6">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-6 flex items-center gap-2">
+                  <TrendingUp size={16} className="text-green-600" /> Conversão entre Etapas
+                </h3>
+                <div className="space-y-4 sm:space-y-6">
+                  {STAGES.slice(0, -1).map((stage, idx) => {
+                    const currentCount = pipelineColumns[stage.id].items.length;
+                    const nextStage = STAGES[idx + 1];
+                    const nextCount = pipelineColumns[nextStage.id].items.length;
+                    const conversion = currentCount > 0 ? (nextCount / currentCount) * 100 : 0;
+                    
+                    return (
+                      <div key={stage.id} className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
+                        <div className="flex justify-between w-full sm:w-32 sm:text-right">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter sm:block">{stage.label}</p>
+                          <p className="text-xs font-black text-gray-900">{currentCount}</p>
+                        </div>
+                        <div className="flex-1 flex items-center gap-2 w-full">
+                          <div className="h-1 flex-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-rose-500 opacity-20" style={{ width: '100%' }}></div>
+                          </div>
+                          <div className="px-3 py-1 bg-rose-50 border border-rose-100 rounded-full shrink-0">
+                            <span className="text-[10px] font-black text-rose-600">{conversion.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1 flex-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-rose-500 opacity-20" style={{ width: '100%' }}></div>
+                          </div>
+                        </div>
+                        <div className="flex justify-between w-full sm:w-32 sm:text-left">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter sm:block">{nextStage.label}</p>
+                          <p className="text-xs font-black text-gray-900">{nextCount}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'PIPELINE' && (
+          <div className="h-full flex flex-col gap-2">
+            {/* Toolbar de Filtros do Pipeline */}
+            <div className="bg-white border border-gray-200 p-2 shadow-sm rounded-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0 animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-center gap-2 mr-2">
+                    <Filter size={14} className="text-gray-400" />
+                    <span className="text-[10px] font-bold uppercase text-gray-500 tracking-widest">Filtros</span>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                    <select 
+                        className="bg-gray-50 border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                        value={pipelineFilters.rep}
+                        onChange={(e) => updateFilters({ rep: e.target.value })}
+                    >
+                        <option value="">Todos Representantes</option>
+                        {uniqueReps.map(r => (
+                            <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                    </select>
+
+                    <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-2 py-1.5 w-full sm:w-auto">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Nº:</span>
+                        <input 
+                            type="text" 
+                            placeholder="Orçamento..."
+                            className="bg-transparent text-[10px] outline-none w-20"
+                            value={pipelineFilters.orderNumber}
+                            onChange={(e) => updateFilters({ orderNumber: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-gray-50 px-2 py-1.5 w-full sm:w-auto overflow-x-auto">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                        <input 
+                            type="date" 
+                            className="bg-transparent text-[10px] outline-none w-24"
+                            value={pipelineFilters.startDate}
+                            onChange={(e) => updateFilters({ startDate: e.target.value })}
+                        />
+                        <span className="text-gray-300 shrink-0">-</span>
+                        <input 
+                            type="date" 
+                            className="bg-transparent text-[10px] outline-none w-24"
+                            value={pipelineFilters.endDate}
+                            onChange={(e) => updateFilters({ endDate: e.target.value })}
+                        />
+                    </div>
+                </div>
+
+                <button 
+                    onClick={() => updateFilters({ onlyHot: !pipelineFilters.onlyHot })}
+                    className={`flex items-center gap-1 px-3 py-1 rounded-sm border text-[10px] font-bold uppercase tracking-widest transition-all ${
+                        pipelineFilters.onlyHot 
+                        ? 'bg-orange-50 border-orange-200 text-orange-600' 
+                        : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}
+                >
+                    <Flame size={12} className={pipelineFilters.onlyHot ? 'fill-orange-600' : ''} />
+                    Só Quentes
+                </button>
+
+                <button 
+                    onClick={handleExportPipeline}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-green-200 bg-green-50 text-green-700 text-[10px] font-bold uppercase tracking-widest hover:bg-green-100 transition-colors ml-auto md:ml-0"
+                    title="Exportar Funil para Excel"
+                >
+                    <FileSpreadsheet size={12} />
+                    Exportar Funil
+                </button>
+
+                <button 
+                    onClick={handleExportSummaryPDF}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest hover:bg-blue-100 transition-colors"
+                    title="Exportar Resumo em PDF"
+                >
+                    <FileText size={12} />
+                    Resumo PDF
+                </button>
+
+                <button 
+                    onClick={handleGenerateAIInsights}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-amber-200 bg-amber-50 text-amber-700 text-[10px] font-bold uppercase tracking-widest hover:bg-amber-100 transition-colors"
+                    title="Análise de IA do Funil"
+                >
+                    <Sparkles size={12} className="text-amber-500" />
+                    Análise IA
+                </button>
+
+                <button 
+                    onClick={checkAutoRules}
+                    className="flex items-center gap-1 px-3 py-1 rounded-sm border border-purple-200 bg-purple-50 text-purple-700 text-[10px] font-bold uppercase tracking-widest hover:bg-purple-100 transition-colors"
+                    title="Automações Inteligentes"
+                >
+                    <Bot size={12} className="text-purple-500" />
+                    Automações
+                </button>
+
+
+                {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.onlyHot || pipelineFilters.orderNumber) && (
+                    <button 
+                        onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', onlyHot: false, orderNumber: '' })}
+                        className="ml-auto text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                        title="Limpar Filtros"
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+
+            <DragDropContext onDragEnd={onDragEnd}>
+              <div className="flex-1 flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
+                {STAGES.map((stage, stageIndex) => {
+                  const col = pipelineColumns[stage.id];
+                  return (
+                    <div key={stage.id} className="flex-1 min-w-[280px] max-w-[350px] flex flex-col h-full">
+                      <div className={`p-3 rounded-t-md border-t-4 bg-white border-x border-b border-gray-200 shadow-sm mb-3 flex justify-between items-center ${col.color}`}>
+                        <div className="flex items-center gap-2">
+                          <col.icon size={14} className="text-gray-400" />
+                          <h3 className="text-[11px] font-bold uppercase text-gray-700">{col.title}</h3>
+                        </div>
+                        <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[9px] font-bold">
+                          {col.items.length}
+                        </span>
+                      </div>
+                      
+                      <Droppable droppableId={stage.id}>
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            className={`flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 ${snapshot.isDraggingOver ? 'bg-gray-50/50' : ''}`}
+                          >
+                            {col.items.map((item, idx) => (
+                              <Draggable
+                                // @ts-ignore
+                                key={`${item.PED_IN_CODIGO}`}
+                                draggableId={`${item.PED_IN_CODIGO}`}
+                                index={idx}
+                              >
+                                {(provided, snapshot) => (
+                                  <div 
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    style={{ ...provided.draggableProps.style }}
+                                    onClick={() => { setSelectedOrder(item); setModalTab('ITENS'); }}
+                                    className={`p-3 rounded shadow-sm hover:shadow-md transition-all cursor-pointer group relative overflow-hidden
+                                      ${movingOrder === String(item.PED_IN_CODIGO) ? 'opacity-50 pointer-events-none' : ''}
+                                      ${item.IS_HOT ? 'bg-orange-50/30 border-2 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)]' : 'bg-white border border-gray-200'}
+                                      ${snapshot.isDragging ? 'rotate-2 scale-105 shadow-xl z-50' : ''}
+                                    `}
+                                  >
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${col.bg.replace('bg-', 'bg-').replace('50', '500')}`}></div>
+                                    <div className="pl-2">
+                                      <div className="flex justify-between items-start mb-2">
+                                        <span className="text-[9px] font-mono text-gray-400">#{item.PED_IN_CODIGO}</span>
+                                        <div className="flex items-center gap-2">
+                                            {item.IS_HOT && <Flame size={12} className="text-orange-500 fill-orange-500 animate-pulse" title="Orçamento Quente" />}
+                                            <span className="text-[9px] font-bold text-gray-400">{formatDate(item.PED_DT_EMISSAO)}</span>
+                                        </div>
+                                      </div>
+                                      <h4 className="text-[11px] font-bold text-gray-900 leading-tight mb-1 line-clamp-2">
+                                        <span className="text-gray-400 mr-1">#{item.CLI_IN_CODIGO}</span>
+                                        {customerCnpjMap.get(Number(item.CLI_IN_CODIGO)) ? `[${customerCnpjMap.get(Number(item.CLI_IN_CODIGO))}] ` : ''}{item.CLIENTE_NOME}
+                                      </h4>
+                                      <p className="text-[10px] text-gray-500 mb-3 truncate">{item.REPRESENTANTE_NOME}</p>
+                                      
+                                      <div className="flex justify-between items-end border-t border-gray-50 pt-2">
+                                        <div>
+                                          <p className="text-[9px] text-gray-400 uppercase">Valor Est.</p>
+                                          <p className="text-sm font-bold text-gray-800">{formatCurrency(item.TOTAL_VALOR)}</p>
+                                        </div>
+                                        
+                                        {/* Quick Move Arrows */}
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                                            {/* WhatsApp Button */}
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const phone = item.CLIENTE_TELEFONE ? item.CLIENTE_TELEFONE.replace(/\D/g, '') : '';
+                                                    if (!phone) {
+                                                        alert('Cliente sem telefone cadastrado.');
+                                                        return;
+                                                    }
+                                                    
+                                                    let message = '';
+                                                    const firstName = item.CLIENTE_NOME.split(' ')[0];
+                                                    
+                                                    if (col.id === 'ENVIO_PROPOSTA') {
+                                                        message = `Olá ${firstName}, tudo bem? Gostaria de saber se teve chance de avaliar a proposta do pedido ${item.PED_IN_CODIGO}?`;
+                                                    } else if (col.id === 'NEGOCIACAO') {
+                                                        message = `Olá ${firstName}, podemos agendar uma conversa rápida sobre os detalhes do pedido ${item.PED_IN_CODIGO}?`;
+                                                    } else {
+                                                        message = `Olá ${firstName}, estou entrando em contato referente ao pedido ${item.PED_IN_CODIGO}.`;
+                                                    }
+                                                    
+                                                    window.open(`https://wa.me/55${phone}?text=${encodeURIComponent(message)}`, '_blank');
+                                                }}
+                                                className="p-1.5 text-green-600 hover:bg-green-50 rounded-full transition-colors mr-1"
+                                                title="Enviar WhatsApp"
+                                            >
+                                                <MessageCircle size={14} />
+                                            </button>
+
+                                            {stageIndex > 0 && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleMoveStage(item, STAGES[stageIndex - 1].id); }}
+                                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900" 
+                                                    title="Mover para Anterior"
+                                                >
+                                                    <ArrowLeft size={12} />
+                                                </button>
+                                            )}
+                                            {stageIndex < STAGES.length - 1 && (
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleMoveStage(item, STAGES[stageIndex + 1].id); }}
+                                                    className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900" 
+                                                    title="Mover para Próximo"
+                                                >
+                                                    <ArrowRight size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
+                            {col.items.length === 0 && (
+                              <div className="h-24 border-2 border-dashed border-gray-200 rounded-md flex items-center justify-center text-gray-300 text-[10px] uppercase font-bold">
+                                Vazio
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </Droppable>
+                      
+                      <div className="mt-2 p-2 bg-white border border-gray-200 rounded shadow-sm text-center">
+                        <p className="text-[9px] text-gray-400 uppercase">Total na Coluna</p>
+                        <p className="text-xs font-bold text-gray-700">
+                          {formatCurrency(col.items.reduce((acc, curr) => acc + curr.TOTAL_VALOR, 0))}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </DragDropContext>
+          </div>
+        )}
+
+        {/* --- FOLLOW UP TAB --- */}
+        {activeTab === 'FOLLOWUP' && (
+            <div className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-sm overflow-hidden animate-in fade-in">
+                <div className="p-3 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                        <div className="relative w-full sm:w-64">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input 
+                                type="text" 
+                                placeholder={followUpViewMode === 'OPPORTUNITIES' ? "Buscar Orçamento..." : "Buscar no Histórico..."}
+                                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-sm text-xs outline-none focus:border-rose-500 transition-colors"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Filtros de Representante e Data (Mesmos do Pipeline) */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                                value={pipelineFilters.rep}
+                                onChange={(e) => updateFilters({ rep: e.target.value })}
+                            >
+                                <option value="">Todos Representantes</option>
+                                {uniqueReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Nº:</span>
+                                <input 
+                                    type="text" 
+                                    placeholder="Orçamento..."
+                                    className="bg-transparent text-[10px] outline-none w-20"
+                                    value={pipelineFilters.orderNumber}
+                                    onChange={(e) => updateFilters({ orderNumber: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.startDate}
+                                    onChange={(e) => updateFilters({ startDate: e.target.value })}
+                                />
+                                <span className="text-gray-300 shrink-0">-</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.endDate}
+                                    onChange={(e) => updateFilters({ endDate: e.target.value })}
+                                />
+                            </div>
+
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.orderNumber) && (
+                                <button 
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', orderNumber: '' })}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    title="Limpar Filtros"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Toggle View Mode */}
+                        <div className="flex bg-gray-100 p-0.5 rounded-sm border border-gray-200 w-full sm:w-auto">
+                            <button 
+                                onClick={() => setFollowUpViewMode('OPPORTUNITIES')}
+                                className={`flex-1 sm:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 transition-all ${followUpViewMode === 'OPPORTUNITIES' ? 'bg-white shadow-sm text-rose-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <LayoutGrid size={12} /> Oportunidades
+                            </button>
+                            <button 
+                                onClick={() => setFollowUpViewMode('HISTORY')}
+                                className={`flex-1 sm:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 transition-all ${followUpViewMode === 'HISTORY' ? 'bg-white shadow-sm text-rose-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <List size={12} /> Histórico
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                        {followUpViewMode === 'OPPORTUNITIES' ? (
+                            <div className="text-[10px] text-gray-500">
+                                Oportunidades em aberto: <strong>{followUpList.length}</strong>
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => handleExportAppointments('Relatorio_FollowUp')}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-green-100 transition-colors"
+                            >
+                                <FileSpreadsheet size={14} /> Exportar Relatório
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-auto custom-scrollbar p-4 bg-gray-50">
+                    {followUpViewMode === 'OPPORTUNITIES' ? (
+                        // MODO: Oportunidades (Cards)
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in">
+                            {followUpList.map((order, idx) => (
+                                <div key={idx} className="bg-white border border-gray-200 rounded shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden group">
+                                    {order.IS_HOT && <div className="absolute top-0 right-0 p-1.5"><Flame size={14} className="text-orange-500 fill-orange-500 animate-pulse" /></div>}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-bold uppercase">#{order.PED_IN_CODIGO}</span>
+                                            <span className="text-[9px] font-bold text-gray-400">{formatDate(order.PED_DT_EMISSAO)}</span>
+                                        </div>
+                                        <h4 className="text-xs font-bold text-gray-900 mb-1 line-clamp-2" title={order.CLIENTE_NOME}>
+                                            <span className="text-gray-400 mr-1">#{order.CLI_IN_CODIGO}</span>
+                                            {customerCnpjMap.get(Number(order.CLI_IN_CODIGO)) ? `[${customerCnpjMap.get(Number(order.CLI_IN_CODIGO))}] ` : ''}{order.CLIENTE_NOME}
+                                        </h4>
+                                        <p className="text-[10px] text-gray-500 mb-4">{order.REPRESENTANTE_NOME}</p>
+                                        
+                                        <div className="flex justify-between items-center py-2 border-t border-gray-50">
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase">Valor</span>
+                                            <span className="text-sm font-bold text-gray-800">{formatCurrency(order.TOTAL_VALOR)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center pb-2">
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase">Status</span>
+                                            <span className="text-[9px] font-bold text-gray-600 uppercase">{order.PED_ST_STATUS || 'ABERTO'}</span>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => openFollowUpModal(order)}
+                                        className="w-full mt-2 py-2 bg-rose-50 text-rose-600 border border-rose-100 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-rose-100 hover:border-rose-200 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <History size={14} /> Registrar Follow-up
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        // MODO: Histórico (Tabela)
+                        <div className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden animate-in fade-in">
+                            {/* Desktop Table View */}
+                            <table className="w-full text-left border-collapse hidden md:table">
+                                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Data / Hora</th>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Cliente</th>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Tipo</th>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Descrição</th>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {historyList.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="p-8 text-center text-gray-400 text-xs uppercase font-bold">Nenhum registro encontrado.</td>
+                                        </tr>
+                                    ) : (
+                                        historyList.map(item => (
+                                            <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="p-3">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-bold text-gray-900">{formatDate(item.start_date)}</span>
+                                                        <span className="text-[9px] text-gray-400">{item.start_time}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className="text-xs font-bold text-gray-800">
+                                                        <span className="text-gray-400 mr-1">#{item.client_id}</span>
+                                                        {item.client_id && customerCnpjMap.get(item.client_id) ? `[${customerCnpjMap.get(item.client_id)}] ` : ''}{item.client_name}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <span className={`px-2 py-0.5 text-[8px] font-bold uppercase rounded-full border ${
+                                                        item.activity_type === 'TELEFONEMA' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                        item.activity_type === 'EMAIL' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
+                                                        item.activity_type === 'REUNIAO' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                                        'bg-gray-50 text-gray-700 border-gray-100'
+                                                    }`}>
+                                                        {item.activity_type}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3 max-w-md">
+                                                    <p className="text-[10px] text-gray-600 line-clamp-2" title={item.description}>{item.description}</p>
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <button 
+                                                        onClick={() => handleDeleteClick(item.id)}
+                                                        className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                                        title="Excluir Registro"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+
+                            {/* Mobile Card View */}
+                            <div className="md:hidden divide-y divide-gray-100">
+                                {historyList.length === 0 ? (
+                                    <div className="p-8 text-center text-gray-400 text-xs uppercase font-bold">Nenhum registro encontrado.</div>
+                                ) : (
+                                    historyList.map(item => (
+                                        <div key={item.id} className="p-4 hover:bg-gray-50 transition-colors">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-bold text-gray-900">{formatDate(item.start_date)}</span>
+                                                    <span className="text-[9px] text-gray-400">{item.start_time}</span>
+                                                </div>
+                                                <span className={`px-2 py-0.5 text-[8px] font-bold uppercase rounded-full border ${
+                                                    item.activity_type === 'TELEFONEMA' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                                                    item.activity_type === 'EMAIL' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
+                                                    item.activity_type === 'REUNIAO' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                                    'bg-gray-50 text-gray-700 border-gray-100'
+                                                }`}>
+                                                    {item.activity_type}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-bold text-gray-800 mb-1">
+                                                {item.client_id && customerCnpjMap.get(item.client_id) ? `[${customerCnpjMap.get(item.client_id)}] ` : ''}{item.client_name}
+                                            </p>
+                                            <p className="text-[10px] text-gray-600 mb-3">{item.description}</p>
+                                            <div className="flex justify-end">
+                                                <button 
+                                                    onClick={() => handleDeleteClick(item.id)}
+                                                    className="text-gray-300 hover:text-red-500 transition-colors p-1 flex items-center gap-1 text-[10px] font-bold uppercase"
+                                                >
+                                                    <Trash2 size={12} /> Excluir
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* AGENDA TAB */}
+        {activeTab === 'AGENDA' && (
+            <div className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-sm overflow-hidden animate-in fade-in">
+                <div className="p-3 border-b bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-700 flex items-center gap-2">
+                            <Calendar size={14} /> Próximos Compromissos
+                        </h3>
+
+                        {/* Filtros de Representante e Data (Mesmos do Pipeline) */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                                value={pipelineFilters.rep}
+                                onChange={(e) => updateFilters({ rep: e.target.value })}
+                            >
+                                <option value="">Todos Representantes</option>
+                                {uniqueReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.startDate}
+                                    onChange={(e) => updateFilters({ startDate: e.target.value })}
+                                />
+                                <span className="text-gray-300 shrink-0">-</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.endDate}
+                                    onChange={(e) => updateFilters({ endDate: e.target.value })}
+                                />
+                            </div>
+
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate) && (
+                                <button 
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '' })}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    title="Limpar Filtros"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Toggle View Mode */}
+                        <div className="flex bg-gray-100 p-0.5 rounded-sm border border-gray-200 w-full sm:w-auto">
+                            <button 
+                                onClick={() => setAgendaViewMode('LIST')}
+                                className={`flex-1 sm:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 transition-all ${agendaViewMode === 'LIST' ? 'bg-white shadow-sm text-rose-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <List size={12} /> Lista
+                            </button>
+                            <button 
+                                onClick={() => setAgendaViewMode('CALENDAR')}
+                                className={`flex-1 sm:flex-none px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 transition-all ${agendaViewMode === 'CALENDAR' ? 'bg-white shadow-sm text-rose-600' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <Calendar size={12} /> Calendário
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        <button 
+                            onClick={() => handleExportAppointments('Relatorio_Agenda')}
+                            className="flex-1 sm:flex-none px-3 py-1.5 bg-green-50 text-green-700 border border-green-200 text-[10px] font-bold uppercase tracking-widest rounded hover:bg-green-100 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            <FileSpreadsheet size={14} /> Exportar
+                        </button>
+                        <button 
+                            onClick={() => {
+                                setEditingEvent(null);
+                                setNewEvent({
+                                    req_confirmation: false, notify_email: true, hide_appointment: false,
+                                    recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
+                                    start_date: getLocalISODate(),
+                                    end_date: getLocalISODate(),
+                                    start_time: '09:00', end_time: '10:00',
+                                    attachments: []
+                                });
+                                setClientSearchTerm('');
+                                setShowClientDropdown(false);
+                                setShowEventModal(true);
+                            }}
+                            className="flex-1 sm:flex-none px-3 py-1.5 bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-rose-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                        >
+                            <Plus size={14} /> Novo
+                        </button>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100">
+                    {agendaViewMode === 'LIST' ? (
+                        <div className="space-y-3">
+                            {filteredAppointments.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                                    <Calendar size={48} className="mb-2 opacity-50" />
+                                    <p className="text-xs font-medium">Nenhum compromisso agendado.</p>
+                                </div>
+                            ) : (
+                                filteredAppointments.map(evt => (
+                                    <div key={evt.id} className="bg-white p-4 rounded border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${evt.priority === 'CRITICA' ? 'bg-red-500' : evt.priority === 'ALTA' ? 'bg-orange-500' : evt.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
+                                        <div className="flex flex-col items-center justify-center p-3 bg-rose-50 rounded border border-rose-100 min-w-[3.5rem] shrink-0">
+                                            <span className="text-xs font-bold text-gray-500 uppercase">{parseLocalDate(evt.start_date).toLocaleDateString('pt-BR', { weekday: 'short' })}</span>
+                                            <span className="text-2xl font-black text-rose-700 leading-none my-0.5">{parseLocalDate(evt.start_date).getDate()}</span>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase">{parseLocalDate(evt.start_date).toLocaleDateString('pt-BR', { month: 'short' })}</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start mb-1">
+                                                <h4 className="text-sm font-bold text-gray-900">{evt.title}</h4>
+                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${evt.status === 'CONCLUIDO' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {evt.status.replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-gray-600 mb-2 flex items-center gap-1">
+                                                <Building2 size={12} className="text-gray-400"/> 
+                                                {evt.client_id && customerCnpjMap.get(evt.client_id) ? `[${customerCnpjMap.get(evt.client_id)}] ` : ''}{evt.client_name || 'Cliente Geral'}
+                                            </p>
+                                            <div className="flex flex-wrap gap-3 text-[10px] text-gray-500">
+                                                <span className="flex items-center gap-1"><Clock size={12} /> {evt.start_time} - {evt.end_time}</span>
+                                                <span className="flex items-center gap-1"><MapPin size={12} /> {evt.location || 'Sem local definido'}</span>
+                                                <span className="flex items-center gap-1"><Flag size={12} /> Prioridade: {evt.priority}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => deleteCRMAppointment(evt.id).then(loadAppointments)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><XCircle size={18}/></button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col lg:flex-row gap-4 h-full animate-in fade-in zoom-in-95 duration-300">
+                            {/* Calendar Card */}
+                            <div className="flex-1 bg-white rounded border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
+                                <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                                    <h4 className="text-xs font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
+                                        <Calendar size={14} className="text-rose-600" />
+                                        {currentCalendarDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                    </h4>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => changeMonth(-1)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-rose-600 transition-colors" title="Mês Anterior"><ArrowLeft size={16}/></button>
+                                        <button onClick={() => setCurrentCalendarDate(new Date())} className="px-3 py-1 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all">Hoje</button>
+                                        <button onClick={() => changeMonth(1)} className="p-1.5 hover:bg-gray-100 rounded text-gray-400 hover:text-rose-600 transition-colors" title="Próximo Mês"><ArrowRight size={16}/></button>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-7 bg-gray-50/30 border-b border-gray-100">
+                                    {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                                        <div key={d} className="py-2.5 text-center text-[9px] font-black uppercase text-gray-400 tracking-widest">{d}</div>
+                                    ))}
+                                </div>
+                                <div className="flex-1 grid grid-cols-7 auto-rows-fr">
+                                    {calendarDays.map((dateObj, idx) => {
+                                        const dateStr = getLocalISODate(dateObj.date);
+                                        const dayAppointments = filteredAppointments.filter(a => a.start_date === dateStr);
+                                        const hasAppointments = dayAppointments.length > 0;
+                                        const isSelected = selectedCalendarDay === dateStr;
+                                        const isToday = getLocalISODate() === dateStr;
+                                        
+                                        return (
+                                            <button 
+                                                key={idx}
+                                                onClick={() => setSelectedCalendarDay(dateStr)}
+                                                className={`relative p-2 border-r border-b border-gray-50 flex flex-col items-center justify-start transition-all hover:bg-rose-50/50 group min-h-[60px] ${!dateObj.isCurrentMonth ? 'bg-gray-50/30' : 'bg-white'} ${isSelected ? 'bg-rose-50 ring-1 ring-inset ring-rose-200 z-10' : ''}`}
+                                            >
+                                                <span className={`text-[11px] font-bold mb-1 transition-all ${!dateObj.isCurrentMonth ? 'text-gray-300' : isToday ? 'text-white bg-rose-600 w-5 h-5 flex items-center justify-center rounded-full shadow-sm' : 'text-gray-600'} ${isSelected && !isToday ? 'text-rose-700 scale-110 transform' : ''}`}>
+                                                    {dateObj.date.getDate()}
+                                                </span>
+                                                {hasAppointments && (
+                                                    <div className="flex flex-col gap-0.5 w-full overflow-hidden">
+                                                        {dayAppointments.slice(0, 2).map(app => (
+                                                            <div key={app.id} className={`h-1 w-full rounded-full ${app.priority === 'CRITICA' ? 'bg-red-400' : app.priority === 'ALTA' ? 'bg-orange-400' : 'bg-blue-400'} opacity-60`}></div>
+                                                        ))}
+                                                        {dayAppointments.length > 2 && (
+                                                            <span className="text-[8px] font-bold text-gray-400 text-center">+{dayAppointments.length - 2}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {/* Selected Day Appointments */}
+                            <div className="w-full lg:w-80 bg-white rounded border border-gray-200 shadow-sm flex flex-col overflow-hidden animate-in slide-in-from-right-4 duration-300">
+                                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Clock size={12} className="text-rose-500" />
+                                        {selectedCalendarDay ? new Date(selectedCalendarDay + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', weekday: 'long' }) : 'Selecione um dia'}
+                                    </h4>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50/20">
+                                    {!selectedCalendarDay ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-50 text-center p-6">
+                                            <Calendar size={32} className="mb-3" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">Selecione um dia no calendário para ver os compromissos</p>
+                                        </div>
+                                    ) : appointmentsForSelectedDay.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-50 text-center p-6">
+                                            <CheckCircle2 size={32} className="mb-3 text-green-400" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest">Nenhum compromisso agendado para este dia</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {appointmentsForSelectedDay.map(evt => (
+                                                <div key={evt.id} className="p-3 rounded border border-gray-100 bg-white shadow-sm hover:border-rose-200 hover:shadow transition-all relative overflow-hidden group">
+                                                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${evt.priority === 'CRITICA' ? 'bg-red-500' : evt.priority === 'ALTA' ? 'bg-orange-500' : evt.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
+                                                    <div className="flex justify-between items-start mb-1.5">
+                                                        <h5 className="text-xs font-bold text-gray-800 line-clamp-2 leading-tight">{evt.title}</h5>
+                                                        <span className="text-[9px] font-black text-gray-400 shrink-0 ml-2">{evt.start_time}</span>
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-500 mb-3 flex items-center gap-1">
+                                                        <Building2 size={10} className="text-gray-300" />
+                                                        <span className="truncate">
+                                                            <span className="text-gray-400">#{evt.client_id}</span>
+                                                            {evt.client_id && customerCnpjMap.get(evt.client_id) ? `[${customerCnpjMap.get(evt.client_id)}] ` : ''}{evt.client_name || 'Cliente Geral'}
+                                                        </span>
+                                                    </p>
+                                                    <div className="flex justify-between items-center">
+                                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${evt.status === 'CONCLUIDO' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                                                            {evt.status.replace('_', ' ')}
+                                                        </span>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setEditingEvent(evt);
+                                                                    setNewEvent({ ...evt });
+                                                                    setClientSearchTerm(evt.client_name || '');
+                                                                    setShowClientDropdown(false);
+                                                                    setShowEventModal(true);
+                                                                }}
+                                                                className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                                            >
+                                                                <Edit2 size={12}/>
+                                                            </button>
+                                                            <button onClick={() => deleteCRMAppointment(evt.id).then(loadAppointments)} className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={12}/></button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                {selectedCalendarDay && (
+                                    <div className="p-4 border-t border-gray-100 bg-white">
+                                        <button 
+                                            onClick={() => {
+                                                setNewEvent(prev => ({ 
+                                                    ...prev, 
+                                                    start_date: selectedCalendarDay, 
+                                                    end_date: selectedCalendarDay,
+                                                    start_time: '09:00',
+                                                    end_time: '10:00'
+                                                }));
+                                                setClientSearchTerm('');
+                                                setShowClientDropdown(false);
+                                                setShowEventModal(true);
+                                            }}
+                                            className="w-full py-2.5 bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded shadow-sm hover:bg-rose-700 hover:shadow-md transition-all flex items-center justify-center gap-2"
+                                        >
+                                            <Plus size={14} /> Novo Compromisso
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+        {/* TAREFAS TAB */}
+        {activeTab === 'TAREFAS' && (
+            <div className="h-full flex flex-col bg-white border border-gray-200 shadow-sm rounded-sm overflow-hidden animate-in fade-in">
+                <div className="p-3 border-b bg-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-700 flex items-center gap-2">
+                            <LayoutList size={14} /> Gestão de Tarefas
+                        </h3>
+
+                        {/* Filtros de Representante e Data (Mesmos do Pipeline) */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-48"
+                                value={pipelineFilters.rep}
+                                onChange={(e) => updateFilters({ rep: e.target.value })}
+                            >
+                                <option value="">Todos Representantes</option>
+                                {uniqueReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Nº:</span>
+                                <input 
+                                    type="text" 
+                                    placeholder="Orçamento..."
+                                    className="bg-transparent text-[10px] outline-none w-20"
+                                    value={pipelineFilters.orderNumber}
+                                    onChange={(e) => updateFilters({ orderNumber: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.startDate}
+                                    onChange={(e) => updateFilters({ startDate: e.target.value })}
+                                />
+                                <span className="text-gray-300 shrink-0">-</span>
+                                <input 
+                                    type="date" 
+                                    className="bg-transparent text-[10px] outline-none w-24"
+                                    value={pipelineFilters.endDate}
+                                    onChange={(e) => updateFilters({ endDate: e.target.value })}
+                                />
+                            </div>
+
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.orderNumber) && (
+                                <button 
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', orderNumber: '' })}
+                                    className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                                    title="Limpar Filtros"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="flex bg-gray-200 p-0.5 rounded text-[9px] font-bold uppercase w-full sm:w-auto">
+                            {(['TODAS', 'PENDENTES', 'CONCLUIDAS'] as const).map(f => (
+                                <button 
+                                    key={f}
+                                    onClick={() => setTaskFilter(f)}
+                                    className={`flex-1 sm:flex-none px-2 py-1 rounded-sm transition-all ${taskFilter === f ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                        {user?.is_admin && (
+                            <button 
+                                onClick={() => {
+                                    setEditingTask(null);
+                                    setNewTask({ priority: 'MEDIA', status: 'PENDENTE' });
+                                    setClientSearchTerm('');
+                                    setShowClientDropdown(false);
+                                    setShowTaskModal(true);
+                                }}
+                                className="w-full sm:w-auto px-3 py-1.5 bg-rose-600 text-white text-[10px] font-bold uppercase tracking-widest rounded hover:bg-rose-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            >
+                                <Plus size={14} /> Nova Tarefa
+                            </button>
+                        )}
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-gray-100">
+                    {loadingTasks ? (
+                        <div className="flex items-center justify-center h-64">
+                            <div className="w-8 h-8 border-4 border-rose-200 border-t-rose-600 rounded-full animate-spin"></div>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {filteredTasks.filter(t => {
+                                if (taskFilter === 'PENDENTES') return t.status === 'PENDENTE';
+                                if (taskFilter === 'CONCLUIDAS') return t.status === 'CONCLUIDA';
+                                return true;
+                            }).map(task => (
+                                <div key={task.id} className={`bg-white p-4 rounded border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden group ${task.status === 'CONCLUIDA' ? 'bg-gray-50/80' : ''}`}>
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-300 ${task.status === 'CONCLUIDA' ? 'bg-green-500' : task.priority === 'ALTA' ? 'bg-red-500' : task.priority === 'MEDIA' ? 'bg-yellow-500' : 'bg-blue-500'}`}></div>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex items-start gap-2 flex-1">
+                                            <button 
+                                                onClick={() => handleToggleTaskStatus(task)}
+                                                className={`mt-0.5 shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-300 ${task.status === 'CONCLUIDA' ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-rose-500'}`}
+                                            >
+                                                {task.status === 'CONCLUIDA' && <Check size={10} className="text-white animate-in zoom-in duration-200" />}
+                                            </button>
+                                            <h4 className={`text-sm font-bold transition-all duration-300 ${task.status === 'CONCLUIDA' ? 'text-gray-400 line-through decoration-2 decoration-green-500/30' : 'text-gray-900'}`}>
+                                                {task.title}
+                                            </h4>
+                                        </div>
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase transition-colors duration-300 ${task.status === 'CONCLUIDA' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                            {task.status}
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-600 mb-3 line-clamp-3">{task.description}</p>
+                                    <div className="space-y-1.5 border-t border-gray-50 pt-3">
+                                        <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                                            <User size={12} className="text-gray-400" />
+                                            <span>Para: <strong>{task.rep_nome}</strong></span>
+                                        </div>
+                                        {task.client_name && (
+                                            <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                                                <Building2 size={12} className="text-gray-400" />
+                                                <span>Cliente: <strong><span className="text-gray-400 font-normal">#{task.client_id}</span> {task.client_id && customerCnpjMap.get(task.client_id) ? `[${customerCnpjMap.get(task.client_id)}] ` : ''}{task.client_name}</strong></span>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                                            <Clock size={12} className="text-gray-400" />
+                                            <span>Criada em: {new Date(task.created_at).toLocaleString('pt-BR')}</span>
+                                        </div>
+                                        {task.due_date && task.status !== 'CONCLUIDA' && (
+                                            <div className={`flex items-center gap-2 text-[10px] font-bold ${
+                                                (getDaysRemaining(task.due_date) || 0) < 0 ? 'text-red-600' : 
+                                                (getDaysRemaining(task.due_date) || 0) <= 2 ? 'text-amber-600' : 'text-blue-600'
+                                            }`}>
+                                                <Calendar size={12} />
+                                                <span>
+                                                    Vence em: {parseLocalDate(task.due_date).toLocaleDateString('pt-BR')} 
+                                                    ({getDaysRemaining(task.due_date) === 0 ? 'Vence hoje' : 
+                                                      (getDaysRemaining(task.due_date) || 0) < 0 ? `Atrasada ${Math.abs(getDaysRemaining(task.due_date) || 0)} dias` : 
+                                                      `Faltam ${getDaysRemaining(task.due_date)} dias`})
+                                                </span>
+                                            </div>
+                                        )}
+                                        {task.status === 'CONCLUIDA' && task.completed_at && (
+                                            <div className="flex items-center gap-2 text-[10px] text-green-600 font-bold">
+                                                <CheckCircle2 size={12} />
+                                                <span>Concluída em: {new Date(task.completed_at).toLocaleString('pt-BR')}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mt-4 flex gap-2">
+                                        {task.status !== 'CONCLUIDA' && (task.rep_in_codigo === user?.rep_in_codigo || user?.is_admin) && (
+                                            <button 
+                                                onClick={() => handleToggleTaskStatus(task)}
+                                                className="flex-1 py-1.5 bg-green-600 text-white text-[10px] font-bold uppercase rounded hover:bg-green-700 transition-colors flex items-center justify-center gap-1"
+                                            >
+                                                <Check size={14} /> Concluir
+                                            </button>
+                                        )}
+                                        {user?.is_admin && (
+                                            <>
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditingTask(task);
+                                                        setNewTask(task);
+                                                        setClientSearchTerm(task.client_name || '');
+                                                        setShowClientDropdown(false);
+                                                        setShowTaskModal(true);
+                                                    }}
+                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteTask(task.id)}
+                                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+      </div>
+
+      {/* Modal Registro de Follow-up (Z-INDEX AUMENTADO para 200) */}
+      {showFollowUpModal && followUpData.order && (
+          <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-lg shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm">
+                  <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-800 flex items-center gap-2">
+                            <History size={16} /> {editingFollowUpId ? 'Editar Follow-up' : 'Registrar Follow-up'}
+                        </h3>
+                        <p className="text-[10px] text-gray-500 font-bold mt-1">Orçamento #{followUpData.order.PED_IN_CODIGO} - {customerCnpjMap.get(followUpData.order.AGN_IN_CODIGO) ? `[${customerCnpjMap.get(followUpData.order.AGN_IN_CODIGO)}] ` : ''}{followUpData.order.CLIENTE_NOME}</p>
+                      </div>
+                      <button onClick={() => setShowFollowUpModal(false)} className="text-gray-400 hover:text-red-500"><XCircle size={20}/></button>
+                  </div>
+                  
+                  <div className="p-6 bg-white space-y-4">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Tipo de Contato</label>
+                          <div className="grid grid-cols-2 gap-3 mt-1">
+                              <button onClick={() => setFollowUpData({...followUpData, type: 'TELEFONEMA'})} className={`flex items-center gap-2 p-3 border rounded text-xs font-bold transition-all ${followUpData.type === 'TELEFONEMA' ? 'border-rose-500 bg-rose-50 text-rose-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                  <Phone size={16} /> Telefone
+                              </button>
+                              <button onClick={() => setFollowUpData({...followUpData, type: 'EMAIL'})} className={`flex items-center gap-2 p-3 border rounded text-xs font-bold transition-all ${followUpData.type === 'EMAIL' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                  <Mail size={16} /> E-mail
+                              </button>
+                              <button onClick={() => setFollowUpData({...followUpData, type: 'COMPROMISSO'})} className={`flex items-center gap-2 p-3 border rounded text-xs font-bold transition-all ${followUpData.type === 'COMPROMISSO' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                  <MessageCircle size={16} /> WhatsApp
+                              </button>
+                              <button onClick={() => setFollowUpData({...followUpData, type: 'REUNIAO'})} className={`flex items-center gap-2 p-3 border rounded text-xs font-bold transition-all ${followUpData.type === 'REUNIAO' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                  <Users size={16} /> Reunião
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Data e Hora da Interação</label>
+                          <div className="flex gap-3">
+                              <input 
+                                  type="date" 
+                                  className="flex-1 p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
+                                  value={followUpData.date}
+                                  onChange={e => setFollowUpData({...followUpData, date: e.target.value})}
+                              />
+                              <input 
+                                  type="time" 
+                                  className="w-32 p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
+                                  value={followUpData.time}
+                                  onChange={e => setFollowUpData({...followUpData, time: e.target.value})}
+                              />
+                          </div>
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Resumo da Conversa <span className="text-red-500">*</span></label>
+                          <textarea 
+                            className="w-full p-3 border border-gray-300 rounded text-xs outline-none h-32 resize-none focus:border-rose-500 transition-colors" 
+                            placeholder="Descreva o que foi conversado com o cliente..." 
+                            value={followUpData.notes} 
+                            onChange={e => setFollowUpData({...followUpData, notes: e.target.value})} 
+                            autoFocus
+                          />
+                      </div>
+                  </div>
+
+                  <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowFollowUpModal(false)} className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-100 transition-colors">Cancelar</button>
+                      <button onClick={handleRegisterFollowUp} className="px-6 py-2 bg-rose-600 text-white text-xs font-bold uppercase rounded hover:bg-rose-700 transition-colors shadow-md flex items-center gap-2">
+                          <Check size={14} /> {editingFollowUpId ? 'Salvar Alterações' : 'Registrar Interação'}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal Criar Evento Agenda */}
+      {showEventModal && (
+          <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-3xl max-h-[90vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm">
+                  <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-gray-800 flex items-center gap-2">
+                          <Calendar size={16} /> Novo Compromisso
+                      </h3>
+                      <button onClick={() => setShowEventModal(false)} className="text-gray-400 hover:text-red-500"><XCircle size={20}/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white space-y-6">
+                      {/* Responsável */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Responsável <span className="text-red-500">*</span></label>
+                          <div className="flex items-center gap-2 p-2 border border-gray-200 bg-gray-50 rounded text-xs text-gray-700">
+                              <User size={14} /> Usuário Atual (Representante)
+                          </div>
+                      </div>
+
+                      {/* Assunto */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Assunto <span className="text-red-500">*</span></label>
+                          <input type="text" className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors" placeholder="Ex: Visita Técnica Mensal" value={newEvent.title || ''} onChange={e => setNewEvent({...newEvent, title: e.target.value})} />
+                      </div>
+
+                      {/* Datas e Horas */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 p-3 rounded border border-gray-100">
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Data de Início <span className="text-red-500">*</span></label>
+                              <input type="date" className="w-full p-1.5 border border-gray-300 rounded text-xs" value={newEvent.start_date} onChange={e => setNewEvent({...newEvent, start_date: e.target.value})} />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Hora de Início <span className="text-red-500">*</span></label>
+                              <input type="time" className="w-full p-1.5 border border-gray-300 rounded text-xs" value={newEvent.start_time} onChange={e => setNewEvent({...newEvent, start_time: e.target.value})} />
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Hora de Término <span className="text-red-500">*</span></label>
+                              <input type="time" className="w-full p-1.5 border border-gray-300 rounded text-xs" value={newEvent.end_time} onChange={e => setNewEvent({...newEvent, end_time: e.target.value})} />
+                          </div>
+                      </div>
+
+                      {/* Atividade */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Atividade <span className="text-red-500">*</span></label>
+                          <div className="flex flex-wrap gap-4 mt-1">
+                              {['REUNIAO', 'TELEFONEMA', 'COMPROMISSO', 'VISITA', 'EMAIL'].map(act => (
+                                  <label key={act} className="flex items-center gap-1 cursor-pointer text-xs">
+                                      <input type="radio" name="activity" value={act} checked={newEvent.activity_type === act} onChange={() => setNewEvent({...newEvent, activity_type: act as any})} className="accent-rose-600" />
+                                      {act.charAt(0) + act.slice(1).toLowerCase()}
+                                  </label>
+                              ))}
+                          </div>
+                      </div>
+
+                      {/* Prioridade */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Prioridade <span className="text-red-500">*</span></label>
+                          <div className="flex flex-wrap gap-4 mt-1">
+                              {[
+                                  {val: 'BAIXA', color: 'bg-green-500'}, 
+                                  {val: 'MEDIA', color: 'bg-yellow-500'}, 
+                                  {val: 'ALTA', color: 'bg-orange-500'}, 
+                                  {val: 'CRITICA', color: 'bg-red-500'}
+                              ].map(p => (
+                                  <label key={p.val} className="flex items-center gap-1 cursor-pointer text-xs">
+                                      <input type="radio" name="priority" value={p.val} checked={newEvent.priority === p.val} onChange={() => setNewEvent({...newEvent, priority: p.val as any})} className="accent-rose-600" />
+                                      <span className={`w-2 h-2 rounded-full ${p.color}`}></span>
+                                      {p.val.charAt(0) + p.val.slice(1).toLowerCase()}
+                                  </label>
+                              ))}
+                          </div>
+                      </div>
+
+                      {/* Conta (Cliente) e Local */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1 relative">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Conta (Cliente)</label>
+                              <div className="relative">
+                                <input 
+                                    type="text"
+                                    className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
+                                    placeholder="Digite para buscar cliente..."
+                                    value={clientSearchTerm}
+                                    onChange={(e) => {
+                                        setClientSearchTerm(e.target.value);
+                                        setShowClientDropdown(true);
+                                    }}
+                                    onFocus={() => setShowClientDropdown(true)}
+                                />
+                                {newEvent.client_name && !showClientDropdown && (
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                        <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded font-bold border border-rose-100">Selecionado</span>
+                                        <button 
+                                            onClick={() => {
+                                                setNewEvent({...newEvent, client_id: undefined, client_name: undefined});
+                                                setClientSearchTerm('');
+                                            }}
+                                            className="text-gray-400 hover:text-red-500"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                )}
+                              </div>
+                              
+                              {showClientDropdown && filteredClientsForTask.length > 0 && (
+                                  <div className="absolute z-[210] left-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-sm max-h-48 overflow-y-auto custom-scrollbar w-full">
+                                      {filteredClientsForTask.map(c => (
+                                          <button
+                                              key={c.id}
+                                              className="w-full text-left p-2 hover:bg-rose-50 border-b border-gray-50 last:border-0 transition-colors"
+                                              onClick={() => {
+                                                  setNewEvent({...newEvent, client_id: c.id, client_name: c.name});
+                                                  setClientSearchTerm(c.name);
+                                                  setShowClientDropdown(false);
+                                              }}
+                                          >
+                                              <p className="text-xs font-bold text-gray-800">
+                                                  {c.cnpj ? `[${c.cnpj}] ` : ''}{c.name}
+                                              </p>
+                                              <p className="text-[9px] text-gray-400">ID: {c.id} • Rep: {c.repName || 'N/A'}</p>
+                                          </button>
+                                      ))}
+                                  </div>
+                              )}
+                              {showClientDropdown && clientSearchTerm.length >= 2 && filteredClientsForTask.length === 0 && (
+                                  <div className="absolute z-[210] left-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-sm p-3 text-center w-full">
+                                      <p className="text-[10px] text-gray-400 font-bold uppercase">Nenhum cliente encontrado</p>
+                                  </div>
+                              )}
+                          </div>
+                          <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Local</label>
+                              <input type="text" className="w-full p-2 border border-gray-300 rounded text-xs outline-none" placeholder="Endereço ou Link Reunião" value={newEvent.location || ''} onChange={e => setNewEvent({...newEvent, location: e.target.value})} />
+                          </div>
+                      </div>
+
+                      {/* Descrição */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Descrição</label>
+                          <textarea className="w-full p-2 border border-gray-300 rounded text-xs outline-none h-24 resize-none" placeholder="Detalhes do compromisso..." value={newEvent.description || ''} onChange={e => setNewEvent({...newEvent, description: e.target.value})} />
+                      </div>
+
+                      {/* Anexos */}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                              <Paperclip size={12} /> Anexos
+                          </label>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                              {(newEvent.attachments || []).map((file, idx) => (
+                                  <div key={idx} className="relative group">
+                                      <div className="w-16 h-16 bg-gray-100 border border-gray-200 rounded flex items-center justify-center overflow-hidden">
+                                          {file.startsWith('data:image') ? (
+                                              <img src={file} alt="Anexo" className="w-full h-full object-cover" />
+                                          ) : (
+                                              <FileText size={24} className="text-gray-400" />
+                                          )}
+                                      </div>
+                                      <button 
+                                          onClick={() => removeAttachment(idx)}
+                                          className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                          <X size={10} />
+                                      </button>
+                                  </div>
+                              ))}
+                              <label className="w-16 h-16 border-2 border-dashed border-gray-200 rounded flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-50 transition-colors">
+                                  <Upload size={16} className="text-gray-400" />
+                                  <span className="text-[8px] font-bold text-gray-400 uppercase">Adicionar</span>
+                                  <input type="file" className="hidden" multiple onChange={handleFileChange} />
+                              </label>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowEventModal(false)} className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-100 transition-colors">Cancelar</button>
+                      <button onClick={handleSaveEvent} className="px-6 py-2 bg-rose-600 text-white text-xs font-bold uppercase rounded hover:bg-rose-700 transition-colors shadow-md">Salvar Compromisso</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Modal Detalhe Cliente */}
+      {selectedClient && (
+        <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="p-6 bg-gray-900 text-white shrink-0">
+              <div className="flex justify-between items-start mb-4">
+                <div className="w-12 h-12 bg-rose-600 rounded-lg flex items-center justify-center text-xl font-bold">
+                  {selectedClient.name.substring(0, 2)}
+                </div>
+                <button onClick={() => setSelectedClient(null)} className="text-gray-400 hover:text-white">
+                  <XCircle size={24} />
+                </button>
+              </div>
+                  <h2 className="text-lg font-bold leading-tight mb-1">
+                    {selectedClient.cnpj ? `[${selectedClient.cnpj}] ` : ''}{selectedClient.name}
+                  </h2>
+              <p className="text-xs text-gray-400 font-mono">ID: {selectedClient.id}</p>
+              
+              <div className="grid grid-cols-2 gap-4 mt-6">
+                <div>
+                  <p className="text-[9px] uppercase text-gray-500 font-bold">LTV (Total Gasto)</p>
+                  <p className="text-xl font-bold text-white">{formatCurrency(selectedClient.totalSpent)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] uppercase text-gray-500 font-bold">Última Compra</p>
+                  <p className="text-sm font-bold text-white mt-1">{formatDate(selectedClient.lastPurchaseDate)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-6">
+              <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-4">Histórico de Transações</h3>
+              <div className="space-y-3 relative">
+                 {/* Linha do tempo simples */}
+                 <div className="absolute left-3.5 top-2 bottom-2 w-0.5 bg-gray-200"></div>
+
+                 {selectedClient.history.sort((a: any, b: any) => b.PED_IN_CODIGO - a.PED_IN_CODIGO).map((sale: any, idx: number) => (
+                   <div key={idx} className="relative pl-8">
+                     <div className={`absolute left-2 top-2 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                       sale.SER_ST_CODIGO === 'OV' ? 'bg-amber-400' :
+                       String(sale.PED_ST_STATUS).includes('FATURADO') ? 'bg-green-500' : 
+                       String(sale.PED_ST_STATUS).includes('CANCEL') ? 'bg-red-500' : 
+                       'bg-blue-500'
+                     }`}></div>
+                     <div className="bg-white p-3 rounded-sm border border-gray-200 shadow-sm">
+                       <div className="flex justify-between items-start mb-1">
+                         <div className="flex flex-col">
+                           <span className="text-[10px] font-bold text-gray-900">
+                             {sale.SER_ST_CODIGO === 'OV' ? 'Orçamento' : 'Pedido'} #{sale.PED_IN_CODIGO}
+                           </span>
+                           <span className={`text-[7px] font-black px-1 py-0.5 rounded-sm w-fit mt-0.5 ${sale.SER_ST_CODIGO === 'OV' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                             {sale.SER_ST_CODIGO === 'OV' ? 'ORÇAMENTO' : 'PEDIDO'}
+                           </span>
+                         </div>
+                         <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase ${String(sale.PED_ST_STATUS).includes('FATURADO') ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                           {sale.PED_ST_STATUS || sale.SITUACAO}
+                         </span>
+                       </div>
+                       <p className="text-[10px] text-gray-500 mb-2">{formatDate(sale.PED_DT_EMISSAO)}</p>
+                       <div className="flex justify-between items-center pt-2 border-t border-gray-50">
+                         <span className="text-[9px] text-gray-400 font-mono truncate max-w-[150px]">{sale.ITP_ST_DESCRICAO}</span>
+                         <span className="text-xs font-bold text-gray-900">{formatCurrency(Number(sale.ITP_RE_VALORMERCADORIA))}</span>
+                       </div>
+                     </div>
+                   </div>
+                 ))}
+              </div>
+            </div>
+            
+            <div className="p-4 bg-white border-t border-gray-200 shrink-0">
+               <button className="w-full py-3 bg-gray-900 text-white text-xs font-bold uppercase tracking-widest hover:bg-black transition-colors flex items-center justify-center gap-2">
+                 <Mail size={14} /> Enviar Email
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detalhe Pedido/Oportunidade (CRM Pipeline) */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-2xl max-h-[85vh] shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm">
+             
+             {/* Header do Pedido */}
+             <div className="p-5 border-b bg-gray-900 text-white flex justify-between items-start shrink-0">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    <span className="px-2 py-0.5 bg-white/20 rounded text-[9px] font-black uppercase tracking-widest">
+                      {selectedOrder.SER_ST_CODIGO === 'OV' ? 'Orçamento' : 'Pedido Venda'}
+                    </span>
+                    <h2 className="text-lg font-bold">#{selectedOrder.PED_IN_CODIGO}</h2>
+                    {selectedOrder.IS_HOT && (
+                        <span className="flex items-center gap-1 bg-orange-500/20 px-2 py-0.5 rounded border border-orange-500/50 text-orange-200 text-[10px] font-bold uppercase tracking-widest">
+                            <Flame size={12} className="fill-orange-500 text-orange-500" /> Hot
+                        </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-medium text-gray-300">
+                    <span className="text-gray-500 mr-2">#{selectedOrder.CLI_IN_CODIGO}</span>
+                    {customerCnpjMap.get(Number(selectedOrder.CLI_IN_CODIGO)) ? `[${customerCnpjMap.get(Number(selectedOrder.CLI_IN_CODIGO))}] ` : ''}{selectedOrder.CLIENTE_NOME}
+                  </h3>
+                  <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-400">
+                    <span className="flex items-center gap-1"><Calendar size={12}/> {formatDate(selectedOrder.PED_DT_EMISSAO)}</span>
+                    <span className="flex items-center gap-1"><MapPin size={12}/> {selectedOrder.FILIAL_NOME || `Filial ${selectedOrder.FIL_IN_CODIGO}`}</span>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedOrder(null)} className="text-gray-400 hover:text-white transition-colors">
+                  <XCircle size={24} />
+                </button>
+             </div>
+
+             {/* Status Bar & Action Move */}
+             <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap gap-4 justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${String(selectedOrder.PED_ST_STATUS).includes('FATURADO') ? 'bg-green-500' : String(selectedOrder.PED_ST_STATUS).includes('CANCEL') ? 'bg-red-500' : 'bg-amber-500'}`}></div>
+                  <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-gray-400 uppercase">Status Atual</span>
+                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{selectedOrder.PED_ST_STATUS || 'STATUS DESCONHECIDO'}</span>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                    {/* Hot Toggle */}
+                    <div className="flex items-center gap-2 pr-3 border-r border-gray-200">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                            <div className="relative">
+                                <input 
+                                    type="checkbox" 
+                                    className="peer sr-only" 
+                                    checked={!!selectedOrder.IS_HOT} 
+                                    onChange={() => handleToggleHot(selectedOrder)}
+                                    disabled={togglingHot}
+                                />
+                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-orange-500"></div>
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 ${selectedOrder.IS_HOT ? 'text-orange-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                                <Flame size={12} className={selectedOrder.IS_HOT ? "fill-orange-500" : ""} />
+                                {togglingHot ? '...' : 'Hot Lead'}
+                            </span>
+                        </label>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-white px-2 py-1 border border-gray-200 rounded-sm shadow-sm">
+                        <span className="text-[9px] font-bold text-gray-500 uppercase mr-2">Mover Para:</span>
+                        <select 
+                            disabled={!!movingOrder}
+                            className="bg-transparent text-[10px] font-bold uppercase text-gray-900 outline-none cursor-pointer hover:bg-gray-50 rounded px-1"
+                            onChange={(e) => {
+                                if (e.target.value) handleMoveStage(selectedOrder, e.target.value);
+                            }}
+                            value=""
+                        >
+                            <option value="" disabled>Selecionar Etapa...</option>
+                            {STAGES.map(s => (
+                                <option key={s.id} value={s.id}>{s.label}</option>
+                            ))}
+                        </select>
+                        {movingOrder && <div className="w-3 h-3 border-2 border-gray-200 border-t-gray-600 rounded-full animate-spin"></div>}
+                    </div>
+                </div>
+             </div>
+
+             {/* Abas */}
+             <div className="px-5 border-b border-gray-200 bg-white flex gap-6">
+                <button 
+                  onClick={() => setModalTab('ITENS')}
+                  className={`py-3 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 ${modalTab === 'ITENS' ? 'border-rose-600 text-rose-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                  <Package size={14} /> Itens do Pedido
+                </button>
+                <button 
+                  onClick={() => setModalTab('HISTORICO')}
+                  className={`py-3 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-all flex items-center gap-2 ${modalTab === 'HISTORICO' ? 'border-rose-600 text-rose-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                >
+                  <History size={14} /> Histórico / Follow-up
+                </button>
+             </div>
+
+             {/* Lista de Itens */}
+             {modalTab === 'ITENS' && (
+                 <div className="flex-1 overflow-y-auto custom-scrollbar animate-in fade-in slide-in-from-bottom-2 duration-300">
+                   <table className="w-full text-left border-collapse">
+                     <thead className="bg-gray-100 sticky top-0 z-10">
+                       <tr>
+                         <th className="px-4 py-2 text-[9px] font-black uppercase text-gray-500 tracking-widest border-b">Produto</th>
+                         <th className="px-4 py-2 text-[9px] font-black uppercase text-gray-500 tracking-widest border-b text-center">Qtd.</th>
+                         <th className="px-4 py-2 text-[9px] font-black uppercase text-gray-500 tracking-widest border-b text-right">Unitário</th>
+                         <th className="px-4 py-2 text-[9px] font-black uppercase text-gray-500 tracking-widest border-b text-right">Total</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-100">
+                       {selectedOrderItems.map((item, idx) => (
+                         <tr key={idx} className="hover:bg-gray-50">
+                           <td className="px-4 py-3">
+                             <div className="flex items-center gap-2">
+                                <Package size={14} className="text-gray-300" />
+                                <div>
+                                   <p className="text-[10px] font-bold text-gray-900">{item.ITP_ST_DESCRICAO}</p>
+                                   <p className="text-[9px] text-gray-400 font-mono">{item.PRO_ST_ALTERNATIVO || item.PRO_IN_CODIGO}</p>
+                                </div>
+                             </div>
+                           </td>
+                           <td className="px-4 py-3 text-center text-xs font-mono text-gray-600">{Number(item.ITP_RE_QUANTIDADE)}</td>
+                           <td className="px-4 py-3 text-right text-xs font-mono text-gray-600">{formatCurrency(Number(item.ITP_RE_VALORUNITARIO))}</td>
+                           <td className="px-4 py-3 text-right text-xs font-bold text-gray-900">{formatCurrency(Number(item.ITP_RE_VALORMERCADORIA))}</td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
+             )}
+
+             {/* Histórico / Timeline */}
+             {modalTab === 'HISTORICO' && (
+                 <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-gray-50 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex justify-between items-center mb-4">
+                       <h4 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Linha do Tempo</h4>
+                       <button 
+                         onClick={() => openFollowUpModal(selectedOrder)}
+                         className="px-3 py-1.5 bg-rose-600 text-white text-[9px] font-bold uppercase tracking-widest rounded hover:bg-rose-700 transition-colors flex items-center gap-2 shadow-sm"
+                       >
+                         <Plus size={12} /> Novo Registro
+                       </button>
+                    </div>
+                    
+                    <div className="relative space-y-6 pl-2">
+                        {/* Linha Vertical */}
+                        <div className="absolute left-[19px] top-2 bottom-2 w-0.5 bg-gray-200"></div>
+
+                        {selectedOrderFollowUps.length === 0 ? (
+                            <div className="text-center py-8 text-gray-400">
+                                <History size={32} className="mx-auto mb-2 opacity-50"/>
+                                <p className="text-[10px] uppercase font-bold">Nenhum histórico registrado</p>
+                            </div>
+                        ) : (
+                            selectedOrderFollowUps.map((event, idx) => (
+                                <div key={idx} className="relative flex gap-4 group">
+                                    <div className={`w-10 h-10 rounded-full border-4 border-gray-50 flex items-center justify-center shrink-0 z-10 shadow-sm ${
+                                        event.activity_type === 'TELEFONEMA' ? 'bg-blue-100 text-blue-600' :
+                                        event.activity_type === 'EMAIL' ? 'bg-indigo-100 text-indigo-600' :
+                                        event.activity_type === 'REUNIAO' ? 'bg-purple-100 text-purple-600' :
+                                        'bg-gray-100 text-gray-600'
+                                    }`}>
+                                        {event.activity_type === 'TELEFONEMA' ? <Phone size={16} /> :
+                                         event.activity_type === 'EMAIL' ? <Mail size={16} /> :
+                                         event.activity_type === 'REUNIAO' ? <Users size={16} /> :
+                                         <MessageCircle size={16} />}
+                                    </div>
+                                    <div className="flex-1 bg-white p-3 rounded border border-gray-200 shadow-sm group-hover:shadow-md transition-shadow relative pr-12">
+                                        <div className="absolute top-3 right-3 text-[9px] font-bold text-gray-400 flex flex-col items-end">
+                                            <span>{parseLocalDate(event.start_date).toLocaleDateString()}</span>
+                                            <span>{event.start_time}</span>
+                                        </div>
+                                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">{event.activity_type}</p>
+                                        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{event.description?.replace(/\[.*?\]/, '').trim()}</p>
+                                        
+                                        {/* Ações de Edição/Exclusão */}
+                                        <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleEditFollowUp(event)} 
+                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" 
+                                                title="Editar"
+                                            >
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteClick(event.id)} 
+                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" 
+                                                title="Excluir"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                 </div>
+             )}
+
+             {/* Footer Totais (Só aparece na Tab Itens) */}
+             {modalTab === 'ITENS' && (
+                 <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-6 shrink-0">
+                    <div className="text-right">
+                       <p className="text-[9px] font-black uppercase text-gray-400">Total Itens</p>
+                       <p className="text-sm font-medium text-gray-600">{selectedOrderItems.reduce((acc, curr) => acc + Number(curr.ITP_RE_QUANTIDADE), 0)}</p>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-[9px] font-black uppercase text-gray-400">Valor Total Pedido</p>
+                       <p className="text-xl font-bold text-gray-900">{formatCurrency(selectedOrder.TOTAL_VALOR)}</p>
+                    </div>
+                 </div>
+             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmação de Exclusão */}
+      {deleteFollowUpId && (
+        <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white w-full max-w-sm rounded-sm shadow-2xl border border-gray-200 p-6 text-center animate-in zoom-in-95 duration-200">
+               <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Trash2 size={24} />
+               </div>
+               <h3 className="text-sm font-bold uppercase tracking-widest mb-2 text-gray-900">Confirmar Exclusão</h3>
+               <p className="text-xs text-gray-500 mb-6 font-medium">Tem certeza que deseja remover este registro do histórico?</p>
+               <div className="flex gap-3 justify-center">
+                  <button onClick={() => setDeleteFollowUpId(null)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-50 transition-colors">Cancelar</button>
+                  <button onClick={confirmDeleteFollowUp} className="flex-1 px-4 py-2 bg-red-600 text-white text-xs font-bold uppercase rounded hover:bg-red-700 transition-colors shadow-sm">Excluir</button>
+               </div>
+           </div>
+        </div>
+      )}
+
+      {/* Modal Criar/Editar Tarefa */}
+      {showTaskModal && (
+          <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-white w-full max-w-lg shadow-2xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col rounded-sm">
+                  <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-gray-800 flex items-center gap-2">
+                          <LayoutList size={16} /> {editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}
+                      </h3>
+                      <button onClick={() => setShowTaskModal(false)} className="text-gray-400 hover:text-red-500"><XCircle size={20}/></button>
+                  </div>
+                  
+                  <div className="p-6 bg-white space-y-4 overflow-y-auto custom-scrollbar max-h-[70vh]">
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Título da Tarefa <span className="text-red-500">*</span></label>
+                          <input 
+                            type="text" 
+                            className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors" 
+                            placeholder="Ex: Ligar para cliente sobre proposta" 
+                            value={newTask.title || ''} 
+                            onChange={e => setNewTask({...newTask, title: e.target.value})} 
+                          />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Representante Destinado <span className="text-red-500">*</span></label>
+                            <select 
+                                className="w-full p-2 border border-gray-300 rounded text-xs outline-none bg-white"
+                                value={newTask.rep_in_codigo || ''}
+                                onChange={e => setNewTask({...newTask, rep_in_codigo: Number(e.target.value)})}
+                            >
+                                <option value="">Selecione...</option>
+                                {allUsers.filter(u => u.rep_in_codigo).map(u => (
+                                    <option key={u.id} value={u.rep_in_codigo!}>{u.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Prioridade</label>
+                            <select 
+                                className="w-full p-2 border border-gray-300 rounded text-xs outline-none bg-white"
+                                value={newTask.priority || 'MEDIA'}
+                                onChange={e => setNewTask({...newTask, priority: e.target.value as any})}
+                            >
+                                <option value="BAIXA">Baixa</option>
+                                <option value="MEDIA">Média</option>
+                                <option value="ALTA">Alta</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Data de Vencimento</label>
+                            <input 
+                                type="date" 
+                                className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors" 
+                                value={newTask.due_date || ''} 
+                                onChange={e => setNewTask({...newTask, due_date: e.target.value})} 
+                            />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 relative">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Cliente (Opcional)</label>
+                          <div className="relative">
+                            <input 
+                                type="text"
+                                className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
+                                placeholder="Digite para buscar cliente..."
+                                value={clientSearchTerm}
+                                onChange={(e) => {
+                                    setClientSearchTerm(e.target.value);
+                                    setShowClientDropdown(true);
+                                }}
+                                onFocus={() => setShowClientDropdown(true)}
+                            />
+                            {newTask.client_name && !showClientDropdown && (
+                                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                    <span className="text-[9px] bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded font-bold border border-rose-100">Selecionado</span>
+                                    <button 
+                                        onClick={() => {
+                                            setNewTask({...newTask, client_id: undefined, client_name: undefined});
+                                            setClientSearchTerm('');
+                                        }}
+                                        className="text-gray-400 hover:text-red-500"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            )}
+                          </div>
+                          
+                          {showClientDropdown && filteredClientsForTask.length > 0 && (
+                              <div className="absolute z-[210] left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-sm max-h-48 overflow-y-auto custom-scrollbar">
+                                  {filteredClientsForTask.map(c => (
+                                      <button
+                                          key={c.id}
+                                          className="w-full text-left p-2 hover:bg-rose-50 border-b border-gray-50 last:border-0 transition-colors"
+                                          onClick={() => {
+                                              setNewTask({...newTask, client_id: c.id, client_name: c.name});
+                                              setClientSearchTerm(c.name);
+                                              setShowClientDropdown(false);
+                                          }}
+                                      >
+                                          <p className="text-xs font-bold text-gray-800">
+                                              {c.cnpj ? `[${c.cnpj}] ` : ''}{c.name}
+                                          </p>
+                                          <p className="text-[9px] text-gray-400">ID: {c.id} • Rep: {c.repName || 'N/A'}</p>
+                                      </button>
+                                  ))}
+                              </div>
+                          )}
+                          {showClientDropdown && clientSearchTerm.length >= 2 && filteredClientsForTask.length === 0 && (
+                              <div className="absolute z-[210] left-0 right-0 mt-1 bg-white border border-gray-200 shadow-xl rounded-sm p-3 text-center">
+                                  <p className="text-[10px] text-gray-400 font-bold uppercase">Nenhum cliente encontrado</p>
+                              </div>
+                          )}
+                      </div>
+
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Descrição da Tarefa</label>
+                          <textarea 
+                            className="w-full p-2 border border-gray-300 rounded text-xs outline-none h-24 resize-none focus:border-rose-500 transition-colors" 
+                            placeholder="Detalhes do que deve ser feito..." 
+                            value={newTask.description || ''} 
+                            onChange={e => setNewTask({...newTask, description: e.target.value})} 
+                          />
+                      </div>
+                  </div>
+
+                  <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 shrink-0">
+                      <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-100 transition-colors">Cancelar</button>
+                      <button onClick={handleSaveTask} className="px-6 py-2 bg-rose-600 text-white text-xs font-bold uppercase rounded hover:bg-rose-700 transition-colors shadow-md">
+                          {editingTask ? 'Salvar Alterações' : 'Criar Tarefa'}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+       {/* Modal Confirmação de Exclusão de Tarefa */}
+      {deleteTaskId && (
+        <div className="fixed inset-0 z-[250] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white w-full max-w-sm rounded-sm shadow-2xl border border-gray-200 p-6 text-center animate-in zoom-in-95 duration-200">
+               <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Trash2 size={24} />
+               </div>
+               <h3 className="text-sm font-bold uppercase tracking-widest mb-2 text-gray-900">Excluir Tarefa</h3>
+               <p className="text-xs text-gray-500 mb-6 font-medium">Tem certeza que deseja remover esta tarefa permanentemente?</p>
+               <div className="flex gap-3 justify-center">
+                  <button onClick={() => setDeleteTaskId(null)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-50 transition-colors">Cancelar</button>
+                  <button onClick={confirmDeleteTask} className="flex-1 px-4 py-2 bg-red-600 text-white text-xs font-bold uppercase rounded hover:bg-red-700 transition-colors shadow-sm">Excluir</button>
+               </div>
+           </div>
+        </div>
+      )}
+
+      {/* Modal de IA */}
+      <AIInsightsModal 
+        isOpen={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        isLoading={aiLoading}
+        insights={aiInsights}
+        onGenerate={handleGenerateAIInsights}
+        contextName="CRM / Funil de Vendas"
+        isLocalIA={isUsingLocalAI()}
+      />
+
+      {/* Modal de Automações */}
+      {showAutoActionsModal && (
+        <div className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-2xl rounded-lg shadow-2xl border border-gray-200 flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-purple-50 rounded-t-lg">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-purple-100 p-2 rounded-full">
+                            <Bot size={20} className="text-purple-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-sm font-bold text-purple-900 uppercase tracking-wide">Automações Inteligentes</h2>
+                            <p className="text-[10px] text-purple-600 font-medium">Sugestões de ações baseadas em regras</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowAutoActionsModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-white/50 rounded-full">
+                        <X size={18} />
+                    </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto custom-scrollbar space-y-4">
+                    {autoActions.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                            <Sparkles size={32} className="mx-auto mb-3 text-gray-300" />
+                            <p className="text-sm font-medium">Nenhuma ação sugerida no momento.</p>
+                            <p className="text-xs mt-1">O sistema não encontrou orçamentos parados há mais de 5 dias.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Ações Sugeridas ({autoActions.length})</p>
+                            {autoActions.map((action, idx) => (
+                                <div key={idx} className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-md hover:border-purple-200 transition-colors">
+                                    <div className="mt-0.5">
+                                        <input type="checkbox" checked readOnly className="accent-purple-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-xs font-bold text-gray-800">{action.title}</h4>
+                                            <span className="text-[9px] font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">TAREFA</span>
+                                        </div>
+                                        <p className="text-[11px] text-gray-600 mt-1">{action.description}</p>
+                                        <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                                            <span><span className="font-bold">Cliente:</span> {customerCnpjMap.get(action.order.AGN_IN_CODIGO) ? `[${customerCnpjMap.get(action.order.AGN_IN_CODIGO)}] ` : ''}{action.order.CLIENTE_NOME}</span>
+                                            <span><span className="font-bold">Rep:</span> {action.order.REPRESENTANTE_NOME}</span>
+                                            <span><span className="font-bold">Vencimento:</span> {parseLocalDate(action.due_date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-4 border-t bg-gray-50 flex justify-end gap-3 rounded-b-lg">
+                    <button onClick={() => setShowAutoActionsModal(false)} className="px-4 py-2 border border-gray-300 text-gray-600 text-xs font-bold uppercase rounded hover:bg-gray-100 transition-colors">Cancelar</button>
+                    {autoActions.length > 0 && (
+                        <button onClick={executeAutoActions} className="px-6 py-2 bg-purple-600 text-white text-xs font-bold uppercase rounded hover:bg-purple-700 transition-colors shadow-md flex items-center gap-2">
+                            <Bot size={14} />
+                            Executar Ações
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Customer Timeline Modal */}
+      {selectedClientForTimeline && (
+          <CustomerTimeline
+              clientName={selectedClientForTimeline.name}
+              clientId={selectedClientForTimeline.id}
+              salesHistory={selectedClientForTimeline.history}
+              appointments={appointments}
+              tasks={tasks}
+              onClose={() => setSelectedClientForTimeline(null)}
+          />
+      )}
+    </div>
+  );
+};
