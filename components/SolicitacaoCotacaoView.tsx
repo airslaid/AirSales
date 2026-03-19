@@ -75,8 +75,8 @@ export const SolicitacaoCotacaoView: React.FC<SolicitacaoCotacaoViewProps> = ({ 
       const now = new Date().toISOString();
       const payload = {
         ...formData,
-        created_by_id: user?.id || 'unknown',
-        created_by_name: user?.name || 'unknown'
+        created_by_id: user?.id || 'sistema',
+        created_by_name: user?.name || 'Administrador'
       } as SolicitacaoCotacao;
 
       // Track status changes

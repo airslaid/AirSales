@@ -1227,17 +1227,18 @@ export const CRMView: React.FC<CRMViewProps> = ({
           alert('Preencha os campos obrigatórios: Título, Data e Hora de Início.');
           return;
       }
-      
+
       const targetRepCode = newEvent.rep_in_codigo || user?.rep_in_codigo || 0;
       const targetRepName = combinedReps.find(r => r.id === targetRepCode)?.name || newEvent.rep_nome || user?.name || 'Representante';
 
-      const payload = { 
+      const payload = {
           ...newEvent,
           rep_in_codigo: targetRepCode,
           rep_nome: targetRepName,
-          created_by_name: user?.name || 'Administrador'
+          // Preserva o criador original se estiver editando, senão usa o usuário atual
+          created_by_name: newEvent.id ? (newEvent.created_by_name || user?.name || 'Administrador') : (user?.name || 'Administrador')
       } as CRMAppointment;
-      
+
       try {
           await upsertCRMAppointment(payload);
           setShowEventModal(false);
@@ -2192,7 +2193,16 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                             <span className="text-gray-400 mr-1">#{order.CLI_IN_CODIGO}</span>
                                             {customerCnpjMap.get(Number(order.CLI_IN_CODIGO)) ? `[${customerCnpjMap.get(Number(order.CLI_IN_CODIGO))}] ` : ''}{order.CLIENTE_NOME}
                                         </h4>
-                                        <p className="text-[10px] text-gray-500 mb-4">{order.REPRESENTANTE_NOME}</p>
+                                        <div className="flex flex-col gap-0.5 mb-4">
+                                            <p className="text-[10px] text-gray-500 flex items-center gap-1 font-bold">
+                                                <User size={10} className="text-gray-400" /> {order.REPRESENTANTE_NOME}
+                                            </p>
+                                            {order.USUARIO_INCLUSAO && (
+                                                <p className="text-[9px] text-gray-400 italic flex items-center gap-1">
+                                                    Incluído por: {order.USUARIO_INCLUSAO}
+                                                </p>
+                                            )}
+                                        </div>
                                         
                                         <div className="flex justify-between items-center py-2 border-t border-gray-50">
                                             <span className="text-[9px] font-bold text-gray-400 uppercase">Valor</span>
@@ -2222,6 +2232,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                         <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Data / Hora</th>
                                         <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Cliente</th>
                                         <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Tipo</th>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Responsável</th>
+                                        <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Incluído por</th>
                                         <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest">Descrição</th>
                                         <th className="p-3 text-[9px] font-black uppercase text-gray-400 tracking-widest text-center">Ações</th>
                                     </tr>
@@ -2255,6 +2267,17 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                                     }`}>
                                                         {item.activity_type}
                                                     </span>
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="flex items-center gap-1 text-[10px] text-gray-600">
+                                                        <User size={12} className="text-gray-400" />
+                                                        {item.rep_nome || 'Sistema'}
+                                                    </div>
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="flex items-center gap-1 text-[10px] text-gray-600 font-medium italic">
+                                                        {item.created_by_name || '-'}
+                                                    </div>
                                                 </td>
                                                 <td className="p-3 max-w-md">
                                                     <p className="text-[10px] text-gray-600 line-clamp-2" title={item.description}>{item.description}</p>
@@ -2298,6 +2321,14 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                             <p className="text-xs font-bold text-gray-800 mb-1">
                                                 {item.client_id && customerCnpjMap.get(item.client_id) ? `[${customerCnpjMap.get(item.client_id)}] ` : ''}{item.client_name}
                                             </p>
+                                            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                                                <div className="flex items-center gap-1 text-[9px] text-gray-500">
+                                                    <User size={10} /> {item.rep_nome || 'Sistema'}
+                                                </div>
+                                                <div className="flex items-center gap-1 text-[9px] text-gray-400 italic">
+                                                    Incluído por: {item.created_by_name || '-'}
+                                                </div>
+                                            </div>
                                             <p className="text-[10px] text-gray-600 mb-3">{item.description}</p>
                                             <div className="flex justify-end">
                                                 <button 
@@ -2903,7 +2934,12 @@ export const CRMView: React.FC<CRMViewProps> = ({
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-6 bg-white space-y-6">
                       {/* Responsável */}
                       <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Responsável <span className="text-red-500">*</span></label>
+                          <div className="flex justify-between items-center">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Responsável <span className="text-red-500">*</span></label>
+                              {newEvent.created_by_name && (
+                                  <span className="text-[9px] text-gray-400 italic">Incluído por: {newEvent.created_by_name}</span>
+                              )}
+                          </div>
                           {user?.is_admin ? (
                               <select 
                                   className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
