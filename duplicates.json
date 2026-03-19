@@ -1,0 +1,4834 @@
+[
+  {
+    "id": "989af2c2-3935-4ed5-b750-558f55b4c658",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 2,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "00fe6003-4d04-4e73-9fef-2f4aa78c7502",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 3,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "8ec27602-537c-4ec6-8023-7776686beab1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 7,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4b885469-2ead-440b-84a8-a9efa8850dad",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 8,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "47dea179-3876-4c32-8d42-3591fd56a6f2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "f0bac980-d35f-43ee-bbbd-5c0e96015040",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "26ccab7a-3526-46bb-b0da-c48c4bc7aee8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "65d59ad4-1ee9-49f3-94a4-23250f15a150",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "c65de3d5-e0a9-4ba2-a22e-bbc8792b29c9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "a5f3d80f-b812-44f8-a63e-6b9fd77a2447",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 11,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0f3e5449-0434-442b-948b-089be62f6723",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 13,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "4de02121-3786-4aca-af1c-304679f4139b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 14,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "adb246d3-b61d-45da-ab53-d23e57ba2ddf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 14,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "9041f8e0-c9d4-4bcc-8135-b67db59afe01",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 15,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "39785f93-7fe8-4b10-ae91-9e6cd499e928",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 17,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "a3c4599d-5ff9-43a5-b507-2d859d4a84ad",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 18,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "cf983128-5d36-4a2f-ba5c-b976c4e24c52",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 20,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "d92b212c-9ba2-4d15-af24-d7ef2e65f5b6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 21,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "9ec1a7da-53cb-4f09-a4f4-ce2710ccc9c9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "DV",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "bd5dd159-c43d-4d18-9d90-c24b88b75389",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 1,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "77b7786d-501a-4a63-9b88-5b3a16493922",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 2,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "fc042405-1a30-4f28-9183-c5111ccd867f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 3,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "3c8adaf7-9549-4f86-b863-effd69dc749b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 4,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "b9df9faf-55a5-4525-a0b3-b0b66ebb7fe2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 5,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "0b0b6170-3e2a-4404-88bb-39997b79a00c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 6,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "0bffc242-8548-49c9-8157-9a870779305e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 6,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "14d78d9c-5c3a-4722-8601-b8515b905cbc",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 7,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "2b22900c-c034-4bbc-9d7c-815fd161d6ef",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 8,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "7dca9237-8146-42ae-8297-5e43ac75aae0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "5019353f-9431-4d93-a05d-ccc148a91813",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "b53b447a-d7bf-42f2-94a3-ea7309f3063c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "118b3805-e8ee-440b-a7c5-6835bbd26aac",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 11,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "c0337ff3-616c-41fb-ab6e-3c981e4de7a2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 12,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "6b9dad1b-1e62-4a07-b52f-bf38ef2df3a7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 13,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "6f46eb65-ba43-4099-bb47-95e7b9b0b530",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 14,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO / PERDIDO"
+  },
+  {
+    "id": "6c36483f-5b2b-4f23-a3c9-67fabde599ad",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 15,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "870f5aa4-8d8e-46e3-9119-76c84d94a774",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 16,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "bfbb7ddc-59e3-486f-aa2d-58aad17d6a84",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 19,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "9d536301-28c5-4b06-aa47-5cfc4a219ddd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 20,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "1bfc88c5-e834-4a23-a2c7-e1b6b9136a77",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 21,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "adf8e982-99a0-4c45-8e87-4661c226cae0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "41f85ffa-700c-4b97-9006-c28c7cab2d58",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "08bb89e0-bd56-41c2-b39b-e7e716261ba0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "55f78b21-22f4-4935-bcbb-1bc019b840d0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 23,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "4f9af3cd-4f7e-492b-969e-9a92cff5e2a4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 24,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "49d61b35-c848-4620-8632-f10dbd3ff837",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 24,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "db7b2042-f47d-4895-af3b-6aed9d62ac3e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 25,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "d328fa7b-c60d-42da-9422-03e76cad42c8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 26,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "1d10c937-32b1-4fa8-8c16-71c0f12ecb6e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 26,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "e0e05110-97c6-4f9c-bd8e-d5417fda275d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "57bdaa73-f65e-4909-beef-fb0bd8ce045b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "ff31bcfa-91f3-438c-9318-f8ee6522a57a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 29,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "5f1b6ce8-caa5-40b5-b4b0-69f77221274d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 31,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "68fa601b-d5c7-4058-bec6-0bbde30756d4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 32,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "ec13f5bf-f4de-4cd4-b612-608c121ab004",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 34,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "4f25665e-9b3c-41e3-a330-e9b9e13a8fdf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 35,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "852488ec-dd6b-42b9-aba3-f6bc71168f98",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 37,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "fc5a90b9-8b9c-4a72-9401-c8d86020544c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 40,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "83bbb169-f61f-4dec-a23a-3a601229bbf9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 41,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "5339a918-69f4-45c2-aa52-d8d33f2bf8ec",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 42,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "ac2f9885-5397-48f5-b41c-973e18054ea9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 43,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "62805a7c-ee9f-460f-90d7-db8a8bf66ea4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 44,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "c96b92b7-2a15-4286-a948-b785ef4e699a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 46,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "16f1610c-a50c-4821-a6a2-a5fb6e990b77",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 47,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "6e0d328b-5ae6-473c-8a26-230f4180262e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 48,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "08f5352d-cb5a-404a-8ca5-3a13bdb38c7a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 48,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "e5540e0b-640c-408a-9426-e5a88ab89e5c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 49,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "c28b513b-d28c-4493-ba7a-269f10cc8bd3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 50,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "a3693885-882e-4556-859c-8b47007ad849",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 50,
+    "itp_in_sequencia": 1004,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "6810dc5d-4b62-42a5-a449-91ba00902c7f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 51,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "f1cb8d87-20d6-4457-b404-45646f92a17c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 52,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "ecb53d1c-d20b-45ec-a71c-e284126a5cca",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 52,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "1a9f9b5a-58f9-4498-9598-457d2672b389",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 53,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "e9649829-5562-4399-b128-2a59c0e29e38",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 54,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "5707a674-fa3f-43bd-992a-156058220377",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 55,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "866f9ef4-63f2-4a7a-ab3e-85933abbddfa",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 56,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "43b6d176-db18-45ed-8ccc-2090110df913",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 57,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "5f22c3ef-9966-4b93-b033-d97e6e93ea54",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 57,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "77ecdba4-a85d-467e-b948-bcc9c69867ee",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 58,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "6ae084d0-8049-4bca-8c88-186dbab570ae",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 59,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "5c17fab8-1b38-47b8-8134-f291bbb92349",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 62,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "3506bc9a-9919-451d-b626-15a3e650bffd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 64,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "8eb25d80-909d-4939-9a43-a7f7b301f02a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 65,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "c25c2bca-6702-4735-9fc2-deb7fc986a6d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 67,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "5826c261-c2be-435f-8be2-17b9f9440207",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 69,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "8c467077-e845-4c2c-be11-887b085d9ec4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 70,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "d87f6265-d0ca-4e46-a541-b184ac2ad521",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 72,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "4b611162-322b-4071-8765-048fe9dd6234",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 73,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "fe1dc275-453f-43d8-9c17-cfcce7e84fd6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 76,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "57c2dad1-f9cc-4dea-82c1-4c385b0fecdf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 77,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "9be8b756-4c3d-4357-84bf-94ab824a6e0a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 78,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "e5079eea-a3af-47c6-aefb-7cbc2ad9bc2a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 79,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "36a41e37-4d05-490d-9fdd-cf8708eb99d7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "561763e2-986c-4019-8b08-8b55fc1a4080",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "0a2830b8-ab47-4f03-b7bb-acab0ada50b3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 81,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "4b0d04cd-f71b-468d-a9d7-626ba06074ec",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 82,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "9622f588-6612-481b-9f09-2b5495d52cbb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 83,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "a1cf2b61-89d5-4146-90be-1202053f6d08",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 84,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "f20c2478-06b4-41a4-a571-af7fafa088b6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 85,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "08b71fc3-ecb0-4a5a-9751-fe6f2977a981",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 86,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "8d36122c-ae4f-4e79-a990-42e29394f3e6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 87,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "232aaeae-e94e-4577-a0a4-97e84ac4492f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 88,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "2111df54-bf76-4213-8e5c-9b2a50cf70b7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 89,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "b2797a54-1c8e-444b-bc2e-e4f6af94e321",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 90,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "b5ac8e24-00da-4254-a49d-147493107216",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 91,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "0ed6c4d1-bbf3-40e1-bbcc-91c232e67cc3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 97,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "056f7249-1ea3-45b1-bb26-54992493a947",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 110,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "87aafa64-5e95-4727-9286-d13ec48fd513",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 110,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "501092ca-b421-4e68-a161-0e9ae00d27d9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 118,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "6d043ad2-4811-486b-96b2-8a2594169b29",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 146,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "8f8ae962-dcc5-499e-a159-d60095c0a2e7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 147,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "1da5be1d-c8b2-4170-ad82-470da96c295d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 164,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO / PERDIDO"
+  },
+  {
+    "id": "9e488ca8-4c7d-440d-afda-9907773adcbc",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 178,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "60a26592-4321-4e85-8dd1-6f23c18e3516",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 178,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "ea0b86a9-c080-487d-bfca-c452285c8d1a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 179,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "78378ef1-d12d-44eb-9ec5-a6aaa82ed2d9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 180,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "c24c9b72-ce1f-4426-b252-19d5787dc343",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 181,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "022230ff-c663-4f83-9ecc-924a45e76ab5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 203,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "41ebd1cf-ad93-4d67-ae87-f4fb1677b237",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 203,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "0bb6e168-5708-4d18-831a-060bc8a09993",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 204,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "2e2338a5-f821-4419-87db-582e6f88aac9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 212,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "d0586814-97fa-4fa6-b0fc-82a92dab6f79",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 218,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "91192e0e-0782-4e1c-a71a-1b9e1839ddd9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 220,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "34fc9a57-6442-43d3-b459-73a654839285",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 220,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "caab9316-ffd4-4ca4-b29f-5430e27e2fe0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 235,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "58a96422-0ab1-472c-b0cc-41eab1b625ea",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 237,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "b3bbce31-b693-455c-b10b-abb885f064e2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 245,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "f51fc282-df24-4002-b29e-da4d1909392b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 245,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "0fc9c8b5-f9a3-4171-9c02-3400a7fe3329",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 245,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "31b5d137-5933-4a19-a90f-1ed1048ac789",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 256,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "d171c386-08d0-4806-812d-d882df5bbefe",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 258,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "b476eb08-c3b8-4468-99e0-5d5ddead3696",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 260,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "ad06c85c-6ab0-41af-a9d9-0cae6e6fe5b7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 262,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "1db33e74-bf01-4f1d-93f6-be2a773ae804",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 263,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "1def76af-68bd-4374-af9d-20279fadd442",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 270,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "ec77d13e-2e54-42a6-89ec-5b11ca85d871",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 273,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "c8cde5bb-5708-4874-a15f-a72990b50f34",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 277,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "60910cb0-d9d9-4946-9a29-c89b59f7c357",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 277,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "0f8d010d-032d-4aef-9432-e3a60f04d8e4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 290,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "3f78d8e6-c5ae-42f1-94b5-4a5d736dc9c2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 292,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "431e95c7-dcc4-48f9-ae57-81aff2b7c536",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 298,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "04eda19e-f157-40a1-a0d9-1e8cd9453d0c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 302,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "b7302044-5849-4bf0-870b-c4794251ab87",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 307,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "4618d86e-ac1d-45aa-92ab-7958388c6d74",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 309,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO / PERDIDO"
+  },
+  {
+    "id": "1f2b4a47-b432-4d7e-bd23-eae1f18497b1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 312,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "21c81988-a937-471c-8855-28e4392f617d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 314,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "eb31b4aa-2856-495a-8781-130e65a809c0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 314,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "d4c96d62-04d2-4393-a1a8-3ef076bc13c3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 316,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "65e68f98-8252-49bc-8c59-5d252772016c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 316,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "d9581782-c683-40e0-be63-c824b6d1504d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 318,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "95a4ffef-84fd-4d13-9c7a-b42a1bc270e8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 319,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "1a725980-6fd1-41cd-b1c8-ba4cfd842ffd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 324,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "5fc1d229-aa89-4512-8d6a-c5108ac5e070",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 325,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "e14ef58e-3fbd-4256-958d-8ee7b6cb93f6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 327,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "5ee36390-ca16-40e0-b7b9-c1628f8e6912",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 331,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "a2caad3e-2372-41e3-a6f1-c1161b14fd8d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 332,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "17413d24-2948-4b05-afe5-1f74256b9d9c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 332,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "c6ecfeb1-36ff-4f67-8e30-7bb0257cc008",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 335,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "43dc6e1e-9364-4d2e-b6c4-518a57aa7c81",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 336,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "a80eab4b-5479-4b33-ac9d-a106933b72bf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 338,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "79543e3e-fcbe-470b-ab48-d0ca2b841478",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 338,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "afd918b9-6eba-4af7-83e4-bbb0db9db494",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 338,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "69c0588a-b491-4287-a501-bc43b0d04c85",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 339,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "9ed8d687-209d-4a3d-adb6-0b346948b22c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 342,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "45d4a5d3-1f78-438c-abbb-d1196830e7de",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 345,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "35d4c525-9fad-4780-b564-090063987d4b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 346,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "9d615801-fc32-46f8-8be9-c6ded2a8ba13",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 347,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "60a4a5fe-8e0e-411c-b629-73678e9ede3e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 349,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "40f2fa11-ba4e-4091-bbe0-adad3653f7a2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 352,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "9cebff27-0fca-4e5e-9788-3af5c7e45418",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 354,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "8e42cb7b-f82a-43af-b336-eadcd90396ca",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 356,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "92606c30-dd88-41ad-a52f-79f6dcaa1f93",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 360,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "e103c5f4-69ed-4257-ab3d-9f04b6b080f6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 361,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO / PERDIDO"
+  },
+  {
+    "id": "9fd6b34f-bb62-4a85-99db-508e0bcd654a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 363,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "6fd8d0b1-aaf6-4519-a26c-13c6a840e932",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 366,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "a88baf5d-35e3-4000-a512-e96e70a51f9f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 366,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "0bd2f1e0-2efc-4d1e-aafd-33cbf737d98a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 375,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "9a356f3c-cca0-41b0-9848-6c92bb17500e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 380,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "839abee9-0f61-4538-bff4-3b2254e16f3d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 381,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "85577ce3-4938-4a5e-a8b7-b247afce1de3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 384,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "95cfee93-902a-49f7-86e8-55454c1ee1df",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 385,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "d49c89a6-33fa-496b-b380-06213cf4161d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 386,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM APROVAÇÃO"
+  },
+  {
+    "id": "cf371d7a-47f4-422a-b6da-14f3c4133515",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 387,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "449857fe-9427-4742-8f98-65b8040e1ccb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 388,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "57dd9ea5-3167-4565-a177-02d3a2af5193",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 389,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "92558964-1519-432c-a168-e28f59fc87da",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 2,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "8ffd6e3b-2f7d-4396-bafd-e929ee3eda83",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 3,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "68db878a-6288-4be2-82dc-ac8d22aa6a65",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 4,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ac7ee10f-8107-4229-a3e0-41dc63f568e7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 6,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "96e3dd01-6cae-417f-bda8-07fc1e82babf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 6,
+    "itp_in_sequencia": 3002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a443e7e4-9ace-46fa-9993-d26a11f3b3b0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 8,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d7858f0e-b85b-4983-85a1-c96e60669de1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "adf9da39-40f8-4b21-b80e-83604de55eb2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9ef6d6bb-ea35-42dd-93fe-b5dd01a79459",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 11,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3bb36783-a625-4e8c-8bf5-b99d74a8ad69",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 12,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8b5a52bc-e38b-4cfc-93c1-11c6a4da518f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 13,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7c675779-6e31-4bb2-87fe-74d7fa16ceb5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 14,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ca802e00-bd8e-4612-8094-e125180fbade",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 15,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "80ecee9d-cb15-45bb-b9b6-69c486623906",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 16,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ebee20bb-e143-44a3-a239-1a31296e6fba",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 17,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0bbbcb77-8675-402b-9f7c-09d5770f42ca",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 18,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "81936dff-bc45-4cab-9a43-f4da1b0e561f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 18,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ff089b42-f80c-4722-8af0-3b739c947a47",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 19,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6f158a96-284c-4e20-b291-26e36f33c8f6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 20,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8dc20032-c7bd-4028-94d7-9eb3f81d786d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 21,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "17bd6755-b70b-4387-b920-2c7db622943b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b85c7ff7-8c84-4e31-9f6f-eaa77305b62c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1f616c4c-586e-49ef-928c-700bf8e45a9d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 23,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8584b0e1-7683-4a4a-b220-51b994fcc1cc",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 24,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "27562c9b-9deb-4043-bcf5-658242f16c4b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 25,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "36080fde-dd94-4073-ad06-fbab0eb7f431",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 26,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bd6faf1c-3446-4e19-ad7e-4ab8e2dacd20",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 27,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "b5a06067-5471-454b-aded-678928df1ab4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "05921b36-f7b4-4551-93c9-8cf4fe1b3989",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d0d7d0bb-ff31-47c0-9180-83ecdbdcc4d9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "24bfbf88-7427-41d7-9584-ba7025e762eb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "28fb7c45-f3d6-4852-8b37-bd980ec9d978",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 2003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "69daeff8-14bf-43ac-9f6e-f584feff8357",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1d4df0fd-b3d8-4f86-9338-3782cf151209",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 29,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "69ba9bdc-06f9-4e69-91e6-96014660c6f0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 30,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ed6ed0b3-40c5-49d0-801f-16fc90f22b57",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 31,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "59c5c974-a8aa-41c9-a63d-f7cdab1c7421",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 32,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8a5187f1-1deb-4d67-a392-4153d58edd5b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 33,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c8212e75-4d32-48f9-a0b3-ad3b79ae1476",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 34,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "cbc6e64e-c9c3-47cf-b665-62c4a186e51a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 35,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "187e3c32-35c2-4b60-8af0-15d9145f5338",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 35,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "92961e43-3a02-4ee7-8fb8-b865fc06b093",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 36,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a6f5d784-1a8a-4720-89a2-57035a9b8bb9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 36,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d0862800-d1b7-493f-91de-26965deb77b0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 37,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9e2e5e5f-f88a-46d2-b0eb-e9666c958748",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 38,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2ca6128d-4c6a-4639-ba93-d15c30bbd90f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 39,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "80e39e07-0682-4571-ad5c-d2b8f31c8782",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 40,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "96e44050-2225-487e-851f-b50643d3cb84",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 41,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e6aa08cd-89c9-49f6-a84c-c8bd028fdc44",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 42,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a93a73d4-7bc2-426a-be53-a35ac5f24049",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 43,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7ad71f70-d36a-4414-8df0-20a15cad4baf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 44,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "01ca3640-34a3-441b-af3b-444b545e1c2e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 45,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f2a30408-26df-4595-ad31-31e60ed04c7d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 47,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d16d3e90-0974-47ce-bff9-f6d1c3401a2d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 48,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2792560a-e4fa-4262-81e4-475d8744ebde",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 49,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ced39006-9927-49a9-946a-b16545d544bb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 49,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8f5f1a09-0788-4287-9d62-271d94e65a37",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 49,
+    "itp_in_sequencia": 3002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e0032c52-867c-445c-9b31-28e769330f11",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 51,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f5cd2c4f-41b2-4dbc-817c-5ae947db8437",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 52,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "19bd0f34-6c4f-47c8-ba44-9c9f95d1f9fa",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 54,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e3b5e4da-bc2d-48f0-a750-47fe365645eb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 55,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "82cbcca0-8498-4726-833c-4b2cf8d5f455",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 57,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0e62f500-23f0-4f9a-b148-d0c5fad81803",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 58,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6eddc787-2bd7-43db-82a8-7fa2c56e2b91",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 59,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c3434488-a4fb-4806-b559-e7c010e5272a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 60,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "78f65b88-9cbd-4f0a-b158-94d3a5ab4987",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 61,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "19b5dd83-adc0-4530-83b8-2dabc7c2efb2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 63,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "ca588776-fc56-4a88-a86d-48fdc9ad98dd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 64,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "04d6f331-8f51-4c12-83ce-2a0185b73395",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 65,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7f52cc4d-3bfd-4f4d-bb3f-33cf4f157ac6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 66,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bf364444-11bb-4366-ab5e-e86ef172e0c0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 67,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9d868cd8-a942-438d-9de8-b4df36907068",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 68,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c8c39a91-52d6-46de-9b17-3ceee9792889",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 69,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f8d8bfe3-b34b-4022-9900-0faafb764605",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 70,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c4de7529-a1c2-436f-9451-ab3db3cceafe",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 71,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "58258de4-8dda-4c52-b856-e098c99f0c93",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 72,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bf713e2c-8c3d-4fd7-b6b6-97f571969e24",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 74,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "21a86118-7720-4a51-8af8-cfd308648785",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 75,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "266d9a1f-131b-46f2-80a8-53441d1849cd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 76,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "134a2aa1-129e-4007-8251-a10df1a5e45b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 77,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "94a782ad-17d1-4139-a92d-6c1f2df29de8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 77,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b4676460-72e4-4e28-a129-ec1821383351",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 79,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "02fbffb9-144c-425e-a37b-ff7bd36323cb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "86ffd45d-06fa-49a9-b8c3-ec8859eec7b5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bf7beb61-20f9-46a0-8a12-fb9242aa15ce",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f4445c15-cf8d-4825-85ce-9f11bbbad7b9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4c2c2a22-542d-4f75-bacf-bf9a77ff5553",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 80,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f08ea59e-2b96-45f0-97e3-987530ff9b5a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 81,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2a8bc47b-8fb7-41f6-97ca-22436e56a874",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 81,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "23562ea4-c4b5-4606-a7a9-2a573641c63b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 82,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "9eab0332-8911-419c-a7bc-ee7433672b47",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 82,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "07790eaf-b39b-4bb6-9e70-cee3c07431c8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 82,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "bf4935ea-5bb4-49ef-ac9e-80f5735d5526",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 82,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "62d2b808-d86b-47fa-93be-dd4ba395e3eb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 83,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "21f9d83c-c112-4ae9-8c6d-944566e2c577",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 83,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6a0177e3-adfe-468d-9c95-f86d21080304",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 84,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ba7c1f19-7062-4d76-9d37-29777041dd17",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 84,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "cb81ffa5-1fb0-4857-9786-61d1617de610",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 85,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "803edd3a-627f-4dda-b221-9c3f6ed663a3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 85,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "68dd726d-1146-48b4-98dc-2a91e915cfb7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 86,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "15a7f2c4-6f4e-4f58-93f6-902662cf51a7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 86,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9de5cd49-936f-41c7-9862-a57ca436b0d5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 87,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6a18106f-fdcf-43fe-a18d-83ce6110196c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 87,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bebbc07a-fb58-457f-9684-1d29a433f883",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 88,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0eff5570-f1b4-41c8-8201-34d8b6d102e4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 88,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f613dd04-4148-4c55-a006-4fc8baa8bff6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 89,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7cedb4e6-c2f3-4278-ae41-7360a20fdd0f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 89,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "567ffcc3-bfb1-43c1-a4e0-62890c48cb3c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 90,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2e99f571-ccc2-4abf-a2c0-4b7a4eb17447",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 90,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b2cddcb0-c3c3-432a-ab75-393ca870788d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 91,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8263613b-dd57-4011-9608-978c9c92e784",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 91,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d898240d-2008-455a-9227-e831d4f72d7a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 91,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "34a8b94a-f73e-42e1-b30a-82cbd1ef4aad",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 92,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "a0a26209-8675-4573-aa06-202c26f6f870",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 93,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0bfb10f0-dd4d-4a50-b795-380c253bb678",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 94,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c8cec6a6-1a1e-4f9f-a9d6-0d3d42f72139",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 95,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c010ecff-9f43-4013-be42-f2e835dc4266",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 98,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "26669931-265f-4eed-8ab3-3ea84d0ad186",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 99,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7e5e09d7-5332-4124-8662-8a80a2bd7144",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 100,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "43682831-f9af-41ab-ba54-64714183adbb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 101,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "60b060c5-e187-4e99-8ced-fefb352642b8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 102,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f104c56e-d6ad-467d-8238-60960e10918c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 104,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ad4abd51-f400-4db4-ada3-29c2cfb7cd34",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 108,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8926c620-88bc-4bfc-b353-fcc29e62aade",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 112,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "05245086-afe9-476f-aada-c91f1a9668d2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 114,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f224de9d-dc89-40ae-8886-4eede8c5b835",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 115,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c2bb8e18-9db3-47b3-b804-978c83c666f5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 116,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "85ca95ef-f99f-4b86-80a9-b02dc49d8f03",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 117,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "10fac624-e003-41ef-88ea-f7a5161fd520",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 118,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2edc74c5-188a-4ce4-8f8e-231aa244c74f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 119,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d51ee09f-5add-4271-b0ce-4ff3aeab4118",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 120,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "d4c96283-e1b7-440d-8c98-e3f1f796b2c0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 120,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "ee74cfa3-6ea9-4513-941c-228717d693de",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 120,
+    "itp_in_sequencia": 1004,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "c7b95576-b76f-47fe-8223-770e72a52925",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 121,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "05338d8d-444e-416b-914b-512dfa34db41",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 122,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "46ddd7a4-dcb2-4d5b-96e1-627d67874c25",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 124,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "12e26bac-fb03-4282-9edf-3cbe00b010a6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 125,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7fa299b7-6efb-491a-bf38-b0e40bac1579",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 126,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3e9a642e-68e6-44a2-a0fb-3bad7160cbfe",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 128,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4c239eb5-ab32-49ff-b565-0d59efc5f9e5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 129,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "88ad099b-9499-4a2d-a814-3547c718b2a9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 130,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1da9cc8e-2dc6-48bb-93fd-bca4389a87a6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 133,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8888b2b8-629d-438b-993d-b06fc3e2f662",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 133,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "13a72804-a50b-4cb7-b6e8-085c43dff9b4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 134,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "db54560e-2012-49e1-a2f8-9b41f075fd7f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 135,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4a55b748-4bce-44e3-879b-0012a9145499",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 136,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "546686f0-9a0e-4b6c-a618-16bdf90ed9f2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 137,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "09019d74-52f7-4be0-9c37-2af204a03f58",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 137,
+    "itp_in_sequencia": 1004,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7754f040-6b57-41a3-a898-23284986a618",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 138,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "87c13162-4cad-475d-bd0d-a3269c88e241",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 139,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ffdbf739-89ff-4e36-9d06-9e148ba3c74d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 139,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "feef0c05-ced4-4cea-af73-972aeaac97bf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 140,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "5412a10f-b6fa-4e70-895b-f39a47d6645c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 142,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b22d4bb4-a670-45fd-9992-f0e6194abd53",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 143,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0a0cdcb7-e21d-4072-b108-7267b4b09632",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 144,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "cf3fb575-d053-4dd6-9915-93859c6b7108",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 145,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "019117fa-8479-4310-9e0f-f5ad8b36d552",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 148,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c27b91f9-c228-4eb3-b5f1-1c47a22aa6c1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 149,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "55eab0e7-c8ee-470a-8995-a304018ccb9e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 150,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c5b075bc-b84c-4087-b456-6f55a5a97e5e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 151,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8c8134e5-fa05-41ea-9ad5-1d630c6331bc",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 152,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4547f4db-9d04-43f6-982c-785ea25b7a24",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 153,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "4ca874d9-f19f-486f-896c-c0417c587d62",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 156,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "42688b21-31c6-4d75-a5a6-93405c4f29cf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 157,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "eaca1c1c-ba12-4bb6-9fa7-2e199d6c647a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 159,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "883b6984-c6fb-4109-85d8-7eb184217ad4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 160,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "03f7d13d-70de-4125-9c96-de03e3d5d797",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 161,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "372b79c5-79a7-4ee8-b546-17d068a4169a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 162,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4a84ef6e-8606-4d9e-898d-229ee0b3199d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 163,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c2f43ba6-23b3-4d78-88b8-e691db376256",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 165,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "60c8a624-c17c-4b75-9527-b3067cb09b3c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 166,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d582b19d-9e29-43b1-8c49-50ee1c29bf32",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 167,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a6282f17-8642-46ee-8753-5ac1f5618462",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 168,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "43e1090f-f419-4fb0-89d7-1bfdc78a3ed2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 169,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8301892f-5394-4236-9965-a9d6ea22e0bd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 170,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6ec2e204-2a54-4d2b-b7e9-cbbaa321ad65",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 171,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b6bbff85-b606-4547-8b23-492cba0254f9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 171,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "adbd8476-7f88-4a05-ad3c-bc5dea401da6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 171,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2f64e9be-809e-458b-bbde-e9bd04fe9364",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 172,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "67dbdc84-5e97-47d3-96c3-71aaad2a6d58",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 173,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "08c5e41f-de42-40fd-b96d-f3ee245256ec",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 174,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e90ea4cb-d0e8-477c-817d-9a1902969163",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 174,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4710aa08-380e-44d5-8289-980a0453512b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 174,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2fa4eb43-45d8-480d-95a6-04d6c8902e6c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 175,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "6b3784e5-3a24-46bd-9ef5-e06493a3aa5e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 175,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "23b6203d-dd24-4055-8e38-34e3a8fa425e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 176,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "7715ddf1-4c76-4471-ae2c-8b282186d65a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 177,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "67cde0eb-cc21-43f3-9f9a-f22261f7793e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 182,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e854cab8-100d-4913-a308-405b45edadc3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 183,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8643510a-f17e-4c32-9761-1f4a61a11f4c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 185,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c2124c8f-4d7a-43bc-8385-2152a6b95740",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 186,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9096b670-c9f8-464a-895b-28b0a57f2035",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 187,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "c9427457-3b59-40ba-a774-c1db6e1f1877",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 189,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9823f013-f5ab-4e85-87ed-5f2d9381dfbd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 190,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2ae982d5-1b12-4f12-9e70-7a9ef0f202c5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 191,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "470f12e4-3c27-4e9f-9890-0c69868125c8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 191,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "47f69665-f242-40c6-9626-fb19c752088d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 192,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "dddadfa1-fafe-49e2-bbca-002a98187d47",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 193,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "53b4b9a0-673d-4546-9bb9-5801f46f2d17",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 194,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "153f84e1-c46c-4862-a7df-d58fd8a2ecd5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 195,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "92bf7f39-6f97-4f9a-ac20-aafd6342c1b4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 196,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8deeebd0-a160-4645-bae1-e78a3cc7b8ad",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 198,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e8df7bea-186b-45f3-b5c7-344c21ea9d4e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 199,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b2ed7a1f-e639-417b-9f57-8c752b413291",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 200,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "42e01dff-e6da-4faf-a21d-a6c302fa5fcd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 201,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "064e3f03-fc61-49a4-8be2-77ddef7c0fcf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 202,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f01b3bac-e619-4ef6-bb85-5547bbb22707",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 202,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6e041f20-cca3-4d56-9cae-62cc43170098",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 205,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "cadfbf68-2aa9-4b54-bcfa-ec595a252c40",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 206,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6b3192b1-ad2f-4d95-965b-3d9795507835",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 207,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9e31870f-169d-4c21-a74f-27d26b2eec3e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 208,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "54f5433a-09aa-4e27-83a0-0f13a746dbe6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 209,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9fcc89b0-753e-49b6-968e-0a0c6444e193",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 210,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "39c12fa7-0e84-4c5b-a3b3-1391e44d8155",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 211,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3978de1d-dbce-498e-96f5-bb037d3a253e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 211,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a2266393-a6fc-4108-ac7b-ee34d2821dd1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 213,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c1337609-8815-4f07-a182-38a9aecccbc1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 213,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "dd1634e2-ad61-4039-953e-e1eea55e41b8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 214,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e42a0aa3-b369-404b-a398-2137200c58fe",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 215,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "846bf96e-0fec-4ce6-b3a0-5c7a40e6b6e4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 216,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "175bcc3d-9b47-4a02-b336-206cbbb6098e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 219,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "b3773ea0-7f46-4b0f-a231-de5588026b99",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 221,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d436d3ca-7b83-4308-88b8-68912ebcaa38",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 222,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ec134c47-b7ca-482b-8c48-56ad6c150e06",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 223,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "fc55a0c9-61fb-4c8d-b9af-2538ffedf6a4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 224,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "5486ccb4-dd29-47d6-ab1c-c880e61d472d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 226,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "057b53c8-2fe6-4ee5-92f9-49dcdf7cb605",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 226,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "5f732c4f-9b49-4cd0-a7d4-e04ed1ae553b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 227,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d99a9822-3892-4f41-a11d-7aa15fbca9b2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 228,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0c177caa-a759-490e-a62a-85026eaa486b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 229,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2132b6f1-3303-4da6-ab72-ba295ff1f984",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 230,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3d81f07b-3205-4d74-b5dd-149f718db510",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 231,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "dd9efca8-5b4c-43d3-b9cf-ffe3f15a8c97",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 232,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ac2cf216-e5db-4f3b-9c93-0928ccb78916",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 233,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a942f3d1-e5ae-47e8-9cfe-70cdb58b0f39",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 234,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6790dfba-c4ef-4493-a061-e1444bd13ff8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 235,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b52ff6d5-8b6a-49c7-94b3-6122002a4088",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 236,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3c8f682d-d6bd-4eda-a39f-3ab25c3f1bae",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 238,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d8db0d34-444a-440e-98c2-42bcf6103f2c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 239,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "626e078b-286c-4251-b8e6-9e3fcecd7602",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 240,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "876d246f-c40c-4d75-9931-15c14e12fdde",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 241,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "a4f94ff5-c64f-47bd-8f3d-e0c8b577ca3b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 242,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "10245172-a1fa-4e0d-bd7e-72817d9ee668",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 243,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a35063c7-b369-42d8-958b-e8ba35e672d3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 243,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1b99e8a4-2ab4-4796-9741-34e52c65fa99",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 246,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bdcd7550-cde4-4baf-8c47-02c3a595b9d0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 247,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "58f166a5-1482-457c-8190-0cfcfe657a26",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 248,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d76a145a-d4f1-41d2-85ec-9def2dec252f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 249,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "0bd4d0bb-8b02-4c77-ae43-06f32aa824a9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 249,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "cb9d278c-8ce5-418a-8225-c94a02b320d5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 250,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "24e3d429-0b03-46fe-a217-b1fd5b04a2bf",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 251,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "6d4234e3-44b5-499a-819a-7bbfea8e9b02",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 252,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "eaf1dafe-da9b-47fa-b2c2-8f1c10989105",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 252,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e9b3019e-1148-4bda-8bc3-831cc6d6c816",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 253,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c5d100b3-49b1-4674-bc65-045aee490640",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 253,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "81435638-cd1f-4aaa-8848-0bd3a769eba8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 254,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d4db3f69-7ea2-48df-9e3f-d89f8bc3a80d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 255,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b375df28-c76f-4135-ac68-d7a96923e64a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 256,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "e831327d-04e8-4600-a277-14c93c313642",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 257,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "144d3c5b-7832-4cdd-a708-55f0c806f1d7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 258,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a1a6593e-63e0-475d-992c-3b80c93d2b2a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 259,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "595020c2-76aa-41e4-bd11-3eb14b7b07e3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 260,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "48f6faa1-4489-4929-9a44-3532bfe429d5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 261,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "cfa67176-f3b0-400f-b087-de2ec5aacc2d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 263,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e6b1d027-bf88-4816-ae25-b95e5b346b0d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 264,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "95f5e172-319f-4880-ae34-f1caef8f1e33",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 265,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "cec10844-7dac-483f-8dae-920b05e652d9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 266,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ad415d5e-84d8-4a70-9714-2d56f4163a52",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 267,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e6f35563-8bad-48eb-9095-4217c84e8a74",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 268,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "9127cc32-806d-49a5-b294-90dec279459a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 271,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "245f2082-0a74-4170-bb5f-9694be79c67d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 272,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "94e078ca-286e-496a-871d-c81db4163f41",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 274,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "5a13f05a-4932-4674-a94c-4e4783e4606c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 275,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "7307889b-996c-48a8-b325-7790bfed1f8b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 276,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d495d91a-3d50-45c4-ba61-2d73d12e916a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 278,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "1feb34cd-6058-4b53-9e97-820b1c90f264",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 279,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "6c7971ce-bbbb-4c78-a00c-19d9c660837a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 280,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ee72fe4b-c5ee-4a87-a324-2749ed4c480e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 281,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "a3ae7d02-7fde-4682-aa76-3400f3c1b86e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 282,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d0fdf921-ae10-40ca-9428-3343d0ea7ce3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 282,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "dc04ed32-c0f0-4122-a0b3-3531d00a2ee6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 282,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4071bfc0-1bc7-441c-a48f-195a5ae9fcc1",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 283,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "c5935381-613c-4819-8abb-f120ebe5651e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 284,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1e596c92-4579-4f68-934a-f6cd467ade4a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 285,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "01d64111-359f-4edf-8df5-c12cda86b51d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 286,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "f237836a-8ad1-4316-9570-96432213ee79",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 287,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "68fb89ac-0d84-4015-b0f6-4048b200bfda",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 288,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c090c8b0-9738-424e-800d-46a5bffd0fb4",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 289,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "eb76fe2d-ab76-4871-9669-e1b20eca55b3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 291,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "06042867-41b9-46a5-b223-07e24238713e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 293,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "4404d7fa-9825-41f6-a0a0-d1b384e1038c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 294,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b3df167b-c72e-465d-9acd-541febbd3318",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 295,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "cebce61a-b578-4850-ad3e-cc2d52b1e62a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 296,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8e62d651-1534-419d-bbe9-6b7472adee79",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 297,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "b70121e0-49ec-4a34-9b7a-f92456d063a8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 299,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "adf8b2b5-8302-497d-a8db-f897dcfa4471",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 300,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9e37afdc-5c80-4b40-b91d-e39df7e90124",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 300,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e8adb0b4-61f5-4f0d-93cf-d8dbe2fbe565",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 300,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "d799c1d3-36b6-457e-b703-d8e9fcb25e96",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 301,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "def5a51f-768c-45eb-b6e8-3f69beb1df1c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 302,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0fae0155-5952-46d0-bf45-f8579a618fc5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 303,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "43caaef8-e868-4291-958c-a5e5fa2e56fd",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 303,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "50453294-af25-4c02-bf55-fe92cdcf3a9f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 304,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "8a8b3a4c-6e6d-45b3-8a33-7d63b79f745b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 305,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "b40c654d-cbb7-4f80-821a-916d58a57f76",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 306,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "762c292f-6a0f-45b0-9669-74768151ba92",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 306,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "20b21751-4955-4a4f-a437-79b01191a0b3",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 308,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "4dea512b-d00f-48d8-a5a2-dc9f7f7dff47",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 310,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "bff5cac8-4761-4b93-aef9-4392c3d918ab",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 311,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "18df2ed2-fffd-46ab-84f4-20b4d0476685",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 313,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "51d9fea5-6e76-40e7-9934-949f1da1ddf8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 313,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "1556ded1-6b43-42a5-bc1a-844ce98d773c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 314,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8fd86ce5-ca71-4339-bce7-681b2018b07a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 314,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "e134352b-5d3c-4e97-8793-53bd10886146",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 315,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3aff6975-2b89-47d0-90ad-26e70c21382d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 316,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "b888cacb-cefe-40fb-aa1c-49ecfb4a0446",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 316,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c9309923-e9a3-447f-93ed-b02cd12096c5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 317,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "99642f1f-990d-4e3a-9773-010685dcf979",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 320,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "d7d99738-3111-4c8f-a17d-fdb94d634486",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 321,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a2f748fa-0f3a-4293-a733-604e182a3fb7",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 322,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "64ec875f-1b1c-4b0a-96f7-51825d2dbf11",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 323,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8344bc42-0869-416e-b012-2cb4574c944c",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 326,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3746e290-c987-4667-8368-5456196afcff",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 328,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "a57d2750-5d48-460b-a3ab-736980ed16e2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 329,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO PARCIAL"
+  },
+  {
+    "id": "dbc98add-db63-4dfe-90fa-267df3f97510",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 330,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "6875166e-6974-4a37-b3f6-b1a2c24ebba6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 330,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "2faa46c1-0c5a-48e2-9ac3-77bc6131ec02",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 334,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "3823a3b1-9de9-42f9-99f5-9d25cf723b9f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 336,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "2170ffd4-1ed9-480e-bd62-a3eceec59fed",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 336,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "68b40ba2-5fb4-4d18-b43d-5e895e75fbd5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 337,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "843d5088-23b0-4b96-b633-a5999bb560f6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 341,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "32538d61-1c3c-4411-86bb-8da3ecc34ba9",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 343,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6c2f61ea-c64a-4f7c-a543-f84673970e85",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 344,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "a219d018-952b-4da1-ac82-ef8c5c08ceb5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 348,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "f1f1c00c-8404-4f1c-8f4e-6fcb817daf73",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 350,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "da6544a9-17c9-4d60-9993-0c936b100719",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 351,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "c05e7c40-8987-42e7-a339-5f4e91f0cfcb",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 353,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "aed74d86-88f3-4b87-b99e-b55f69ff1f12",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 355,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "86711218-69c8-495e-bc03-7c440f2ee670",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 356,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM NEGOCIAÇÃO"
+  },
+  {
+    "id": "809e7ea4-9f43-4fde-908e-1280abb946c6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 358,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a4b44bbb-a3db-474b-bc85-c44cec9ef97d",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 359,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "05c00638-da82-4981-a1b0-4fb6baee6a3a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 362,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "40bfb363-859c-48cc-a2ad-bcfe80e9a9ad",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 364,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "55a6b846-710c-4483-aa50-68d7b831641f",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 367,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "43541f7a-c1e2-47a4-8810-477a451a2ca0",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 368,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "effcf6bd-c1b5-4b1a-a05b-5576c9070101",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 369,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "8e0fc79b-325a-4b67-98c8-2bbfb4870242",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 372,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "be610fd0-6f26-445f-807c-c3efe640da2e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 373,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "3807f8bb-a5d9-4992-b973-4a5b788aa2bc",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 374,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "4d93339f-3089-44e5-b74d-ee3b6e627b7a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 376,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "98c50378-ddec-4b0b-8f94-291e80695098",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 377,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "5e2c9dbc-3c4f-4b59-b974-0f3896edb908",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 378,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "03faa1a4-bf42-4ccb-8868-dc23fb55762a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 379,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "bb9ef49c-a869-4a02-bf72-03ee19cfbb2e",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 382,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "61e368a8-ee8a-4a6b-9328-8888d25fe1f8",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 383,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "1434e3b6-db0a-4854-ba76-6c8240d59e7a",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 390,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "5a139ad1-f658-4a54-ab18-380f160caee6",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 392,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "19b00361-8cfc-4f1d-b367-e86964f48af2",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 393,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "76c3d59f-a3ce-4b29-a3e4-3441e8830074",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 394,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "b119ae7a-33f5-48d4-83f7-2d3805f68bc5",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 395,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "de853884-3136-47ff-9933-ef930d956c5b",
+    "fil_in_codigo": 100,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 396,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "919f73b4-97f9-4d6b-a0d4-f22fef02e6e9",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 6,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "162b97bc-0a42-48c6-8d59-c9698a29028b",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 16,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "93f4e21d-0830-4366-9376-198db830ea62",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 16,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "8d0e6c54-0bc0-4374-93aa-47a943be8020",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 17,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "69767cad-dd6c-45c9-8308-d6bcbe8b65a1",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 19,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "c63da7f9-743b-4523-9925-a5a4a17d4e6a",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 24,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "dc2fdc50-6850-4c68-8a88-c587b1fc9cd7",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 26,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "ea576955-8dea-4e74-b5d3-c2043a5bf19e",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 27,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "e8066582-eaf6-43a3-8091-d6251b2d3db0",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 30,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "567fd152-e4ae-4ad9-995d-1d1fe6040c65",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 33,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "e9f86134-ba28-4250-9571-b1f48b5830e7",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 38,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "b3a1874f-958c-47fd-8513-a7f5a649543e",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 38,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "f3536139-05a5-41a6-924c-4619f8bb7512",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 39,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "afbb3dad-2f3e-44b2-81af-a0893cff8dd7",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 39,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "7d1b87d9-398b-48ed-b3f2-cebda4fcc1e6",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 45,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "0703ff74-3e1b-49b9-a420-113fd827bd19",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 46,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "66e30fb1-3352-4e2d-8b86-47c7807a2426",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 50,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "4afa04dc-c885-4f95-8ea5-08e29afc7343",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 53,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "7fddb752-a8d1-4721-808d-6654c5f151a3",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 53,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "501aa6ff-c74a-4ff2-93cb-ea1ac51654fd",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 61,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO / PERDIDO"
+  },
+  {
+    "id": "1e8ff574-7bdc-492d-a0bb-785d6f703609",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 63,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "da19a38e-fe44-4f9f-ab21-66dbc6f66dc4",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 66,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "CANCELADO"
+  },
+  {
+    "id": "78108323-b5a7-47ad-8839-22a4a49ebeaa",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 68,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "ENCERRADO"
+  },
+  {
+    "id": "68412654-1a17-4115-bffa-fe53d68a48ad",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "OV",
+    "ped_in_codigo": 78,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "PROPOSTA ENVIADA"
+  },
+  {
+    "id": "428983a2-1e56-4826-8da0-e3577dfc47bd",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 1,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "0d8e759a-8489-4b16-999f-aa8579c2199f",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 2,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "8f85fbad-544d-4112-8b90-fbfa82d8bf4d",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 3,
+    "itp_in_sequencia": 4001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "65120488-dbed-4b27-bc45-80744af771fc",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 4,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "560ed1e9-97a2-4dbc-830e-ba795f6d9601",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 4,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9e956768-866a-401f-b5a4-56fdf3da93a7",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 5,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "c8877de4-751e-4f09-8d89-0a620bae2539",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 6,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a9c74e7b-9a89-4837-9411-5362388cad59",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 7,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "f015df12-ee5a-42d2-b971-c7dc5615dea1",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 8,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1a09a310-3832-4c75-8cf8-2a764af68bbb",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "78deaa25-d9e6-4ccb-86a3-1de8d54ebcf9",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 9,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ef25309d-7ff6-49b5-a181-63b459c17946",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "23b10d2d-7119-49b1-b18f-5c95345364c9",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 10,
+    "itp_in_sequencia": 3002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "4f282f76-7313-46ba-ae20-bbe167d46490",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 11,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "43399d47-d853-47d4-a144-34efa6aeea8c",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 12,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2a26e0c0-7f75-47de-a827-5a2e8656b246",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 13,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "5987f0d0-7a7c-4101-8b3b-7414be217677",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 14,
+    "itp_in_sequencia": 2002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1a335d01-8ae0-41e4-8552-0eea7fa1532a",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 14,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "27f6e841-2614-4ef3-8dde-280422b1e311",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 15,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "ffde8727-7cf7-4874-bcfc-c32f3174310c",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 16,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "991f3b6f-66e1-4455-8ea5-ff0a4a81da45",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 17,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "2375e64c-0b84-4c7a-85d7-8bd90b821374",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 18,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "a85feadd-9624-47b0-9a64-d1879acedacc",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 18,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "da5b39ca-b953-4701-8b61-c5c3399b4e5d",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 19,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "65b49799-8abd-47ad-a74a-3cbbc02ce6e1",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 20,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "42cf0557-f4da-402b-a2e2-8d4804fd881c",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 21,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "1e07ef5c-1d55-48ef-b4a6-443b36ca3ac0",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "9c948b23-d516-4feb-8cfb-0dfe7b3a3e29",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 22,
+    "itp_in_sequencia": 3001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "06b21a4e-4caf-4f60-b667-eaf1d27480f7",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 24,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "6b9c219b-546b-4988-8a16-1eeb317ffa4a",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 25,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "c372b275-9fea-4a50-9192-a7d67dd851b8",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 26,
+    "itp_in_sequencia": 2001,
+    "ped_st_status": "FATURADO"
+  },
+  {
+    "id": "563daa60-d737-469d-a2b9-373f6df79568",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 1001,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "49cb12bb-c640-45a6-b6bf-c999b5eb988c",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 1002,
+    "ped_st_status": "EM ABERTO"
+  },
+  {
+    "id": "5b4a7141-d4f2-4df6-938d-6ce705477004",
+    "fil_in_codigo": 200,
+    "ser_st_codigo": "PD",
+    "ped_in_codigo": 28,
+    "itp_in_sequencia": 1003,
+    "ped_st_status": "EM ABERTO"
+  }
+]

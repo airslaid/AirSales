@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCircle2, Calendar, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Bell, CheckCircle2, Calendar, Clock, AlertCircle, AlertTriangle, User } from 'lucide-react';
 import { AppUser, CRMTask, CRMAppointment, Ocorrencia } from '../types';
 import { fetchCRMTasks, fetchCRMAppointments, fetchOcorrencias } from '../services/supabaseService';
 
@@ -258,9 +258,16 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
                           )}
                         </div>
                         <p className="text-sm font-medium text-gray-800 line-clamp-1">{task.title}</p>
-                        {task.client_name && (
-                          <p className="text-xs text-gray-500 truncate">{task.client_name}</p>
-                        )}
+                        <div className="flex justify-between items-center mt-1">
+                          {task.client_name && (
+                            <p className="text-xs text-gray-500 truncate max-w-[150px]">{task.client_name}</p>
+                          )}
+                          {task.rep_nome && (
+                            <span className="text-[9px] text-rose-600 font-bold flex items-center gap-1">
+                              <User size={10} /> {task.rep_nome}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -291,9 +298,16 @@ export const NotificationsMenu: React.FC<NotificationsMenuProps> = ({ currentUse
                           </span>
                         </div>
                         <p className="text-sm font-medium text-gray-800 line-clamp-1">{appt.title}</p>
-                        {appt.client_name && (
-                          <p className="text-xs text-gray-500 truncate">{appt.client_name}</p>
-                        )}
+                        <div className="flex justify-between items-center mt-1">
+                          {appt.client_name && (
+                            <p className="text-xs text-gray-500 truncate max-w-[150px]">{appt.client_name}</p>
+                          )}
+                          {appt.rep_nome && (
+                            <span className="text-[9px] text-rose-600 font-bold flex items-center gap-1">
+                              <User size={10} /> {appt.rep_nome}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia, OcorrenciaAcao, SolicitacaoCotacao, Customer } from '../types';
+import { Sale, AppUser, SalesGoal, CRMAppointment, CRMTask, VisitReport, Ocorrencia, OcorrenciaAcao, SolicitacaoCotacao, Customer, CRMPipelineStatus } from '../types';
 
 // --- Solicitacao Cotacao Service ---
 
@@ -281,50 +281,37 @@ const normalizeStatus = (text: string | null | undefined): string => {
     .toUpperCase();
 };
 
-const CRM_STATUSES = [
-  'EM ANALISE',
-  'EM ANÁLISE',
-  'EM NEGOCIACAO',
-  'EM NEGOCIAÇÃO',
-  'AGUARDANDO CLIENTE',
-  'EM APROVACAO (INTERNO)',
-  'EM APROVAÇÃO (INTERNO)',
-  'PROPOSTA ENVIADA',
-  'ENCERRADO',
-  'CANCELADO / PERDIDO',
-  'FECHADO (GANHO)',
-  'FECHADO (PERDIDO)'
-];
-
-const shouldPreserveStatus = (existing: string, incoming: string) => {
-  const normalizedExisting = normalizeStatus(existing);
-  const normalizedIncoming = normalizeStatus(incoming);
-  
-  // Se o status atual no Supabase é um status específico do CRM (movimentação manual)
-  // e o status vindo do ERP é apenas um status genérico de "início",
-  // mantemos o status do CRM pois ele é mais rico em informação sobre a negociação.
-  if (CRM_STATUSES.includes(normalizedExisting)) {
-      const isGenericIncoming = 
-        normalizedIncoming === 'ABERTO' || 
-        normalizedIncoming === 'EM ABERTO' || 
-        normalizedIncoming === 'EM APROVACAO' || 
-        normalizedIncoming === 'EM APROVAÇÃO' || 
-        normalizedIncoming === 'EM APROVACAO (INTERNO)' ||
-        normalizedIncoming === 'EM APROVAÇÃO (INTERNO)' ||
-        normalizedIncoming === 'ORCAMENTO' ||
-        normalizedIncoming === 'ORÇAMENTO' ||
-        normalizedIncoming === 'ORC' ||
-        normalizedIncoming === 'PEDIDO' ||
-        normalizedIncoming === 'PENDENTE' ||
-        normalizedIncoming === 'LIBERADO' ||
-        normalizedIncoming === '';
-        
-      if (isGenericIncoming) {
-          return true;
-      }
-  }
-  return false;
+// CRM Pipeline / Statuses
+export const fetchCRMPipelineStatuses = async (): Promise<CRMPipelineStatus[]> => {
+    try {
+        const { data, error } = await supabase.from('crm_pipeline').select('*');
+        if (error) {
+            console.warn("crm_pipeline table might not exist yet:", error.message);
+            return [];
+        }
+        return data || [];
+    } catch (e: any) {
+        console.warn("fetchCRMPipelineStatuses error:", e.message);
+        return [];
+    }
 };
+
+export const upsertCRMPipelineStatus = async (pipeline: CRMPipelineStatus) => {
+    const payload = { ...pipeline };
+    payload.updated_at = new Date().toISOString();
+    
+    try {
+        const { error } = await supabase
+            .from('crm_pipeline')
+            .upsert([payload], { onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo' });
+            
+        if (error) throw error;
+        return true;
+    } catch (e: any) {
+        throw new Error(`Erro ao atualizar status CRM Pipeline: ${e.message}`);
+    }
+};
+
 
 export const syncSalesToSupabase = async (sales: Sale[]) => {
   if (!sales || sales.length === 0) return;
@@ -353,10 +340,30 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
         return prodA.localeCompare(prodB);
     });
 
+    // FIX: Deduplicate exact items before generating sequences, prioritizing the last one (usually latest status)
+    const deduplicatedSales = [];
+    const seenItems = new Set();
+    for (let i = sortedSales.length - 1; i >= 0; i--) {
+        const s = sortedSales[i];
+        const fil = Math.floor(toNumeric(findValue(s, 'FIL_IN_CODIGO')));
+        const ser = String(findValue(s, 'SER_ST_CODIGO') || '').trim();
+        const ped = Math.floor(toNumeric(findValue(s, 'PED_IN_CODIGO')));
+        const seq = Math.floor(toNumeric(findValue(s, 'ITP_IN_SEQUENCIA')));
+        const nf = Math.floor(toNumeric(findValue(s, 'NF_NOT_IN_CODIGO')));
+        const prod = String(findValue(s, 'PRO_ST_ALTERNATIVO') || findValue(s, 'ITP_ST_DESCRICAO') || '');
+        
+        // Chave única para identificar duplicadas no mesmo pedido/item/nota
+        const dupKey = `${fil}-${ser}-${ped}-${seq}-${nf}-${prod}`;
+        if (!seenItems.has(dupKey)) {
+            seenItems.add(dupKey);
+            deduplicatedSales.unshift(s); // unshift to preserve the ordered array sequence
+        }
+    }
+
     const ordersMap = new Map<number, number>(); 
     const usedSequencesMap = new Map<number, Set<number>>(); // Rastreia sequências usadas por pedido
 
-    const allRows = sortedSales.map(s => {
+    const allRows = deduplicatedSales.map(s => {
       let rawSer = findValue(s, 'SER_ST_CODIGO') || s['SER_ST_CODIGO'];
       let serCod = String(rawSer || '').trim();
       const pedNum = Math.floor(toNumeric(findValue(s, 'PED_IN_CODIGO')));
@@ -455,68 +462,9 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
     });
     const uniqueRows = Array.from(uniqueMap.values());
 
-    // --- LÓGICA DE PRESERVAÇÃO DE STATUS DO CRM ---
-    // Antes de fazer o upsert, buscamos os status atuais no banco para não sobrescrever 
-    // movimentações manuais feitas no CRM com status genéricos "ABERTO" do ERP.
-    try {
-        const keysToFetch = uniqueRows.map(r => r.ped_in_codigo);
-        // Busca em lotes para evitar limites de URL/Query
-        const batchSize = 500;
-        const existingMap = new Map<string, string>();
-        
-        for (let i = 0; i < keysToFetch.length; i += batchSize) {
-            const batchKeys = keysToFetch.slice(i, i + batchSize);
-            const { data: existingData } = await supabase
-                .from('sales')
-                .select('fil_in_codigo, ser_st_codigo, ped_in_codigo, itp_in_sequencia, ped_st_status')
-                .in('ped_in_codigo', batchKeys);
-            
-            existingData?.forEach(row => {
-                const key = `${row.fil_in_codigo}-${row.ser_st_codigo}-${row.ped_in_codigo}-${row.itp_in_sequencia}`;
-                existingMap.set(key, row.ped_st_status);
-            });
-        }
-
-        let preservedCount = 0;
-
-        // Aplica a preservação no array de upsert (uniqueRows)
-        uniqueRows.forEach(row => {
-            const key = `${row.fil_in_codigo}-${row.ser_st_codigo}-${row.ped_in_codigo}-${row.itp_in_sequencia}`;
-            const existingStatus = existingMap.get(key);
-            if (existingStatus && shouldPreserveStatus(existingStatus, row.ped_st_status)) {
-                row.ped_st_status = existingStatus;
-                preservedCount++;
-            }
-        });
-
-        if (preservedCount > 0) {
-            console.log(`[Sales Sync] Preserved ${preservedCount} manual CRM statuses from being overwritten.`);
-        }
-
-        // TAMBÉM aplica a preservação no array ORIGINAL (sales) para que o retorno do dataService reflita a mudança
-        // e evite o "reset" visual imediato no UI.
-        sales.forEach(s => {
-            const fil = Math.floor(toNumeric(findValue(s, 'FIL_IN_CODIGO')));
-            const ser = String(findValue(s, 'SER_ST_CODIGO') || '').trim();
-            const ped = Math.floor(toNumeric(findValue(s, 'PED_IN_CODIGO')));
-            const seq = Math.floor(toNumeric(findValue(s, 'ITP_IN_SEQUENCIA')));
-            
-            const key = `${fil}-${ser}-${ped}-${seq}`;
-            const existingStatus = existingMap.get(key);
-            
-            const currentStatus = String(findValue(s, 'PED_ST_STATUS') || '').trim();
-            
-            if (existingStatus && shouldPreserveStatus(existingStatus, currentStatus)) {
-                // Atualiza no objeto original usando a chave que ele já possui (provavelmente uppercase)
-                const keys = Object.keys(s);
-                const statusKey = keys.find(k => k.toUpperCase() === 'PED_ST_STATUS') || 'PED_ST_STATUS';
-                s[statusKey] = existingStatus;
-            }
-        });
-    } catch (fetchErr) {
-        console.error("Erro ao buscar status existentes para preservação:", fetchErr);
-        // Continua o upsert mesmo se falhar a busca (melhor atualizar do que falhar tudo)
-    }
+    // --- REMOVIDO PRESERVAÇÃO ERP vs CRM NA TABELA SALES ---
+    // A tabela 'sales' agora reflete estritamente o PowerBI.
+    // O espelhamento do CRM é salvo na tabela 'crm_pipeline' para não sujar os dados oficiais.
 
     const { error } = await supabase.from('sales').upsert(uniqueRows, { onConflict: 'fil_in_codigo,ser_st_codigo,ped_in_codigo,itp_in_sequencia' });
     if (error) throw error;
@@ -528,46 +476,45 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
 };
 
 export const updateOrderStatus = async (keys: { fil: number, ser: string, ped: number }, newStatus: string) => {
+    // Agora salvamos as movimentações do CRM na tabela crm_pipeline!
     try {
-        // Atualiza todos os itens do pedido com o novo status
-        const { error } = await supabase
-            .from('sales')
-            .update({ ped_st_status: newStatus })
-            .match({ 
-                fil_in_codigo: keys.fil, 
-                ser_st_codigo: keys.ser, 
-                ped_in_codigo: keys.ped 
-            });
-            
-        if (error) throw error;
+        await upsertCRMPipelineStatus({
+            fil_in_codigo: keys.fil,
+            ser_st_codigo: keys.ser,
+            ped_in_codigo: keys.ped,
+            status: newStatus
+        });
         return true;
     } catch (e: any) {
-        throw new Error(`Erro ao atualizar status: ${e.message}`);
+        throw new Error(`Erro ao atualizar status do CRM: ${e.message}`);
     }
 };
 
 export const updateOrderHotStatus = async (keys: { fil: number, ser: string, ped: number }, isHot: boolean) => {
     try {
-        // Usa filtro explícito para garantir compatibilidade
-        const { error } = await supabase
-            .from('sales')
-            .update({ is_hot: isHot })
+        // Primeiro obtemos o status atual do pipeline para não sobrescrever com null, pois é uma PK/upsert.
+        // Como o status é o verdadeiro espelho, não podemos perder o que estava lá.
+        const { data, error: fetchErr } = await supabase
+            .from('crm_pipeline')
+            .select('status')
             .eq('fil_in_codigo', keys.fil)
             .eq('ser_st_codigo', keys.ser)
-            .eq('ped_in_codigo', keys.ped);
-            
-        if (error) {
-            console.error('Supabase Error:', error);
-            throw error;
-        }
+            .eq('ped_in_codigo', keys.ped)
+            .single();
+
+        const currentStatus = data?.status || 'EM ABERTO'; // Default seguro se ainda não existir
+
+        await upsertCRMPipelineStatus({
+            fil_in_codigo: keys.fil,
+            ser_st_codigo: keys.ser,
+            ped_in_codigo: keys.ped,
+            status: currentStatus,
+            is_hot: isHot
+        });
+        
         return true;
     } catch (e: any) {
-        // Melhora a mensagem de erro para o usuário
-        const msg = e.message || JSON.stringify(e);
-        if (msg.includes('column') && msg.includes('does not exist')) {
-             throw new Error("A coluna 'is_hot' não existe no banco de dados. Contate o administrador.");
-        }
-        throw new Error(`Erro API: ${msg}`);
+        throw new Error(`Erro API: ${e.message}`);
     }
 };
 
@@ -801,13 +748,8 @@ export const fetchCRMAppointments = async (): Promise<CRMAppointment[]> => {
     }
     return allData;
   } catch (err: any) {
-    // Fallback: Return Mock Data if table doesn't exist
-    console.warn("CRM Appointments: Using Mock Data (Table might not exist)", err.message);
-    const mockEvents: CRMAppointment[] = [
-      { id: '1', title: 'Visita Técnica TGA', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], start_time: '09:00', end_time: '11:00', activity_type: 'VISITA', priority: 'ALTA', status: 'AGENDADO', recurrence: 'UNICO', client_name: 'TGA TECH LTDA', rep_in_codigo: 50, req_confirmation: true, notify_email: true, hide_appointment: false, attachments: [] },
-      { id: '2', title: 'Alinhamento Comercial', start_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0], start_time: '14:00', end_time: '15:00', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO', recurrence: 'UNICO', client_name: 'CLARIANT S.A.', rep_in_codigo: 50, req_confirmation: false, notify_email: false, hide_appointment: false, attachments: [] },
-    ];
-    return mockEvents;
+    console.warn("CRM Appointments: Table might not exist or error fetching.", err.message);
+    return [];
   }
 };
 
@@ -815,14 +757,12 @@ export const upsertCRMAppointment = async (appt: CRMAppointment) => {
   const payload = { ...appt };
   if (!payload.id) payload.id = generateUUID();
   
-  try {
-    const { error } = await supabase.from('crm_appointments').upsert([payload]);
-    if (error) throw error;
-    return payload;
-  } catch (err: any) {
-    console.warn("CRM Appointments: Using Local Save (Mock)", err.message);
-    return payload; // Return payload to simulate success in UI
+  const { error } = await supabase.from('crm_appointments').upsert([payload]);
+  if (error) {
+    console.error("CRM Appointments: Error saving to Supabase", error);
+    throw new Error(error.message || 'Erro ao salvar compromisso no banco de dados.');
   }
+  return payload;
 };
 
 export const deleteCRMAppointment = async (id: string) => {

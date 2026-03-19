@@ -83,7 +83,8 @@ export const CustomerTimeline: React.FC<CustomerTimelineProps> = ({
         description: appt.description || 'Sem descrição',
         status: appt.status,
         icon: Calendar,
-        color: 'bg-purple-100 text-purple-600'
+        color: 'bg-purple-100 text-purple-600',
+        rep_nome: appt.rep_nome
       });
     });
 
@@ -119,7 +120,8 @@ export const CustomerTimeline: React.FC<CustomerTimelineProps> = ({
         description: task.description || 'Sem descrição',
         status: task.status,
         icon: CheckCircle2,
-        color: 'bg-green-100 text-green-600'
+        color: 'bg-green-100 text-green-600',
+        rep_nome: task.rep_nome
       });
     });
 
@@ -167,6 +169,11 @@ export const CustomerTimeline: React.FC<CustomerTimelineProps> = ({
                     {event.status && (
                       <span className="px-2 py-0.5 bg-gray-50 text-gray-500 text-[8px] font-bold rounded uppercase tracking-wider border border-gray-200">
                         {event.status}
+                      </span>
+                    )}
+                    {event.rep_nome && (
+                      <span className="px-2 py-0.5 bg-rose-50 text-rose-600 text-[8px] font-bold rounded uppercase tracking-wider border border-rose-100 flex items-center gap-1">
+                        <User size={8} /> {event.rep_nome}
                       </span>
                     )}
                   </div>

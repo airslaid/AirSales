@@ -69,6 +69,8 @@ export interface CRMAppointment {
   client_id?: number;
   client_name?: string;
   rep_in_codigo: number;
+  rep_nome?: string;
+  created_by_name?: string;
   start_date: string; // ISO String
   end_date: string;   // ISO String
   start_time: string; // HH:mm
@@ -256,3 +258,14 @@ export interface ServicePrincipalConfig {
 export type AuthMode = 'manual' | 'servicePrincipal';
 
 export type DataSource = 'mock' | 'powerbi' | 'supabase';
+
+export interface CRMPipelineStatus {
+  id?: string;
+  fil_in_codigo: number;
+  ser_st_codigo: string;
+  ped_in_codigo: number;
+  status: string;
+  is_hot?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
