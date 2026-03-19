@@ -26,7 +26,7 @@ import {
   fetchAppUsers, upsertAppUser, deleteAppUser, fetchSalesGoals, upsertSalesGoal, 
   deleteSalesGoal, fetchFromSupabase, fetchAllRepresentatives, updateSaleCommissionStatus, 
   syncSalesToSupabase, deleteSale, deleteAllSales, updateSaleDelayReason,
-  fetchCustomers, syncCustomersToSupabase
+  fetchCustomers, syncCustomersToSupabase, fetchCRMPipelineStatuses
 } from './services/supabaseService';
 import { generateSalesInsights, isUsingLocalAI } from './services/aiService';
 import { SalesTable } from './components/SalesTable';
@@ -388,18 +388,38 @@ export default function App() {
         data = await fetchData('supabase', "", tableName, filterToUse);
       }
 
-      // MANUAL PATCH FOR MISSING INVOICE DATA
+      const crmStatuses = await fetchCRMPipelineStatuses();
+      const crmMap = new Map();
+      crmStatuses.forEach(c => crmMap.set(`${c.fil_in_codigo}-${c.ser_st_codigo}-${c.ped_in_codigo}`, c));
+
+      // MANUAL PATCH FOR MISSING INVOICE DATA & CRM STATUS
       data = data.map(item => {
+          let updatedItem = { ...item };
+          
+          // Anexando o Status do CRM Pipeline para uso no Kanban e Grid
+          const fil = Math.floor(Number(item.FIL_IN_CODIGO));
+          const ser = String(item.SER_ST_CODIGO || '').trim();
+          const ped = Math.floor(Number(item.PED_IN_CODIGO));
+          const crmKey = `${fil}-${ser}-${ped}`;
+          
+          if (crmMap.has(crmKey)) {
+              const crmData = crmMap.get(crmKey);
+              updatedItem.CRM_STATUS = crmData.status;
+              updatedItem.IS_HOT = crmData.is_hot ?? updatedItem.IS_HOT;
+          } else {
+              updatedItem.CRM_STATUS = String(item.PED_ST_STATUS || '').trim();
+          }
+
           if (String(item.PED_IN_CODIGO) === '216') {
-              return { ...item, NF_NOT_IN_CODIGO: 19265, NOT_DT_EMISSAO: '2026-02-23' };
+              return { ...updatedItem, NF_NOT_IN_CODIGO: 19265, NOT_DT_EMISSAO: '2026-02-23' };
           }
           if (String(item.PED_IN_CODIGO) === '218') {
-              return { ...item, NF_NOT_IN_CODIGO: 19229, NOT_DT_EMISSAO: '2026-02-13' };
+              return { ...updatedItem, NF_NOT_IN_CODIGO: 19229, NOT_DT_EMISSAO: '2026-02-13' };
           }
           if (String(item.PED_IN_CODIGO) === '209') {
-              return { ...item, NF_NOT_IN_CODIGO: 19233, NOT_DT_EMISSAO: '2026-02-16' };
+              return { ...updatedItem, NF_NOT_IN_CODIGO: 19233, NOT_DT_EMISSAO: '2026-02-16' };
           }
-          return item;
+          return updatedItem;
       });
 
       const filtered = repCode ? data.filter(d => Number(d.REP_IN_CODIGO) === Number(repCode)) : data;

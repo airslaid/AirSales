@@ -119,6 +119,13 @@ const getDaysRemaining = (dueDate?: string) => {
   return diffDays;
 };
 
+const findValue = (obj: any, targetKey: string) => {
+  if (!obj) return null;
+  const keys = Object.keys(obj);
+  const foundKey = keys.find(k => k.toUpperCase().replace(/[\s_]/g, '') === targetKey.toUpperCase().replace(/[\s_]/g, ''));
+  return foundKey ? obj[foundKey] : null;
+};
+
 export const CRMView: React.FC<CRMViewProps> = ({ 
   data = [], 
   salesData = [], 
@@ -163,7 +170,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
       startDate: globalFilters?.startDate || '',
       endDate: globalFilters?.endDate || '',
       onlyHot: false,
-      orderNumber: ''
+      orderNumber: '',
+      activityType: ''
   });
 
   // Sync with global filters when they change externally
@@ -282,6 +290,9 @@ export const CRMView: React.FC<CRMViewProps> = ({
             regex.test(String(a.title))
         );
     }
+    if (pipelineFilters.activityType) {
+        list = list.filter(a => a.activity_type === pipelineFilters.activityType);
+    }
     
     return list;
   }, [appointments, user, pipelineFilters]);
@@ -366,6 +377,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
     // Carrega apontamentos se estiver na aba Agenda, Followup ou se abrir um pedido
     if (activeTab === 'AGENDA' || activeTab === 'FOLLOWUP' || selectedOrder) {
         loadAppointments();
+        loadUsers();
     }
     if (activeTab === 'TAREFAS') {
         loadTasks();
@@ -594,15 +606,31 @@ export const CRMView: React.FC<CRMViewProps> = ({
   }, [customers]);
 
   const uniqueReps = useMemo(() => {
-      const reps = new Map<string, string>();
-      const safeData = Array.isArray(data) ? data : [];
-      safeData.forEach(item => {
-          if (item.REP_IN_CODIGO && item.REPRESENTANTE_NOME) {
-              reps.set(String(item.REP_IN_CODIGO), item.REPRESENTANTE_NOME);
-          }
-      });
-      return Array.from(reps.entries()).map(([id, name]) => ({ id, name })).sort((a,b) => a.name.localeCompare(b.name));
-  }, [data]);
+    const reps = new Map<number, string>();
+    [...data, ...salesData].forEach(s => {
+      const code = Number(findValue(s, 'REP_IN_CODIGO'));
+      const name = findValue(s, 'REPRESENTANTE_NOME');
+      if (code && name) reps.set(code, name);
+    });
+    return Array.from(reps.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [data, salesData]);
+
+  const combinedReps = useMemo(() => {
+    const map = new Map<number, string>();
+    // Adiciona dos usuários do App (apenas se for representante)
+    allUsers.forEach(u => {
+      if (u.rep_in_codigo) map.set(u.rep_in_codigo, u.name);
+    });
+    // Adiciona dos representantes detectados nas vendas
+    uniqueReps.forEach(r => {
+      if (r.id) map.set(r.id, r.name);
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allUsers, uniqueReps]);
 
   // --- LÓGICA DO PIPELINE (KANBAN) ---
   const pipelineColumns = useMemo(() => {
@@ -617,7 +645,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
       if (pipelineFilters.rep && String(item.REP_IN_CODIGO) !== pipelineFilters.rep) return;
       if (pipelineFilters.orderNumber && String(item.PED_IN_CODIGO).trim() !== pipelineFilters.orderNumber.trim()) return;
       
-      const statusRaw = String(item.PED_ST_STATUS || item.SITUACAO || '').trim().toUpperCase();
+      const statusRaw = String(item.CRM_STATUS || item.PED_ST_STATUS || item.SITUACAO || '').trim().toUpperCase();
       const isFinished = statusRaw === 'ENCERRADO' || statusRaw === 'FECHADO (GANHO)' || statusRaw.includes('FATURADO') || statusRaw.includes('CANCEL') || statusRaw.includes('PERDIDO') || statusRaw === 'FECHADO (PERDIDO)';
 
       // Itens em aberto (ou pesquisas diretas por pedido) ignoram o filtro de data padrão para não sumirem do Pipeline ao virar o mês
@@ -653,7 +681,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
     };
 
     uniqueOrders.forEach(order => {
-      const statusRaw = String(order.PED_ST_STATUS || order.SITUACAO || '').trim().toUpperCase();
+      const statusRaw = String(order.CRM_STATUS || order.PED_ST_STATUS || order.SITUACAO || '').trim().toUpperCase();
       
       // Lógica de Mapeamento de Status para Colunas (Strict)
       if (statusRaw === 'ENCERRADO' || statusRaw === 'FECHADO (GANHO)' || statusRaw.includes('FATURADO')) {
@@ -815,7 +843,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
                   'Representante': item.REPRESENTANTE_NOME,
                   'Emissao': formatDate(item.PED_DT_EMISSAO),
                   'Valor Estimado': item.TOTAL_VALOR,
-                  'Status Original': item.PED_ST_STATUS,
+                  'Status CRM': item.CRM_STATUS || item.PED_ST_STATUS,
+                  'Status ERP Original': item.PED_ST_STATUS,
                   'Hot Lead': item.IS_HOT ? 'SIM' : 'NÃO',
                   'Itens': item.ITENS_COUNT
               });
@@ -1018,7 +1047,11 @@ export const CRMView: React.FC<CRMViewProps> = ({
   // Recupera os itens do pedido selecionado
   const selectedOrderItems = useMemo(() => {
     if (!selectedOrder) return [];
-    return (data || []).filter(d => d.PED_IN_CODIGO === selectedOrder.PED_IN_CODIGO && d.SER_ST_CODIGO === selectedOrder.SER_ST_CODIGO);
+    return (data || []).filter(d => 
+        d.PED_IN_CODIGO === selectedOrder.PED_IN_CODIGO && 
+        d.SER_ST_CODIGO === selectedOrder.SER_ST_CODIGO &&
+        d.FIL_IN_CODIGO === selectedOrder.FIL_IN_CODIGO
+    );
   }, [selectedOrder, data]);
 
   // Recupera histórico de follow-ups do pedido selecionado
@@ -1100,7 +1133,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
         await updateOrderStatus(keys, newStatusText);
 
         // --- GERAÇÃO AUTOMÁTICA DE FOLLOW-UP ---
-        const oldStatus = order.PED_ST_STATUS || 'STATUS ANTERIOR';
+        const oldStatus = order.CRM_STATUS || order.PED_ST_STATUS || 'STATUS ANTERIOR';
         const now = new Date();
         const autoFollowUp: CRMAppointment = {
             id: '', // Supabase/Service gera o ID
@@ -1117,6 +1150,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
             status: 'CONCLUIDO',
             recurrence: 'UNICO',
             description: `[FOLLOW-UP ORÇAMENTO #${order.PED_IN_CODIGO}] Mudança de status de ${oldStatus} para ${newStatusText}`,
+            rep_nome: order.REPRESENTANTE_NOME || 'Sistema',
+            created_by_name: user?.name || 'Sistema',
             req_confirmation: false,
             notify_email: false,
             hide_appointment: false
@@ -1131,7 +1166,7 @@ export const CRMView: React.FC<CRMViewProps> = ({
         
         // Se estiver com modal aberto, atualiza o objeto local
         if (selectedOrder && selectedOrder.PED_IN_CODIGO === order.PED_IN_CODIGO) {
-            setSelectedOrder({ ...selectedOrder, PED_ST_STATUS: newStatusText });
+            setSelectedOrder({ ...selectedOrder, CRM_STATUS: newStatusText });
             // Recarrega appointments para aparecer no modal
             loadAppointments();
         }
@@ -1189,22 +1224,42 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
   const handleSaveEvent = async () => {
       if (!newEvent.title || !newEvent.start_date || !newEvent.start_time) {
-          console.warn('Preencha os campos obrigatórios (*)');
+          alert('Preencha os campos obrigatórios: Título, Data e Hora de Início.');
           return;
       }
       
-      const payload = { ...newEvent } as CRMAppointment;
-      await upsertCRMAppointment(payload);
-      setShowEventModal(false);
-      loadAppointments();
-      setNewEvent({
-        req_confirmation: false, notify_email: true, hide_appointment: false,
-        recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
-        start_date: getLocalISODate(),
-        end_date: getLocalISODate(),
-        start_time: '09:00', end_time: '10:00',
-        attachments: []
-      });
+      const targetRepCode = newEvent.rep_in_codigo || user?.rep_in_codigo || 0;
+      const targetRepName = combinedReps.find(r => r.id === targetRepCode)?.name || newEvent.rep_nome || user?.name || 'Representante';
+
+      const payload = { 
+          ...newEvent,
+          rep_in_codigo: targetRepCode,
+          rep_nome: targetRepName,
+          created_by_name: user?.name || 'Administrador'
+      } as CRMAppointment;
+      
+      try {
+          await upsertCRMAppointment(payload);
+          setShowEventModal(false);
+          await loadAppointments();
+          setNewEvent({
+            req_confirmation: false, notify_email: true, hide_appointment: false,
+            recurrence: 'UNICO', activity_type: 'REUNIAO', priority: 'MEDIA', status: 'AGENDADO',
+            start_date: getLocalISODate(),
+            end_date: getLocalISODate(),
+            start_time: '09:00', end_time: '10:00',
+            attachments: []
+          });
+      } catch (err: any) {
+          console.error('Erro ao salvar compromisso:', err);
+          const errMsg = err?.message || 'Erro desconhecido';
+          const isSchemaError = errMsg.includes('relation') || errMsg.includes('does not exist') || errMsg.includes('column') || errMsg.includes('schema');
+          if (isSchemaError) {
+              alert(`Erro de banco de dados: "${errMsg}"\n\nExecute o script SQL "fix_crm_appointments_columns.sql" no Editor SQL do Supabase para corrigir as colunas e tente novamente.`);
+          } else {
+              alert(`Erro ao salvar: ${errMsg}`);
+          }
+      }
   };
 
   const handleRegisterFollowUp = async () => {
@@ -1233,6 +1288,8 @@ export const CRMView: React.FC<CRMViewProps> = ({
           client_name: followUpData.order.CLIENTE_NOME,
           client_id: Number(followUpData.order.CLI_IN_CODIGO),
           rep_in_codigo: Number(followUpData.order.REP_IN_CODIGO),
+          rep_nome: followUpData.order.REPRESENTANTE_NOME || combinedReps.find(r => r.id === Number(followUpData.order?.REP_IN_CODIGO))?.name || 'Representante',
+          created_by_name: user?.name || 'Administrador',
           req_confirmation: false, 
           notify_email: false, 
           hide_appointment: false
@@ -2282,6 +2339,19 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                 ))}
                             </select>
 
+                            <select 
+                                className="bg-white border border-gray-200 text-[10px] rounded-sm px-2 py-1.5 outline-none focus:border-rose-500 w-full sm:w-36"
+                                value={pipelineFilters.activityType || ''}
+                                onChange={(e) => updateFilters({ activityType: e.target.value })}
+                            >
+                                <option value="">Todas Atividades</option>
+                                <option value="REUNIAO">Reunião</option>
+                                <option value="TELEFONEMA">Telefonema</option>
+                                <option value="COMPROMISSO">Compromisso</option>
+                                <option value="VISITA">Visita</option>
+                                <option value="EMAIL">Email</option>
+                            </select>
+
                             <div className="flex items-center gap-1 border border-gray-200 rounded-sm bg-white px-2 py-1 w-full sm:w-auto">
                                 <span className="text-[9px] font-bold text-gray-400 uppercase shrink-0">Emissão:</span>
                                 <input 
@@ -2299,9 +2369,9 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                 />
                             </div>
 
-                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate) && (
+                            {(pipelineFilters.rep || pipelineFilters.startDate || pipelineFilters.endDate || pipelineFilters.activityType) && (
                                 <button 
-                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '' })}
+                                    onClick={() => updateFilters({ rep: '', startDate: '', endDate: '', activityType: '' })}
                                     className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors"
                                     title="Limpar Filtros"
                                 >
@@ -2386,6 +2456,10 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                                 <span className="flex items-center gap-1"><Clock size={12} /> {evt.start_time} - {evt.end_time}</span>
                                                 <span className="flex items-center gap-1"><MapPin size={12} /> {evt.location || 'Sem local definido'}</span>
                                                 <span className="flex items-center gap-1"><Flag size={12} /> Prioridade: {evt.priority}</span>
+                                                <span className="flex items-center gap-1 text-rose-600 font-bold"><User size={12} /> {evt.rep_nome || allUsers.find(u => u.rep_in_codigo === evt.rep_in_codigo)?.name || 'Responsável'}</span>
+                                                {evt.created_by_name && (
+                                                    <span className="flex items-center gap-1 text-gray-400 text-[9px] border-l border-gray-200 pl-2 italic">Incluído por: {evt.created_by_name}</span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2476,13 +2550,22 @@ export const CRMView: React.FC<CRMViewProps> = ({
                                                         <h5 className="text-xs font-bold text-gray-800 line-clamp-2 leading-tight">{evt.title}</h5>
                                                         <span className="text-[9px] font-black text-gray-400 shrink-0 ml-2">{evt.start_time}</span>
                                                     </div>
-                                                    <p className="text-[10px] text-gray-500 mb-3 flex items-center gap-1">
+                                                    <p className="text-[10px] text-gray-500 mb-1 flex items-center gap-1">
                                                         <Building2 size={10} className="text-gray-300" />
                                                         <span className="truncate">
                                                             <span className="text-gray-400">#{evt.client_id}</span>
                                                             {evt.client_id && customerCnpjMap.get(evt.client_id) ? `[${customerCnpjMap.get(evt.client_id)}] ` : ''}{evt.client_name || 'Cliente Geral'}
                                                         </span>
                                                     </p>
+                                                    <p className="text-[9px] text-rose-600 font-bold mb-1 flex items-center gap-1">
+                                                        <User size={10} className="text-rose-400" />
+                                                        {evt.rep_nome || allUsers.find(u => u.rep_in_codigo === evt.rep_in_codigo)?.name || 'Responsável'}
+                                                    </p>
+                                                    {evt.created_by_name && (
+                                                        <p className="text-[8px] text-gray-400 italic mb-3 flex items-center gap-1">
+                                                            Incluído por: {evt.created_by_name}
+                                                        </p>
+                                                    )}
                                                     <div className="flex justify-between items-center">
                                                         <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${evt.status === 'CONCLUIDO' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                                                             {evt.status.replace('_', ' ')}
@@ -2821,9 +2904,22 @@ export const CRMView: React.FC<CRMViewProps> = ({
                       {/* Responsável */}
                       <div className="space-y-1">
                           <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Responsável <span className="text-red-500">*</span></label>
-                          <div className="flex items-center gap-2 p-2 border border-gray-200 bg-gray-50 rounded text-xs text-gray-700">
-                              <User size={14} /> Usuário Atual (Representante)
-                          </div>
+                          {user?.is_admin ? (
+                              <select 
+                                  className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
+                                  value={newEvent.rep_in_codigo ?? user?.rep_in_codigo ?? ''}
+                                  onChange={e => setNewEvent({...newEvent, rep_in_codigo: Number(e.target.value)})}
+                              >
+                                  <option value="" disabled>Selecionar Representante...</option>
+                                  {combinedReps.map(r => (
+                                      <option key={r.id} value={r.id}>{r.name}</option>
+                                  ))}
+                              </select>
+                          ) : (
+                              <div className="flex items-center gap-2 p-2 border border-gray-200 bg-gray-50 rounded text-xs text-gray-700">
+                                  <User size={14} /> {user?.name || 'Usuário Atual (Representante)'}
+                              </div>
+                          )}
                       </div>
 
                       {/* Assunto */}
@@ -3332,13 +3428,13 @@ export const CRMView: React.FC<CRMViewProps> = ({
                         <div className="space-y-1">
                             <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Representante Destinado <span className="text-red-500">*</span></label>
                             <select 
-                                className="w-full p-2 border border-gray-300 rounded text-xs outline-none bg-white"
-                                value={newTask.rep_in_codigo || ''}
+                                className="w-full p-2 border border-gray-300 rounded text-xs outline-none focus:border-rose-500 transition-colors"
+                                value={newTask.rep_in_codigo ?? user?.rep_in_codigo ?? ''}
                                 onChange={e => setNewTask({...newTask, rep_in_codigo: Number(e.target.value)})}
                             >
-                                <option value="">Selecione...</option>
-                                {allUsers.filter(u => u.rep_in_codigo).map(u => (
-                                    <option key={u.id} value={u.rep_in_codigo!}>{u.name}</option>
+                                <option value="" disabled>Selecionar Representante...</option>
+                                {combinedReps.map(r => (
+                                    <option key={r.id} value={r.id}>{r.name}</option>
                                 ))}
                             </select>
                         </div>
