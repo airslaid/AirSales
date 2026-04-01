@@ -46,7 +46,7 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <InfoCard icon={<User size={14}/>} label="Cliente" value={summary.CLIENTE_NOME} />
             <InfoCard icon={<Hash size={14}/>} label="Pedido" value={summary.PED_IN_CODIGO} />
-            <InfoCard icon={<Calendar size={14}/>} label="Emissão" value={dateFormat(summary.PED_DT_EMISSAO)} />
+            <InfoCard icon={<Calendar size={14}/>} label="Emissão Pedido" value={dateFormat(summary.PED_DT_EMISSAO)} />
             <InfoCard icon={<Tag size={14}/>} label="Status" value={
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
                 String(summary.PED_ST_STATUS).toLowerCase().includes('faturado') ? 'bg-green-100 text-green-700' : 
@@ -59,6 +59,7 @@ export const SaleDetailModal: React.FC<SaleDetailModalProps> = ({
             <InfoCard icon={<MapPin size={14}/>} label="Filial" value={summary.FILIAL_NOME} />
             <InfoCard icon={<User size={14}/>} label="Vendedor/Rep" value={summary.REPRESENTANTE_NOME} />
             <InfoCard icon={<FileText size={14}/>} label="Notas Fiscais" value={summary.NF_NOT_IN_CODIGO || '-'} />
+            <InfoCard icon={<Calendar size={14}/>} label="Emissão Nota" value={summary.NOT_DT_EMISSAO ? dateFormat(summary.NOT_DT_EMISSAO) : '-'} />
             <InfoCard icon={<Percent size={14}/>} label="Total Comissão" value={currencyFormat(summary.VALOR_COMISSAO)} valueClassName="text-amber-600" />
           </div>
 
