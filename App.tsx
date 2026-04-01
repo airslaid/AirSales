@@ -416,15 +416,6 @@ export default function App() {
               updatedItem.CRM_STATUS = String(item.PED_ST_STATUS || '').trim();
           }
 
-          if (String(item.PED_IN_CODIGO) === '216') {
-              return { ...updatedItem, NF_NOT_IN_CODIGO: 19265, NOT_DT_EMISSAO: '2026-02-23' };
-          }
-          if (String(item.PED_IN_CODIGO) === '218') {
-              return { ...updatedItem, NF_NOT_IN_CODIGO: 19229, NOT_DT_EMISSAO: '2026-02-13' };
-          }
-          if (String(item.PED_IN_CODIGO) === '209') {
-              return { ...updatedItem, NF_NOT_IN_CODIGO: 19233, NOT_DT_EMISSAO: '2026-02-16' };
-          }
           return updatedItem;
       });
 
