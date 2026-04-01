@@ -449,7 +449,8 @@ export const syncSalesToSupabase = async (sales: Sale[]) => {
         nf_not_in_codigo: Math.floor(toNumeric(findValue(s, 'NF_NOT_IN_CODIGO'))),
         not_dt_emissao: findValue(s, 'NOT_DT_EMISSAO') || null,
         ipe_dt_dataentrega: findValue(s, 'IPE_DT_DATAENTREGA') || null,
-        is_hot: s.IS_HOT ? true : false
+        is_hot: s.IS_HOT ? true : false,
+        tpd_in_codigo: Math.floor(toNumeric(findValue(s, 'TPD_IN_CODIGO')))
       };
     }).filter((row): row is NonNullable<typeof row> => row !== null);
 
@@ -644,6 +645,7 @@ export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: num
       "ITP_ST_PEDIDOCLIENTE": row.itp_st_pedidocliente,
       "IPE_DT_DATAENTREGA": row.ipe_dt_dataentrega,
       "IS_HOT": row.is_hot || false,
+      "TPD_IN_CODIGO": row.tpd_in_codigo,
       "PAGO_ASSISTENTE": row.pago_assistente || false,
       "PAGO_VENDEDOR": row.pago_vendedor || false,
       "PAGO_SUPERVISOR": row.pago_supervisor || false,
