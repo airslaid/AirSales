@@ -966,7 +966,9 @@ export default function App() {
         // usando o mesmo período que o usuário selecionou no filtro global.
         // Importante: Filtramos apenas PD e DV para bater com a aba de comissões.
         filteredByMode = salesData.filter(item => {
-            const isCommissionable = item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV';
+            const cfop = String(item.CFOP_ST_DESCRICAO || '').toUpperCase();
+            const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+            const isCommissionable = (item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV') && isValidCFOP;
             if (!isCommissionable) return false;
 
             const billingDate = item.NOT_DT_EMISSAO || '';
@@ -981,7 +983,9 @@ export default function App() {
     } else {
         // Lógica normal para os módulos de comissão/pagamento (usa processedData que já tem filtro de data)
         filteredByMode = processedData.filter(item => { 
-            const isCommissionable = item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV';
+            const cfop = String(item.CFOP_ST_DESCRICAO || '').toUpperCase();
+            const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+            const isCommissionable = (item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV') && isValidCFOP;
             if (!isCommissionable) return false;
 
             const status = String(item.PED_ST_STATUS || '').toUpperCase(); 
@@ -1060,6 +1064,7 @@ export default function App() {
       { key: 'NF_NOT_IN_CODIGO', label: 'NOTA FISCAL', visible: true }, 
       { key: 'PED_IN_CODIGO', label: 'PEDIDO', visible: true }, 
       { key: 'TPD_IN_CODIGO', label: 'TPD', visible: false },
+      { key: 'CFOP_ST_DESCRICAO', label: 'CFOP DESC', visible: false },
       { key: 'CLIENTE_NOME', label: 'CLIENTE', visible: true }, 
       { key: 'PRO_ST_ALTERNATIVO', label: 'CÓD. ALTERNATIVO', visible: true }, 
       { key: 'ITP_ST_DESCRICAO', label: 'DESCRIÇÃO', visible: true },
@@ -1132,7 +1137,10 @@ export default function App() {
       const vInvoice = parseBrNumber(d['ITN_RE_VALORTOTAL'] || 0);
       const s = String(d.PED_ST_STATUS || '').toLowerCase(); 
       const hasInvoice = (d['NOT_DT_EMISSAO'] && d['NOT_DT_EMISSAO'] !== '') || (d['NF_NOT_IN_CODIGO'] && Number(d['NF_NOT_IN_CODIGO']) > 0); 
-      if (s.includes('faturado') || hasInvoice) { 
+      const cfop = String(d.CFOP_ST_DESCRICAO || '').toUpperCase();
+      const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+      
+      if ((s.includes('faturado') || hasInvoice) && isValidCFOP) { 
         faturado += vInvoice; 
       } 
     });
@@ -1152,8 +1160,10 @@ export default function App() {
             
             const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (item.NOT_DT_EMISSAO && item.NOT_DT_EMISSAO !== '');
             const isPD = item.SER_ST_CODIGO === 'PD';
+            const cfop = String(item.CFOP_ST_DESCRICAO || '').toUpperCase();
+            const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
 
-            if (inDateRange && repMatch && filialMatch && isBilled && isPD) {
+            if (inDateRange && repMatch && filialMatch && isBilled && isPD && isValidCFOP) {
                 faturadoReal += parseBrNumber(item['ITN_RE_VALORTOTAL'] || 0);
             }
         });

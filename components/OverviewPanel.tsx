@@ -74,7 +74,13 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         billedData = billedData.filter(s => (s.NOT_DT_EMISSAO || '') <= dateRange.end);
       }
       const totalBilled = billedData
-        .filter(s => s.SER_ST_CODIGO === 'PD' && (String(s.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (s.NOT_DT_EMISSAO && s.NOT_DT_EMISSAO !== '')))
+        .filter(s => {
+          const cfop = String(s.CFOP_ST_DESCRICAO || '').toUpperCase();
+          const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+          return s.SER_ST_CODIGO === 'PD' && 
+                 (String(s.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (s.NOT_DT_EMISSAO && s.NOT_DT_EMISSAO !== '')) &&
+                 isValidCFOP;
+        })
         .reduce((acc, curr) => acc + (Number(curr.ITN_RE_VALORTOTAL) || 0), 0);
 
       // Contagem de Status
@@ -149,7 +155,10 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
        const val = Number(sale.ITP_RE_VALORMERCADORIA) || 0;
        const current = monthsMap.get(key)!;
        
-       if (sale.SER_ST_CODIGO === 'PD') current.Vendas += val;
+       const cfop = String(sale.CFOP_ST_DESCRICAO || '').toUpperCase();
+       const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+
+       if (sale.SER_ST_CODIGO === 'PD' && isValidCFOP) current.Vendas += val;
        if (sale.SER_ST_CODIGO === 'OV') current.Orcamentos += val;
     });
 
@@ -174,7 +183,11 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
         filteredForStatus = filteredForStatus.filter(s => (s.PED_DT_EMISSAO || '') <= dateRange.end);
       }
 
-      filteredForStatus.filter(s => s.SER_ST_CODIGO === 'PD').forEach(s => {
+      filteredForStatus.filter(s => {
+          const cfop = String(s.CFOP_ST_DESCRICAO || '').toUpperCase();
+          const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+          return s.SER_ST_CODIGO === 'PD' && isValidCFOP;
+      }).forEach(s => {
           const st = String(s.PED_ST_STATUS || 'OUTROS').toUpperCase();
           let key = 'OUTROS';
           if (st.includes('FATURADO')) key = 'FATURADO';
