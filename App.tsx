@@ -967,7 +967,7 @@ export default function App() {
         // Importante: Filtramos apenas PD e DV para bater com a aba de comissões.
         filteredByMode = salesData.filter(item => {
             const cfop = String(item.CFOP_ST_DESCRICAO || '').toUpperCase();
-            const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+            const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
             const isCommissionable = (item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV') && isValidCFOP;
             if (!isCommissionable) return false;
 
@@ -984,7 +984,7 @@ export default function App() {
         // Lógica normal para os módulos de comissão/pagamento (usa processedData que já tem filtro de data)
         filteredByMode = processedData.filter(item => { 
             const cfop = String(item.CFOP_ST_DESCRICAO || '').toUpperCase();
-            const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+            const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
             const isCommissionable = (item.SER_ST_CODIGO === 'PD' || item.SER_ST_CODIGO === 'DV') && isValidCFOP;
             if (!isCommissionable) return false;
 
@@ -1138,7 +1138,7 @@ export default function App() {
       const s = String(d.PED_ST_STATUS || '').toLowerCase(); 
       const hasInvoice = (d['NOT_DT_EMISSAO'] && d['NOT_DT_EMISSAO'] !== '') || (d['NF_NOT_IN_CODIGO'] && Number(d['NF_NOT_IN_CODIGO']) > 0); 
       const cfop = String(d.CFOP_ST_DESCRICAO || '').toUpperCase();
-      const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+      const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
       
       if ((s.includes('faturado') || hasInvoice) && isValidCFOP) { 
         faturado += vInvoice; 
@@ -1161,7 +1161,7 @@ export default function App() {
             const isBilled = String(item.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (item.NOT_DT_EMISSAO && item.NOT_DT_EMISSAO !== '');
             const isPD = item.SER_ST_CODIGO === 'PD';
             const cfop = String(item.CFOP_ST_DESCRICAO || '').toUpperCase();
-            const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+            const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
 
             if (inDateRange && repMatch && filialMatch && isBilled && isPD && isValidCFOP) {
                 faturadoReal += parseBrNumber(item['ITN_RE_VALORTOTAL'] || 0);

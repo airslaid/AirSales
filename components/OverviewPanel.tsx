@@ -76,7 +76,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
       const totalBilled = billedData
         .filter(s => {
           const cfop = String(s.CFOP_ST_DESCRICAO || '').toUpperCase();
-          const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+          const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
           return s.SER_ST_CODIGO === 'PD' && 
                  (String(s.PED_ST_STATUS || '').toUpperCase().includes('FATURADO') || (s.NOT_DT_EMISSAO && s.NOT_DT_EMISSAO !== '')) &&
                  isValidCFOP;
@@ -156,7 +156,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
        const current = monthsMap.get(key)!;
        
        const cfop = String(sale.CFOP_ST_DESCRICAO || '').toUpperCase();
-       const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+       const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
 
        if (sale.SER_ST_CODIGO === 'PD' && isValidCFOP) current.Vendas += val;
        if (sale.SER_ST_CODIGO === 'OV') current.Orcamentos += val;
@@ -185,7 +185,7 @@ export const OverviewPanel: React.FC<OverviewProps> = ({
 
       filteredForStatus.filter(s => {
           const cfop = String(s.CFOP_ST_DESCRICAO || '').toUpperCase();
-          const isValidCFOP = cfop.startsWith('VENDA DE PRODUÇÃO DO ESTABELECIMENTO') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA OU RECEBIDA DE TERCE');
+          const isValidCFOP = cfop.startsWith('VENDA DE PRODUC') || cfop.startsWith('VENDA DE MERCADORIA ADQUIRIDA');
           return s.SER_ST_CODIGO === 'PD' && isValidCFOP;
       }).forEach(s => {
           const st = String(s.PED_ST_STATUS || 'OUTROS').toUpperCase();
