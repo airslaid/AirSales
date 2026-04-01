@@ -1059,6 +1059,7 @@ export default function App() {
       { key: 'NOT_DT_EMISSAO', label: 'DT FATURAMENTO', visible: true, format: dateFormat }, 
       { key: 'NF_NOT_IN_CODIGO', label: 'NOTA FISCAL', visible: true }, 
       { key: 'PED_IN_CODIGO', label: 'PEDIDO', visible: true }, 
+      { key: 'TPD_IN_CODIGO', label: 'TPD', visible: false },
       { key: 'CLIENTE_NOME', label: 'CLIENTE', visible: true }, 
       { key: 'PRO_ST_ALTERNATIVO', label: 'CÓD. ALTERNATIVO', visible: true }, 
       { key: 'ITP_ST_DESCRICAO', label: 'DESCRIÇÃO', visible: true },
