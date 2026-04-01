@@ -739,11 +739,11 @@ export default function App() {
   const saveGlobalVision = () => { if (!currentUser) return; localStorage.setItem(getSharedLayoutKey(), JSON.stringify(salesColumns.map(({ key, label, visible }) => ({ key, label, visible })))); setLayoutSaved(true); setTimeout(() => setLayoutSaved(false), 2000); };
 
   const handleExportExcel = () => {
-    let tableData = processedData; let tableCols = salesColumns;
-    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') { 
-      tableData = commissionData; tableCols = commissionColumns; 
-    } else if (isGroupedByOrder) {
-      tableData = groupSalesByOrder(processedData).map(g => g.summary);
+    let tableData = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
+    let tableCols = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionColumns : salesColumns;
+
+    if (isGroupedByOrder) {
+      tableData = groupSalesByOrder(tableData).map(g => g.summary);
     }
     
     const visibleCols = tableCols.filter(c => c.visible);
@@ -771,11 +771,11 @@ export default function App() {
 
   const handleExportPDF = () => {
     const doc = new jsPDF('landscape'); 
-    let tableData = processedData; let tableCols = salesColumns;
-    if (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') { 
-      tableData = commissionData; tableCols = commissionColumns; 
-    } else if (isGroupedByOrder) {
-      tableData = groupSalesByOrder(processedData).map(g => g.summary);
+    let tableData = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionData : processedData;
+    let tableCols = (activeModuleId === 'COMISSAO' || activeModuleId === 'PAGAMENTOS') ? commissionColumns : salesColumns;
+
+    if (isGroupedByOrder) {
+      tableData = groupSalesByOrder(tableData).map(g => g.summary);
     }
 
     const visibleCols = tableCols.filter(c => c.visible && c.key !== 'CHECK_PAGAMENTO' && c.key !== 'MANUAL_ACTIONS');
