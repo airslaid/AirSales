@@ -586,16 +586,32 @@ export const deleteAllSales = async () => {
 
 export const fetchAllRepresentatives = async () => {
   try {
-    const { data, error } = await supabase.from('sales').select('rep_in_codigo, representante_nome').not('rep_in_codigo', 'is', null).limit(5000);
+    // Ordenamos por data de emissão descendente para que o primeiro registro encontrado de cada código seja o mais RECENTE.
+    const { data, error } = await supabase
+      .from('sales')
+      .select('rep_in_codigo, representante_nome')
+      .not('rep_in_codigo', 'is', null)
+      .order('ped_dt_emissao', { ascending: false })
+      .limit(5000);
+
     if (error) throw error;
+    
     const uniqueMap = new Map();
     data?.forEach((row: any) => {
       const code = Number(row.rep_in_codigo);
       const name = String(row.representante_nome || '').trim();
-      if (!uniqueMap.has(code) && name.length > 0) uniqueMap.set(code, name);
+      // Se já temos esse código no mapa, não sobrescrevemos, pois o primeiro encontrado (devido ao ORDER BY DESC) é o mais novo.
+      if (code && name.length > 0 && !uniqueMap.has(code)) {
+        uniqueMap.set(code, name);
+      }
     });
-    return Array.from(uniqueMap.entries()).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name));
-  } catch (err) { return []; }
+
+    return Array.from(uniqueMap.entries())
+      .map(([code, name]) => ({ code, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch (err) { 
+    return []; 
+  }
 };
 
 export const fetchFromSupabase = async (filterCode: string = 'PD', repCode?: number): Promise<Sale[]> => {

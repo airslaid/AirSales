@@ -1398,11 +1398,15 @@ export default function App() {
       });
 
       const repMap = new Map(); 
+      
+      // Itera primeiro sobre as metas para garantir que apareça mesmo sem vendas
       relevantGoals.forEach(g => { 
-          const current = repMap.get(g.rep_in_codigo) || { name: g.rep_nome, goal: 0, realized: 0 }; 
-          current.goal += g.valor_meta; 
-          current.name = g.rep_nome; 
-          repMap.set(g.rep_in_codigo, current); 
+          const repCode = g.rep_in_codigo;
+          // Busca o nome mais recente na lista global
+          const currentRepInfo = availableReps.find(r => r.code === repCode);
+          const nameToUse = currentRepInfo?.name || g.rep_nome || `Rep ${repCode}`;
+          
+          repMap.set(repCode, { name: nameToUse, goal: g.valor_meta, realized: 0 }); 
       });
 
       // De-duplicação para bater com a visão de Pedidos
@@ -1419,19 +1423,26 @@ export default function App() {
         }
       });
 
+      // Soma o realizado
       itemMap.forEach(s => { 
           const code = Number(s.REP_IN_CODIGO); 
           if (!code) return; 
           const val = parseBrNumber(s['ITP_RE_VALORMERCADORIA'] || 0); 
-          const current = repMap.get(code) || { name: s.REPRESENTANTE_NOME, goal: 0, realized: 0 }; 
-          current.realized += val; 
-          if (!current.name && s.REPRESENTANTE_NOME) current.name = s.REPRESENTANTE_NOME; 
-          repMap.set(code, current); 
+          
+          if (repMap.has(code)) {
+              const current = repMap.get(code);
+              current.realized += val;
+          } else {
+              // Se não tinha meta, busca o nome e adiciona
+              const currentRepInfo = availableReps.find(r => r.code === code);
+              const nameToUse = currentRepInfo?.name || s.REPRESENTANTE_NOME || `Rep ${code}`;
+              repMap.set(code, { name: nameToUse, goal: 0, realized: val });
+          }
       });
 
       let result = Array.from(repMap.entries()).map(([code, data]) => ({ 
           code, 
-          name: data.name || `Rep ${code}`, 
+          name: data.name, 
           goal: data.goal, 
           realized: data.realized, 
           percent: data.goal > 0 ? (data.realized / data.goal) * 100 : 0 
@@ -1443,7 +1454,7 @@ export default function App() {
           result = result.filter(r => perfSelectedReps.includes(r.code));
       }
       return result.sort((a, b) => b.percent - a.percent);
-  }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps]);
+  }, [salesGoals, salesData, perfYear, perfMonth, currentUser, perfSelectedReps, availableReps]);
 
   const perfMetrics = useMemo(() => { const totalGoal = performanceData.reduce((acc, curr) => acc + curr.goal, 0); const totalRealized = performanceData.reduce((acc, curr) => acc + curr.realized, 0); const totalPercent = totalGoal > 0 ? (totalRealized / totalGoal) * 100 : 0; return { totalGoal, totalRealized, totalPercent }; }, [performanceData]);
   const togglePerfRepSelection = (repCode: number) => { setPerfSelectedReps(prev => prev.includes(repCode) ? prev.filter(c => c !== repCode) : [...prev, repCode]); };
