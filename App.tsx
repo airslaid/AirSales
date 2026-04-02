@@ -1392,9 +1392,12 @@ export default function App() {
       const relevantGoals = salesGoals.filter(g => g.ano === perfYear && g.mes === perfMonth); 
       const relevantSales = salesData.filter(s => { 
           if (!s.PED_DT_EMISSAO) return false; 
-          const dt = new Date(s.PED_DT_EMISSAO); 
+          
+          // FIX: Evitar erro de fuso horário que joga dia 01 para o final do mês anterior no UTC-3
+          const [year, month] = s.PED_DT_EMISSAO.split('-').map(Number);
+          
           // Alinhamento: Exclui Filial 900 para bater com a visão de Pedidos
-          return dt.getFullYear() === perfYear && (dt.getMonth() + 1) === perfMonth && s.SER_ST_CODIGO === 'PD' && Number(s.FIL_IN_CODIGO) !== 900; 
+          return year === perfYear && month === perfMonth && s.SER_ST_CODIGO === 'PD' && Number(s.FIL_IN_CODIGO) !== 900; 
       });
 
       const repMap = new Map(); 
