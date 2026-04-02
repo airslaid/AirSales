@@ -985,17 +985,16 @@ export const CRMView: React.FC<CRMViewProps> = ({
         }
     });
 
-    // Calcular métricas básicas para a IA
-    const totalValue = allPipelineItems.reduce((acc, item) => acc + (Number(item.ITP_RE_VALORMERCADORIA) || 0), 0);
-    const wonValue = pipelineColumns.GANHO.items.reduce((acc, item) => acc + (Number(item.ITP_RE_VALORMERCADORIA) || 0), 0);
-    const lostValue = pipelineColumns.PERDIDO.items.reduce((acc, item) => acc + (Number(item.ITP_RE_VALORMERCADORIA) || 0), 0);
+    // Calcular métricas básicas para a IA (Baseado em Quantidade conforme solicitado)
+    const wonCount = pipelineColumns.GANHO.items.length;
+    const lostCount = pipelineColumns.PERDIDO.items.length;
     
     const aiMetrics = {
         total: totalValue,
         won: wonValue,
         lost: lostValue,
         count: allPipelineItems.length,
-        conversionRate: (wonValue + lostValue) > 0 ? (wonValue / (wonValue + lostValue)) * 100 : 0
+        conversionRate: (wonCount + lostCount) > 0 ? (wonCount / (wonCount + lostCount)) * 100 : 0
     };
 
     try {
@@ -1634,19 +1633,19 @@ export const CRMView: React.FC<CRMViewProps> = ({
 
               <div className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm relative overflow-hidden group">
                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><CheckCircle2 size={48} /></div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Taxa de Conversão (Valor)</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Taxa de Conversão (Qtd)</p>
                 <h3 className="text-2xl font-black text-green-600 tracking-tighter">
                   {(() => {
-                    const activeVal = 
-                      pipelineColumns.PROCESSO_INTERNO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0) +
-                      pipelineColumns.ENVIO_PROPOSTA.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0) +
-                      pipelineColumns.NEGOCIACAO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
-                    const wonVal = pipelineColumns.GANHO.items.reduce((acc, i) => acc + i.TOTAL_VALOR, 0);
-                    const total = activeVal + wonVal;
-                    return total > 0 ? ((wonVal / total) * 100).toFixed(1) : '0.0';
+                    const activeCount = 
+                      pipelineColumns.PROCESSO_INTERNO.items.length +
+                      pipelineColumns.ENVIO_PROPOSTA.items.length +
+                      pipelineColumns.NEGOCIACAO.items.length;
+                    const wonCount = pipelineColumns.GANHO.items.length;
+                    const total = activeCount + wonCount;
+                    return total > 0 ? ((wonCount / total) * 100).toFixed(1) : '0.0';
                   })()}%
                 </h3>
-                <p className="text-[9px] text-gray-500 mt-1 font-medium">Aberto/Aprovação vs Ganho</p>
+                <p className="text-[9px] text-gray-500 mt-1 font-medium">Oportunidades Ganhos vs Ativos</p>
               </div>
 
               <div className="bg-white p-4 border border-gray-200 shadow-sm rounded-sm relative overflow-hidden group">
